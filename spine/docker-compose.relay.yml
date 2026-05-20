@@ -1,0 +1,15 @@
+# Optional: Signal → Lattice relay bridge.
+# Requires signal-cli to be running and listening on 127.0.0.1:7583.
+# Uses host networking so it can reach both signal-cli and spine on localhost.
+services:
+  signal-relay:
+    image: ghcr.io/rghamilton3/lattice-spine:latest
+    container_name: lattice-relay
+    restart: unless-stopped
+    network_mode: host
+    command: ["bun", "run", "src/signal-relay.ts"]
+    environment:
+      LATTICE_AGENT_TOKEN: ${LATTICE_AGENT_TOKEN:?LATTICE_AGENT_TOKEN is required}
+      SIGNAL_PHONE_NUMBER: ${SIGNAL_PHONE_NUMBER:?SIGNAL_PHONE_NUMBER is required}
+      SIGNAL_RPC_HOST: ${SIGNAL_RPC_HOST:-127.0.0.1:7583}
+      SPINE_URL: ${SPINE_URL:-http://127.0.0.1:3000/api/agent/capture}

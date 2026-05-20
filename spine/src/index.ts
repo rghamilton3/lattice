@@ -279,4 +279,4 @@ const app = new Elysia()
 
   .listen({ port: 3000, hostname: process.env.HOST ?? "127.0.0.1" });
 
-console.log(`Spine listening on http://127.0.0.1:${app.server?.port}`);
+console.log(`Spine listening on http://${app.server?.hostname}:${app.server?.port}`);

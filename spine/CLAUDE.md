@@ -60,7 +60,7 @@ re-sends as no-ops. Design this in; retrofitting is painful.
 
 Spine is one of three sibling directories under `lattice/`:
 
-- `spine/` — this repo (Bun/Elysia, TypeScript)
+- `spine/` — this directory (Bun/Elysia, TypeScript)
 - `agent/` — local file indexer (Rust); polls watched directories, POSTs to `/api/agent/index`
 - `surface/` — SvelteKit SPA; built to static files, served by spine from `/`
 

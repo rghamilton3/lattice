@@ -1,0 +1,11 @@
+# OS / editor cruft
+.DS_Store
+*.swp
+*~
+
+# Local helper / state
+.spine-snapshot/
+
+# Per-tool agent caches at root (component-specific ignores live in their dirs)
+.serena/
+.claude/local-settings.json

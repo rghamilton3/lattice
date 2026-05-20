@@ -8,7 +8,7 @@ Spine owns the SQLite database, serves the REST API, and runs QMD hybrid search 
 
 ```
 lattice/
-├── spine/    ← this repo (Bun/Elysia, TypeScript)
+├── spine/    ← you are here (Bun/Elysia, TypeScript)
 ├── agent/    ← local file indexer (Rust) — POSTs to /api/agent/index
 └── surface/  ← SvelteKit SPA — served as static files from /
 ```

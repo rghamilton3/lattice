@@ -7,16 +7,20 @@
 #   lattice-capture "some thought"
 #   echo "some thought" | lattice-capture
 #
-# Environment:
-#   LATTICE_AGENT_TOKEN  — bearer token; falls back to ~/.config/lattice/token
-#   SPINE_URL            — spine base URL (default: http://localhost:3000)
-#   SOURCE               — capture source tag (default: desktop-hotkey)
+# Config: ~/.config/lattice/config (shell variable format, sourced at startup)
+#   LATTICE_AGENT_TOKEN=...   bearer token
+#   SPINE_URL=...             spine base URL (default: http://localhost:3000)
+#   SOURCE=...                capture source tag (default: desktop-hotkey)
 set -euo pipefail
+
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/lattice/config"
+# shellcheck source=/dev/null
+[[ -f "$CONFIG" ]] && . "$CONFIG"
 
 QUEUE_DB="${XDG_DATA_HOME:-$HOME/.local/share}/lattice/queue.db"
 SPINE_URL="${SPINE_URL:-http://localhost:3000}"
 SOURCE="${SOURCE:-desktop-hotkey}"
-TOKEN="${LATTICE_AGENT_TOKEN:-$(cat "$HOME/.config/lattice/token" 2>/dev/null)}"
+TOKEN="${LATTICE_AGENT_TOKEN:-$(cat "${XDG_CONFIG_HOME:-$HOME/.config}/lattice/token" 2>/dev/null)}"
 
 notify() {
   notify-send "Lattice" "$1" --urgency="${2:-low}" 2>/dev/null || true

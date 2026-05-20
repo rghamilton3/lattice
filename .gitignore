@@ -40,3 +40,12 @@ yarn-error.log*
 **/*.log
 package-lock.json
 **/*.bun
+
+# Runtime data (dev)
+lattice.dev.db
+lattice.dev.db-shm
+lattice.dev.db-wal
+lattice.qmd.db
+lattice.qmd.db-shm
+lattice.qmd.db-wal
+captures/

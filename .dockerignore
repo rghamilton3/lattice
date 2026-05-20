@@ -1,0 +1,16 @@
+.agents/
+.claude/
+.github/
+node_modules/
+captures/
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.local
+tsconfig.json
+mise.toml
+skills-lock.json
+README.md
+CLAUDE.md
+plan.md

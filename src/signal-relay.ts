@@ -1,7 +1,7 @@
 const AGENT_TOKEN = process.env.LATTICE_AGENT_TOKEN ?? "";
 const SIGNAL_PHONE = process.env.SIGNAL_PHONE_NUMBER ?? "";
 const RPC_HOST = process.env.SIGNAL_RPC_HOST ?? "127.0.0.1:7583";
-const SPINE_URL = "http://127.0.0.1:3000/api/agent/capture";
+const SPINE_URL = process.env.SPINE_URL ?? "http://127.0.0.1:3000/api/agent/capture";
 
 if (!AGENT_TOKEN) {
   console.error("[signal-relay] LATTICE_AGENT_TOKEN is required");

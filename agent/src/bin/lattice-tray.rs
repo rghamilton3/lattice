@@ -220,6 +220,19 @@ impl ksni::Tray for LatticeTray {
 
         items.push(
             StandardItem {
+                label: "Configure…".into(),
+                activate: Box::new(|_| {
+                    spawn_config_ui();
+                }),
+                ..Default::default()
+            }
+            .into(),
+        );
+
+        items.push(MenuItem::Separator);
+
+        items.push(
+            StandardItem {
                 label: "Stop Agent & Exit".into(),
                 icon_name: "application-exit".into(),
                 activate: Box::new(|_| {
@@ -345,6 +358,19 @@ fn parse_iso_secs(s: &str) -> Option<u64> {
     let days = era * 146097 + doe - 719468;
 
     Some(days * 86400 + hour * 3600 + min * 60 + sec)
+}
+
+fn spawn_config_ui() {
+    // Resolve lattice-config as a sibling of this binary.
+    let config_bin = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("lattice-config")))
+        .unwrap_or_else(|| "lattice-config".into());
+
+    match std::process::Command::new(&config_bin).spawn() {
+        Ok(_) => {}
+        Err(e) => tracing::warn!(bin = %config_bin.display(), error = %e, "failed to launch lattice-config"),
+    }
 }
 
 fn systemctl(op: &str) {

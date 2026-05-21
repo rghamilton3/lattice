@@ -1,0 +1,17 @@
+[Unit]
+Description=Lattice local file indexer
+Documentation=https://github.com/rghamilton3/lattice
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/lattice-agent
+Restart=on-failure
+RestartSec=30
+
+# Logging via systemd journal; tracing level via environment.
+Environment=RUST_LOG=lattice_agent=info
+
+[Install]
+WantedBy=default.target

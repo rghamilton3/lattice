@@ -30,8 +30,8 @@ bun test src/foo.test.ts  # run a single test file
 
 Two distinct auth paths, enforced by middleware:
 
-- `/api/agent/*` routes — **Bearer token** auth. Token checked against `LATTICE_AGENT_TOKEN` env var. No Authelia involvement.
-- All other routes — **Authelia forward auth**. Trust the `Remote-User` header injected by Caddy after Authelia
+- `/api/agent/*` routes — **Bearer token** auth. Token checked against `LATTICE_AGENT_TOKEN` env var. No Authentik involvement.
+- All other routes — **Authentik forward auth**. Trust the `X-Authentik-Username` header injected by Caddy after Authentik
   approves the request. Reject if the header is missing.
 
 Spine must fail closed on non-HTTPS requests (Caddy handles TLS, but defense in depth).
@@ -47,9 +47,9 @@ Spine must fail closed on non-HTTPS requests (Caddy handles TLS, but defense in 
 - `GET /ping` — health check, no auth
 - `POST /api/agent/capture` — bearer-token auth; accepts `{ text, source, captured_at }`; validates with TypeBox;
   returns `{ id }`
-- `GET /api/captures?limit=N` — Authelia auth; returns recent captures
+- `GET /api/captures?limit=N` — Authentik auth; returns recent captures
 - `POST /api/agent/index` — bearer-token auth; upserts local file index entries; idempotent on `(machine_id, path, hash)`
-- `GET /api/search?q=<query>` — Authelia auth; delegates to QMD vector search
+- `GET /api/search?q=<query>` — Authentik auth; delegates to QMD vector search
 
 ### Idempotency
 

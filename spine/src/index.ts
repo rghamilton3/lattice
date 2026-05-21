@@ -133,8 +133,8 @@ const app = new Elysia()
           return "HTTPS required";
         }
         if (DEV_USER) {
-          headers["remote-user"] = DEV_USER;
-        } else if (!headers["remote-user"]) {
+          headers["x-authentik-username"] = DEV_USER;
+        } else if (!headers["x-authentik-username"]) {
           set.status = 401;
           return "Unauthorized";
         }

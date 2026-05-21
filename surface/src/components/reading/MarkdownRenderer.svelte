@@ -1,6 +1,8 @@
 <script lang="ts">
-	import { marked, type Token } from 'marked';
+	import { Marked, type Token } from 'marked';
 	import markedKatex from 'marked-katex-extension';
+	import DOMPurify from 'dompurify';
+	import { onMount } from 'svelte';
 
 	const { content }: { content: string } = $props();
 
@@ -8,22 +10,21 @@
 	let mermaidInitialized = false;
 	let uid = 0;
 
-	marked.use(markedKatex({ throwOnError: false, nonStandard: true }));
-
-	// Inject katex CSS once
-	function ensureKatexCss() {
+	onMount(() => {
 		if (document.getElementById('katex-css')) return;
 		const link = document.createElement('link');
 		link.id = 'katex-css';
 		link.rel = 'stylesheet';
 		link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css';
 		document.head.appendChild(link);
-	}
+	});
 
 	async function renderMarkdown(md: string): Promise<string> {
 		const mermaidBlocks = new Map<string, string>();
 
-		const instance = marked.use({
+		const instance = new Marked();
+		instance.use(markedKatex({ throwOnError: false, nonStandard: true }));
+		instance.use({
 			async: true,
 			walkTokens: async (token: Token) => {
 				if (token.type === 'code' && (token as { lang?: string }).lang === 'mermaid') {
@@ -53,14 +54,14 @@
 			}
 		});
 
-		return await instance.parse(md);
+		return await instance.parse(md) as string;
 	}
 
 	$effect(() => {
 		const md = content;
-		ensureKatexCss();
 		renderMarkdown(md).then((result) => {
-			html = result;
+			// Allow SVG (mermaid) and MathML (KaTeX) in addition to HTML
+			html = DOMPurify.sanitize(result, { USE_PROFILES: { html: true, svg: true, mathMl: true } });
 		});
 	});
 </script>

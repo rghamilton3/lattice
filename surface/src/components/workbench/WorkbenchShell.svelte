@@ -27,17 +27,16 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ title })
 			});
+			const data = await res.json();
 			if (!res.ok) {
-				const body = await res.json();
-				newDocError = body.error ?? 'Failed to create doc';
+				newDocError = data.error ?? 'Failed to create doc';
 				return;
 			}
-			const { slug } = await res.json();
 			showNewDocModal = false;
 			newDocTitle = '';
 			newDocError = '';
 			queryClient.invalidateQueries({ queryKey: workingKeys.list() });
-			wb.openInPane(wb.focusedPane, { kind: 'editor', slug });
+			wb.openInPane(wb.focusedPane, { kind: 'editor', slug: data.slug });
 		} catch {
 			newDocError = 'Network error';
 		}

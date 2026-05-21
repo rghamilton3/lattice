@@ -23,6 +23,7 @@
 	let isDirty = $state(false);
 	let saveTimer: ReturnType<typeof setTimeout> | null = null;
 	let saveStatus = $state<'' | 'saved' | 'error'>('');
+	let saveErrorMsg = $state('');
 	let statusTimer: ReturnType<typeof setTimeout> | null = null;
 
 	const docQuery = createQuery(() => ({
@@ -40,13 +41,16 @@
 			statusTimer = setTimeout(() => { saveStatus = ''; }, 2000);
 			qc.invalidateQueries({ queryKey: workingKeys.detail(slug) });
 		},
-		onError: () => {
+		onError: (err) => {
+			console.error('[editor] save failed:', err);
 			saveStatus = 'error';
+			saveErrorMsg = err instanceof Error ? err.message : 'unknown error';
 		}
 	}));
 
 	function saveNow(content?: string) {
-		const doc = content ?? view?.state.doc.toString() ?? '';
+		const doc = content ?? view?.state.doc.toString();
+		if (doc === undefined) return;
 		saveMutation.mutate({ content: doc });
 	}
 
@@ -65,7 +69,7 @@
 		wb.openInPane(paneIndex, { kind: 'search', query: '' });
 	}
 
-	// Wire vim ex commands. :q! comes through as commandName='quit' with argString='!'
+	// Wire vim ex commands (global registry — last-mounted editor wins when two are open simultaneously)
 	Vim.defineEx('write', 'w', () => saveNow());
 	Vim.defineEx('wq', 'wq', () => { saveNow(); goBack(); });
 	Vim.defineEx('quit', 'q', (_cm: unknown, params: { argString?: string }) => {
@@ -143,7 +147,7 @@
 		{:else if saveStatus === 'saved'}
 			<span class="text-sm text-green-500">saved</span>
 		{:else if saveStatus === 'error'}
-			<span class="text-sm text-red-400">save failed</span>
+			<span class="text-sm text-red-400" title={saveErrorMsg}>save failed</span>
 		{/if}
 		<button
 			class="rounded px-2 py-0.5 text-sm text-text-muted hover:bg-surface-high hover:text-text disabled:opacity-40"
@@ -159,7 +163,7 @@
 		{#if docQuery.isLoading}
 			<p class="p-3 text-sm text-text-muted">loading…</p>
 		{:else if docQuery.isError}
-			<p class="p-3 text-xs text-red-400">error loading doc</p>
+			<p class="p-3 text-xs text-red-400">{docQuery.error?.message ?? 'error loading doc'}</p>
 		{:else}
 			<div bind:this={editorContainer} class="h-full"></div>
 		{/if}

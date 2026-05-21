@@ -14,7 +14,7 @@
 			case 'search':
 				return c.query ? `search: ${c.query}` : 'search';
 			case 'results':
-				return c.source.type;
+				return c.source.kind;
 			case 'doc':
 				if (c.ref.kind === 'working') return c.ref.slug;
 				return `${c.ref.kind} #${c.ref.id}`;

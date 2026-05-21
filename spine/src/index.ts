@@ -192,7 +192,14 @@ const app = new Elysia()
         )
 
         // ── Working docs ──────────────────────────────────────────────────
-        .get("/api/working", () => listWorking())
+        .get("/api/working", ({ set }) => {
+          try {
+            return listWorking();
+          } catch (e) {
+            set.status = 500;
+            return { error: "Failed to list working docs" };
+          }
+        })
         .get(
           "/api/working/:slug",
           ({ params, set }) => {
@@ -206,7 +213,7 @@ const app = new Elysia()
               throw e;
             }
           },
-          { params: t.Object({ slug: t.String() }) }
+          { params: t.Object({ slug: t.String({ pattern: "^[a-z0-9-]+$" }) }) }
         )
         .post(
           "/api/working",
@@ -220,16 +227,20 @@ const app = new Elysia()
                 CaptureRow,
                 "text" | "captured_at"
               > | null;
-              if (row) {
-                content = `# ${body.title}\n\n> Seeded from capture #${body.seed_capture_id} (${row.captured_at})\n\n${row.text}\n`;
+              if (!row) {
+                set.status = 404;
+                return { error: "Capture not found" };
               }
+              content = `# ${body.title}\n\n> Seeded from capture #${body.seed_capture_id} (${row.captured_at})\n\n${row.text}\n`;
             } else if (body.seed_file_id != null) {
               const row = db
                 .query("SELECT text, path FROM file_index WHERE id = ?")
                 .get(body.seed_file_id) as Pick<FileRow, "text" | "path"> | null;
-              if (row) {
-                content = `# ${body.title}\n\n> Seeded from file: ${row.path}\n\n${row.text}\n`;
+              if (!row) {
+                set.status = 404;
+                return { error: "File not found" };
               }
+              content = `# ${body.title}\n\n> Seeded from file: ${row.path}\n\n${row.text}\n`;
             }
 
             try {
@@ -269,7 +280,7 @@ const app = new Elysia()
             }
           },
           {
-            params: t.Object({ slug: t.String() }),
+            params: t.Object({ slug: t.String({ pattern: "^[a-z0-9-]+$" }) }),
             body: t.Object({ content: t.String() }),
           }
         )
@@ -288,7 +299,7 @@ const app = new Elysia()
               throw e;
             }
           },
-          { params: t.Object({ slug: t.String() }) }
+          { params: t.Object({ slug: t.String({ pattern: "^[a-z0-9-]+$" }) }) }
         )
 
         // ── Lateral movement ──────────────────────────────────────────────
@@ -456,6 +467,10 @@ const app = new Elysia()
           .post(
             "/index",
             ({ body }) => {
+              const existing = db
+                .query("SELECT hash FROM file_index WHERE machine_id = ? AND path = ?")
+                .get(body.machine_id, body.path) as { hash: string } | null;
+              const prevHash = existing?.hash;
               db.prepare(
                 `INSERT INTO file_index
                    (machine_id, path, hash, mime_type, text, modified_at, size_bytes, indexed_at)
@@ -478,7 +493,7 @@ const app = new Elysia()
                 body.size_bytes,
                 new Date().toISOString()
               );
-              writeLocalFile(body.machine_id, body.path, body.hash, body.text);
+              writeLocalFile(body.machine_id, body.path, body.hash, body.text, prevHash);
               refreshIndex();
               return { ok: true };
             },

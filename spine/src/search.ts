@@ -2,7 +2,7 @@ import { createStore } from "@tobilu/qmd";
 import type { QMDStore } from "@tobilu/qmd";
 import type { Database } from "bun:sqlite";
 import { join, dirname, basename, resolve } from "path";
-import { mkdirSync, writeFileSync, existsSync } from "fs";
+import { mkdirSync, writeFileSync, existsSync, unlinkSync } from "fs";
 import { WORKING_DIR } from "./working";
 
 interface CaptureData {
@@ -41,6 +41,8 @@ function localFileToMarkdown(machineId: string, path: string, text: string): str
 }
 
 let _store: QMDStore | null = null;
+let _initFailed = false;
+let _indexFailures = 0;
 // Serial lock: ensures update() and embed() calls never overlap.
 let _indexLock: Promise<void> = Promise.resolve();
 
@@ -59,16 +61,22 @@ export async function initSearch(db: Database): Promise<void> {
     }
   }
 
-  _store = await createStore({
-    dbPath: QMD_DB_PATH,
-    config: {
-      collections: {
-        captures: { path: CAPTURES_DIR, pattern: "**/*.md" },
-        working: { path: WORKING_DIR, pattern: "**/*.md" },
-        "local-files": { path: LOCAL_FILES_DIR, pattern: "**/*.md" },
+  try {
+    _store = await createStore({
+      dbPath: QMD_DB_PATH,
+      config: {
+        collections: {
+          captures: { path: CAPTURES_DIR, pattern: "**/*.md" },
+          working: { path: WORKING_DIR, pattern: "**/*.md" },
+          "local-files": { path: LOCAL_FILES_DIR, pattern: "**/*.md" },
+        },
       },
-    },
-  });
+    });
+  } catch (e) {
+    _initFailed = true;
+    console.error("[qmd] initSearch failed — search unavailable:", e);
+    throw e;
+  }
 
   refreshIndex();
 }
@@ -85,9 +93,13 @@ export function writeCaptureFile(
   );
 }
 
-export function writeLocalFile(machineId: string, path: string, hash: string, text: string): void {
+export function writeLocalFile(machineId: string, path: string, hash: string, text: string, prevHash?: string): void {
   const machineDir = join(LOCAL_FILES_DIR, machineId);
   mkdirSync(machineDir, { recursive: true });
+  if (prevHash && prevHash !== hash) {
+    const oldFile = join(machineDir, `${prevHash}.md`);
+    if (existsSync(oldFile)) unlinkSync(oldFile);
+  }
   writeFileSync(join(machineDir, `${hash}.md`), localFileToMarkdown(machineId, path, text));
 }
 
@@ -101,13 +113,21 @@ export function refreshIndex(): void {
         await store.embed();
       }
     })
-    .catch((e) => console.error("[qmd] index refresh failed:", e));
+    .catch((e) => {
+      _indexFailures++;
+      if (_indexFailures === 1 || _indexFailures % 10 === 0) {
+        console.warn(`[qmd] index refresh failed (${_indexFailures}x):`, e);
+      }
+    });
 }
 
 export async function search(q: string): Promise<SearchResult[]> {
-  if (!_store) return [];
+  if (!_store) {
+    if (_initFailed) console.warn("[qmd] search called but initSearch failed — returning empty results");
+    return [];
+  }
   const results = await _store.search({ query: q, limit: 20 });
-  return results.flatMap((r) => {
+  return results.flatMap((r): SearchResult[] => {
     if (r.file.startsWith(CAPTURES_DIR + "/")) {
       const id = parseInt(basename(r.file, ".md"), 10);
       if (isNaN(id)) return [];

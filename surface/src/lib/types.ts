@@ -1,15 +1,9 @@
 // ── Spine API response types ──────────────────────────────────────────────────
 
-export interface SearchResult {
-	id: number;
-	score: number;
-	snippet: string;
-	body: string;
-	path: string;
-	kind: 'capture' | 'local-file' | 'working';
-	machine_id?: string;
-	slug?: string;
-}
+export type SearchResult =
+	| { kind: 'capture';    id: number; score: number; snippet: string; body: string; path: string }
+	| { kind: 'local-file'; id: number; score: number; snippet: string; body: string; path: string; machine_id: string }
+	| { kind: 'working';    id: number; score: number; snippet: string; body: string; path: string; slug: string };
 
 export interface Capture {
 	id: number;
@@ -54,9 +48,9 @@ export type DocRef =
 // ── Lateral action source ─────────────────────────────────────────────────────
 
 export type LateralSource =
-	| { type: 'similar'; id: string; kind: 'capture' | 'local-file' | 'working' }
-	| { type: 'mentions'; q: string }
-	| { type: 'nearby'; timestamp: string; window_hours: number };
+	| { kind: 'similar'; id: number | string; docKind: 'capture' | 'local-file' | 'working' }
+	| { kind: 'mentions'; q: string }
+	| { kind: 'nearby'; timestamp: string; window_hours: number };
 
 // ── Per-pane content ──────────────────────────────────────────────────────────
 

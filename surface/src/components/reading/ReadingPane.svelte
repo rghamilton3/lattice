@@ -5,7 +5,7 @@
 	import { captureKeys, fetchCapture } from '$lib/api/captures';
 	import { fileKeys, fetchFile } from '$lib/api/files';
 	import { workingKeys, fetchWorking, createWorking } from '$lib/api/working';
-	import { attachSelectionCapture, getPendingSelection } from '$lib/utils/selection';
+	import { getPendingSelection } from '$lib/utils/selection';
 	import type { DocRef } from '$lib/types';
 	import MarkdownRenderer from './MarkdownRenderer.svelte';
 	import PdfViewer from './PdfViewer.svelte';
@@ -15,12 +15,7 @@
 	const wb = getWorkbenchContext();
 	const qc = useQueryClient();
 
-	let paneEl: HTMLDivElement;
-
-	$effect(() => {
-		if (!paneEl) return;
-		return attachSelectionCapture(paneEl);
-	});
+	let promoteError = $state('');
 
 	const captureQuery = createQuery(() => ({
 		queryKey: captureKeys.detail(ref.kind === 'capture' ? ref.id : -1),
@@ -51,18 +46,18 @@
 	);
 
 	// Derive id/slug/kind for lateral queries
-	const lateralRef = $derived<{ id: string; kind: 'capture' | 'local-file' | 'working' }>(
+	const lateralRef = $derived<{ id: number | string; docKind: 'capture' | 'local-file' | 'working' }>(
 		ref.kind === 'capture'
-			? { id: String(ref.id), kind: 'capture' }
+			? { id: ref.id, docKind: 'capture' }
 			: ref.kind === 'file'
-				? { id: String(ref.id), kind: 'local-file' }
-				: { id: ref.slug, kind: 'working' }
+				? { id: ref.id, docKind: 'local-file' }
+				: { id: ref.slug, docKind: 'working' }
 	);
 
 	function openMoreLikeThis() {
 		wb.openInOther(paneIndex, {
 			kind: 'results',
-			source: { type: 'similar', ...lateralRef }
+			source: { kind: 'similar', id: lateralRef.id, docKind: lateralRef.docKind }
 		});
 	}
 
@@ -71,7 +66,7 @@
 		if (!sel) return;
 		wb.openInOther(paneIndex, {
 			kind: 'results',
-			source: { type: 'mentions', q: sel }
+			source: { kind: 'mentions', q: sel }
 		});
 	}
 
@@ -79,11 +74,12 @@
 		if (!timestamp) return;
 		wb.openInOther(paneIndex, {
 			kind: 'results',
-			source: { type: 'nearby', timestamp, window_hours: 72 }
+			source: { kind: 'nearby', timestamp, window_hours: 72 }
 		});
 	}
 
 	async function promoteToWorking() {
+		promoteError = '';
 		const body: Parameters<typeof createWorking>[0] = {
 			title: ref.kind === 'capture'
 				? `from capture #${(ref as { id: number }).id}`
@@ -93,13 +89,17 @@
 		};
 		if (ref.kind === 'capture') body.seed_capture_id = (ref as { id: number }).id;
 		if (ref.kind === 'file') body.seed_file_id = (ref as { id: number }).id;
-		const result = await createWorking(body);
-		qc.invalidateQueries({ queryKey: ['working', 'list'] });
-		wb.openInPane(paneIndex, { kind: 'editor', slug: result.slug });
+		try {
+			const result = await createWorking(body);
+			qc.invalidateQueries({ queryKey: ['working', 'list'] });
+			wb.openInPane(paneIndex, { kind: 'editor', slug: result.slug });
+		} catch (e) {
+			promoteError = e instanceof Error ? e.message : 'promote failed';
+		}
 	}
 </script>
 
-<div bind:this={paneEl} class="flex h-full flex-col">
+<div class="flex h-full flex-col">
 	<!-- toolbar -->
 	<div class="flex shrink-0 flex-wrap items-center gap-1 border-b border-border bg-surface-raised px-2 py-1">
 		<button
@@ -133,6 +133,9 @@
 				class="rounded px-2 py-0.5 text-sm text-text-muted hover:bg-surface-high hover:text-text"
 				onclick={promoteToWorking}
 			>↑ promote</button>
+			{#if promoteError}
+				<span class="text-xs text-red-400">{promoteError}</span>
+			{/if}
 		{/if}
 	</div>
 
@@ -141,7 +144,7 @@
 		{#if isLoading}
 			<p class="p-3 text-sm text-text-muted">loading…</p>
 		{:else if isError}
-			<p class="p-3 text-xs text-red-400">error loading document</p>
+			<p class="p-3 text-xs text-red-400">{captureQuery.error?.message ?? fileQuery.error?.message ?? workingQuery.error?.message ?? 'error loading document'}</p>
 		{:else if ref.kind === 'capture' && captureQuery.data}
 			<MarkdownRenderer content={captureQuery.data.text} />
 		{:else if ref.kind === 'file' && fileQuery.data}

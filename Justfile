@@ -1,9 +1,24 @@
 default:
     @just --list
 
-# Run spine dev server with hot reload
+# Run spine + surface dev servers together (Ctrl+C stops both)
 dev:
-    cd spine && bun run dev
+    #!/bin/bash
+    (cd spine && ALLOW_HTTP=true DEV_USER=dev bun run dev) &
+    (cd surface && bun run dev) &
+    wait
+
+# Run spine dev server only
+spine:
+    cd spine && ALLOW_HTTP=true DEV_USER=dev bun run dev
+
+# Run surface dev server only
+surface:
+    cd surface && bun run dev
+
+# Build the surface (output: surface/build/, served by spine in prod)
+surface-build:
+    cd surface && bun run build
 
 # Run spine in non-watch mode
 spine-start:
@@ -25,9 +40,9 @@ test-file FILE:
 install:
     cd spine && bun install
 
-# Build spine Docker image locally
+# Build spine Docker image locally (includes surface)
 docker-build:
-    docker build -f spine/Dockerfile -t lattice-spine:local spine/
+    docker build -f spine/Dockerfile -t lattice-spine:local .
 
 # Bring up spine via docker compose (from spine/)
 up:

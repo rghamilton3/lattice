@@ -8,7 +8,7 @@ Personal knowledge management substrate, designed around ADHD-aware constraints:
 |-----------|----------|------|
 | [`spine/`](./spine) | TypeScript (Bun, Elysia) | Central server on the VPS. Owns SQLite, hosts QMD search, serves the API and surface. |
 | [`agent/`](./agent) | Rust | Per-machine local file indexer. Polls watched directories, POSTs text to spine. |
-| `surface/` | TypeScript (SvelteKit) | SPA workbench: search, reading panes, working docs. Served as static files by spine. *(Not yet built.)* |
+| [`surface/`](./surface) | TypeScript (SvelteKit) | SPA workbench: search, reading panes, working docs. Served as static files by spine. |
 
 See [`plan.md`](./plan.md) for the full architecture and phased build plan.
 
@@ -47,11 +47,12 @@ bash <(curl -fsSL https://raw.githubusercontent.com/rghamilton3/lattice/main/ins
 The installer prompts for your spine URL, agent token, and watch directories, then installs
 `lattice-agent` and enables it as a systemd user service.
 
-## Quickstart (spine dev)
+## Quickstart
 
 ```bash
-just dev           # spine dev server (more recipes as surface lands)
+just dev           # spine + surface dev servers together
 just test          # all tests
+just surface-build # build surface static files for production
 ```
 
 ## License

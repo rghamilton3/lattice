@@ -8,6 +8,7 @@
     "relay": "bun run src/signal-relay.ts"
   },
   "dependencies": {
+    "@elysiajs/static": "^1.4.10",
     "@tobilu/qmd": "^2.5.1",
     "elysia": "^1.4.28",
     "smol-toml": "^1.6.1"

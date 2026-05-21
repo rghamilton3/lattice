@@ -2,8 +2,8 @@ import { Elysia, t } from "elysia";
 import { staticPlugin } from "@elysiajs/static";
 import { timingSafeEqual } from "node:crypto";
 import { realpath } from "node:fs/promises";
-import { join } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { initDb } from "./db";
 import {
   initSearch,
@@ -23,6 +23,9 @@ import {
   updateWorking,
   deleteWorking,
 } from "./working";
+
+const DB_PATH = resolve(process.env.DATABASE_PATH ?? "./lattice.dev.db");
+const ATTACHMENTS_DIR = join(dirname(DB_PATH), "attachments");
 
 const db = initDb();
 await initSearch(db);
@@ -505,6 +508,50 @@ const app = new Elysia()
                 mime_type: t.String({ minLength: 1 }),
                 text: t.String(),
                 modified_at: t.String({ minLength: 1 }),
+                size_bytes: t.Integer({ minimum: 0 }),
+              }),
+            }
+          )
+          .post(
+            "/capture/:id/attachments",
+            ({ params, body, set }) => {
+              const captureId = parseInt(params.id, 10);
+              if (isNaN(captureId)) {
+                set.status = 400;
+                return { error: "invalid capture id" };
+              }
+              const capture = db.query("SELECT id FROM captures WHERE id = ?").get(captureId);
+              if (!capture) {
+                set.status = 404;
+                return { error: "capture not found" };
+              }
+              const storedName = basename(body.signal_id) || Date.now().toString();
+              const dir = join(ATTACHMENTS_DIR, String(captureId));
+              mkdirSync(dir, { recursive: true });
+              writeFileSync(join(dir, storedName), Buffer.from(body.data, "base64"));
+              const storedPath = `${captureId}/${storedName}`;
+              const row = db.prepare(
+                `INSERT INTO capture_attachments
+                   (capture_id, signal_id, content_type, filename, size_bytes, stored_path, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`
+              ).get(
+                captureId,
+                body.signal_id,
+                body.content_type,
+                body.filename,
+                body.size_bytes,
+                storedPath,
+                new Date().toISOString()
+              ) as { id: number };
+              return { id: row.id };
+            },
+            {
+              params: t.Object({ id: t.String() }),
+              body: t.Object({
+                content_type: t.String({ minLength: 1 }),
+                signal_id: t.String(),
+                filename: t.String(),
+                data: t.String({ minLength: 1 }),
                 size_bytes: t.Integer({ minimum: 0 }),
               }),
             }

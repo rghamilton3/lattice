@@ -40,9 +40,9 @@ test-file FILE:
 install:
     cd spine && bun install
 
-# Build spine Docker image locally
+# Build spine Docker image locally (includes surface)
 docker-build:
-    docker build -f spine/Dockerfile -t lattice-spine:local spine/
+    docker build -f spine/Dockerfile -t lattice-spine:local .
 
 # Bring up spine via docker compose (from spine/)
 up:

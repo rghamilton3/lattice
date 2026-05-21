@@ -1,0 +1,12 @@
+**/node_modules/
+**/.svelte-kit/
+spine/captures/
+spine/*.db
+spine/*.db-shm
+spine/*.db-wal
+spine/.env
+spine/.env.local
+surface/build/
+.agents/
+.claude/
+agent/

@@ -29,7 +29,10 @@ enum ProcessResult {
 
 pub async fn run_pass(cfg: &Config, cache: &Cache, client: &reqwest::Client, status: &SharedStatus) {
     {
-        let mut s = status.write().unwrap();
+        let mut s = status.write().unwrap_or_else(|e| {
+            error!(error = %e, "status lock poisoned — exiting");
+            std::process::exit(1)
+        });
         s.state = ScanState::Scanning;
     }
 
@@ -53,7 +56,10 @@ pub async fn run_pass(cfg: &Config, cache: &Cache, client: &reqwest::Client, sta
 
     info!(indexed, skipped, errors, "scan pass complete");
 
-    let mut s = status.write().unwrap();
+    let mut s = status.write().unwrap_or_else(|e| {
+        error!(error = %e, "status lock poisoned — exiting");
+        std::process::exit(1)
+    });
     s.state = if errors > 0 || spine_errors > 0 {
         ScanState::Error
     } else {

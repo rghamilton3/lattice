@@ -6,7 +6,7 @@
 use ksni::blocking::TrayMethods;
 use ksni::menu::*;
 use serde::Deserialize;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -19,6 +19,8 @@ enum ScanState {
     Idle,
     Scanning,
     Error,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Deserialize)]
@@ -42,8 +44,10 @@ const COLOR_IDLE: [u8; 3] = [79, 174, 74];
 const COLOR_WARN: [u8; 3] = [255, 152, 0];
 // Blue  — scan in progress
 const COLOR_SCAN: [u8; 3] = [66, 133, 244];
-// Red   — error
+// Red   — scan error
 const COLOR_ERR: [u8; 3] = [219, 68, 55];
+// Yellow — tray can't reach IPC socket (distinct from COLOR_WARN: spine unreachable)
+const COLOR_IPC: [u8; 3] = [255, 200, 0];
 
 /// Renders a 16×16 anti-aliased filled circle in ARGB32 network-byte-order.
 fn circle_icon(rgb: [u8; 3]) -> Vec<ksni::Icon> {
@@ -63,11 +67,20 @@ fn circle_icon(rgb: [u8; 3]) -> Vec<ksni::Icon> {
     vec![ksni::Icon { width: SIZE, height: SIZE, data }]
 }
 
+// ── Fetch result ──────────────────────────────────────────────────────────────
+
+enum FetchResult {
+    Running(AgentStatus),
+    Stopped,
+    Error(String),
+}
+
 // ── Tray state ────────────────────────────────────────────────────────────────
 
 #[derive(Debug)]
 struct LatticeTray {
     running: bool,
+    ipc_error: Option<String>,
     status_line: String,
     spine_line: String,
     error_line: Option<String>,
@@ -78,6 +91,7 @@ impl Default for LatticeTray {
     fn default() -> Self {
         Self {
             running: false,
+            ipc_error: None,
             status_line: String::new(),
             spine_line: String::new(),
             error_line: None,
@@ -100,7 +114,9 @@ impl ksni::Tray for LatticeTray {
     }
 
     fn tool_tip(&self) -> ksni::ToolTip {
-        let description = if self.running {
+        let description = if let Some(ref msg) = self.ipc_error {
+            format!("Agent: IPC error — {msg}")
+        } else if self.running {
             format!("{}\n{}", self.status_line, self.spine_line)
         } else {
             "Agent stopped".into()
@@ -116,7 +132,16 @@ impl ksni::Tray for LatticeTray {
         let mut items: Vec<ksni::MenuItem<Self>> = Vec::new();
 
         // Status info (non-interactive)
-        if self.running {
+        if let Some(ref msg) = self.ipc_error {
+            items.push(
+                StandardItem {
+                    label: format!("IPC error: {msg}"),
+                    enabled: false,
+                    ..Default::default()
+                }
+                .into(),
+            );
+        } else if self.running {
             items.push(
                 StandardItem {
                     label: self.status_line.clone(),
@@ -195,7 +220,7 @@ impl ksni::Tray for LatticeTray {
 
         items.push(
             StandardItem {
-                label: "Exit".into(),
+                label: "Stop Agent & Exit".into(),
                 icon_name: "application-exit".into(),
                 activate: Box::new(|_| {
                     systemctl("stop");
@@ -224,22 +249,33 @@ fn socket_path() -> PathBuf {
         .join("agent.sock")
 }
 
-/// Returns `None` when the agent is stopped or the socket is unreachable.
-fn fetch_status() -> Option<AgentStatus> {
+fn fetch_status() -> FetchResult {
     let path = socket_path();
-    let mut stream = UnixStream::connect(&path).ok()?;
-    stream
-        .set_write_timeout(Some(Duration::from_secs(3)))
-        .ok()?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(3)))
-        .ok()?;
-    stream.write_all(b"status\n").ok()?;
-
+    let mut stream = match UnixStream::connect(&path) {
+        Ok(s) => s,
+        // NotFound = socket file absent = agent not running
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return FetchResult::Stopped,
+        // Any other error = agent may be up but IPC is broken
+        Err(e) => return FetchResult::Error(e.to_string()),
+    };
+    if let Err(e) = stream.set_write_timeout(Some(Duration::from_secs(3))) {
+        return FetchResult::Error(e.to_string());
+    }
+    if let Err(e) = stream.set_read_timeout(Some(Duration::from_secs(3))) {
+        return FetchResult::Error(e.to_string());
+    }
+    if let Err(e) = stream.write_all(b"status\n") {
+        return FetchResult::Error(e.to_string());
+    }
     let mut reader = BufReader::new(&stream);
     let mut line = String::new();
-    reader.read_line(&mut line).ok()?;
-    serde_json::from_str(line.trim()).ok()
+    if let Err(e) = reader.read_line(&mut line) {
+        return FetchResult::Error(e.to_string());
+    }
+    match serde_json::from_str(line.trim()) {
+        Ok(s) => FetchResult::Running(s),
+        Err(e) => FetchResult::Error(e.to_string()),
+    }
 }
 
 /// Builds the human-readable status line shown in the menu and tooltip.
@@ -248,6 +284,7 @@ fn format_status_line(s: &AgentStatus) -> String {
         ScanState::Idle => "Idle",
         ScanState::Scanning => "Scanning",
         ScanState::Error => "Error",
+        ScanState::Unknown => "Unknown",
     };
 
     let scan_time = s
@@ -311,20 +348,27 @@ fn parse_iso_secs(s: &str) -> Option<u64> {
 }
 
 fn systemctl(op: &str) {
-    let _ = std::process::Command::new("systemctl")
+    match std::process::Command::new("systemctl")
         .args(["--user", op, "lattice-agent"])
-        .status();
+        .status()
+    {
+        Err(e) => tracing::warn!(op, error = %e, "systemctl failed to run"),
+        Ok(s) if !s.success() => tracing::warn!(op, code = ?s.code(), "systemctl returned non-zero"),
+        Ok(_) => {}
+    }
 }
 
-/// Returns the RGB color for the tray icon based on agent state.
-fn color_for(status: Option<&AgentStatus>) -> [u8; 3] {
-    match status {
-        None => COLOR_STOPPED,
-        Some(s) => match s.state {
+/// Returns the RGB color for the tray icon based on fetch result.
+fn color_for(result: &FetchResult) -> [u8; 3] {
+    match result {
+        FetchResult::Stopped => COLOR_STOPPED,
+        FetchResult::Error(_) => COLOR_IPC,
+        FetchResult::Running(s) => match s.state {
             ScanState::Idle if s.spine_ok => COLOR_IDLE,
             ScanState::Idle => COLOR_WARN,
             ScanState::Scanning => COLOR_SCAN,
             ScanState::Error => COLOR_ERR,
+            ScanState::Unknown => COLOR_WARN,
         },
     }
 }
@@ -332,36 +376,48 @@ fn color_for(status: Option<&AgentStatus>) -> [u8; 3] {
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 fn main() {
+    tracing_subscriber::fmt::init();
     let handle = LatticeTray::default().spawn().expect("failed to register tray icon");
 
     loop {
-        let status = fetch_status();
+        let result = fetch_status();
 
         handle.update(|tray: &mut LatticeTray| {
-            tray.icon_rgb = color_for(status.as_ref());
-            tray.running = status.is_some();
+            tray.icon_rgb = color_for(&result);
 
-            if let Some(ref s) = status {
-                tray.status_line = format_status_line(s);
-                tray.spine_line = if s.spine_ok {
-                    "Spine: reachable".into()
-                } else {
-                    "Spine: unreachable".into()
-                };
-                tray.error_line = if s.last_errors > 0 {
-                    Some(format!(
-                        "Last error: {}",
-                        s.last_error_msg
-                            .as_deref()
-                            .unwrap_or("unknown")
-                    ))
-                } else {
-                    None
-                };
-            } else {
-                tray.status_line.clear();
-                tray.spine_line.clear();
-                tray.error_line = None;
+            match &result {
+                FetchResult::Running(s) => {
+                    tray.running = true;
+                    tray.ipc_error = None;
+                    tray.status_line = format_status_line(s);
+                    tray.spine_line = if s.spine_ok {
+                        "Spine: reachable".into()
+                    } else {
+                        "Spine: unreachable".into()
+                    };
+                    tray.error_line = if s.last_errors > 0 {
+                        Some(format!(
+                            "Last error: {}",
+                            s.last_error_msg.as_deref().unwrap_or("unknown")
+                        ))
+                    } else {
+                        None
+                    };
+                }
+                FetchResult::Stopped => {
+                    tray.running = false;
+                    tray.ipc_error = None;
+                    tray.status_line.clear();
+                    tray.spine_line.clear();
+                    tray.error_line = None;
+                }
+                FetchResult::Error(msg) => {
+                    tray.running = false;
+                    tray.ipc_error = Some(msg.clone());
+                    tray.status_line.clear();
+                    tray.spine_line.clear();
+                    tray.error_line = None;
+                }
             }
         });
 

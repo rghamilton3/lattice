@@ -7,12 +7,12 @@
 	import { searchKeymap } from '@codemirror/search';
 	import { markdown } from '@codemirror/lang-markdown';
 	import { oneDark } from '@codemirror/theme-one-dark';
-	import { vim } from '@replit/codemirror-vim';
+	import { vim, Vim } from '@replit/codemirror-vim';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { workingKeys, fetchWorking, updateWorking } from '$lib/api/working';
 	import VimToggle from './VimToggle.svelte';
 
-	const { slug }: { slug: string } = $props();
+	const { slug, paneIndex }: { slug: string; paneIndex: 0 | 1 } = $props();
 
 	const wb = getWorkbenchContext();
 	const qc = useQueryClient();
@@ -22,6 +22,8 @@
 	let vimCompartment = new Compartment();
 	let isDirty = $state(false);
 	let saveTimer: ReturnType<typeof setTimeout> | null = null;
+	let saveStatus = $state<'' | 'saved' | 'error'>('');
+	let statusTimer: ReturnType<typeof setTimeout> | null = null;
 
 	const docQuery = createQuery(() => ({
 		queryKey: workingKeys.detail(slug),
@@ -33,7 +35,13 @@
 		mutationFn: ({ content }: { content: string }) => updateWorking(slug, content),
 		onSuccess: () => {
 			isDirty = false;
+			saveStatus = 'saved';
+			if (statusTimer) clearTimeout(statusTimer);
+			statusTimer = setTimeout(() => { saveStatus = ''; }, 2000);
 			qc.invalidateQueries({ queryKey: workingKeys.detail(slug) });
+		},
+		onError: () => {
+			saveStatus = 'error';
 		}
 	}));
 
@@ -44,6 +52,7 @@
 
 	function scheduleAutosave(content: string) {
 		isDirty = true;
+		saveStatus = '';
 		if (saveTimer) clearTimeout(saveTimer);
 		saveTimer = setTimeout(() => saveNow(content), 1500);
 	}
@@ -51,6 +60,19 @@
 	function buildVimExtension(enabled: boolean) {
 		return enabled ? vim() : [];
 	}
+
+	function goBack() {
+		wb.openInPane(paneIndex, { kind: 'search', query: '' });
+	}
+
+	// Wire vim ex commands. :q! comes through as commandName='quit' with argString='!'
+	Vim.defineEx('write', 'w', () => saveNow());
+	Vim.defineEx('wq', 'wq', () => { saveNow(); goBack(); });
+	Vim.defineEx('quit', 'q', (_cm: unknown, params: { argString?: string }) => {
+		const force = params?.argString?.trim() === '!';
+		if (!force && isDirty && !window.confirm('Unsaved changes. Leave without saving?')) return;
+		goBack();
+	});
 
 	// Mount editor once we have content
 	$effect(() => {
@@ -103,6 +125,7 @@
 	$effect(() => {
 		return () => {
 			if (saveTimer) clearTimeout(saveTimer);
+			if (statusTimer) clearTimeout(statusTimer);
 			view?.destroy();
 		};
 	});
@@ -110,13 +133,21 @@
 
 <div class="flex h-full flex-col">
 	<div class="flex shrink-0 items-center gap-2 border-b border-border bg-surface-raised px-2 py-1">
+		<button
+			class="rounded px-2 py-0.5 text-sm text-text hover:bg-surface-high"
+			onclick={goBack}
+		>← back</button>
 		<span class="truncate text-sm text-text">{slug}{isDirty ? ' ·' : ''}</span>
 		{#if isDirty}
 			<span class="text-sm text-text-muted">unsaved</span>
+		{:else if saveStatus === 'saved'}
+			<span class="text-sm text-green-500">saved</span>
+		{:else if saveStatus === 'error'}
+			<span class="text-sm text-red-400">save failed</span>
 		{/if}
 		<button
 			class="rounded px-2 py-0.5 text-sm text-text-muted hover:bg-surface-high hover:text-text disabled:opacity-40"
-			disabled={!isDirty || saveMutation.isPending}
+			disabled={saveMutation.isPending}
 			onclick={() => saveNow()}
 		>save</button>
 		<div class="ml-auto">

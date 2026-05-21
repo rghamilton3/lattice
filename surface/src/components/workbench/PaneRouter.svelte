@@ -19,5 +19,5 @@
 {:else if content.kind === 'doc'}
 	<ReadingPane {paneIndex} ref={content.ref} />
 {:else if content.kind === 'editor'}
-	<EditorPane slug={content.slug} />
+	<EditorPane {paneIndex} slug={content.slug} />
 {/if}

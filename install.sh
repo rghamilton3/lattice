@@ -92,7 +92,7 @@ check_deps pdftotext
 # ── lattice-capture (optional) ────────────────────────────────────────────────
 
 echo ""
-read -rp "Install lattice-capture? [y/N] " _ans
+read -rp "Install lattice-capture? [y/N] " _ans </dev/tty
 if [[ "$_ans" =~ ^[Yy]$ ]]; then
   check_deps curl jq sqlite3 python3
 
@@ -114,10 +114,10 @@ else
   mkdir -p "$CONFIG_DIR"
 
   echo "Spine configuration"
-  read -rp "  Spine URL [https://lattice.rghsoftware.com]: " _spine_url
+  read -rp "  Spine URL [https://lattice.rghsoftware.com]: " _spine_url </dev/tty
   _spine_url="${_spine_url:-https://lattice.rghsoftware.com}"
 
-  read -rsp "  Agent token: " _agent_token
+  read -rsp "  Agent token: " _agent_token </dev/tty
   echo ""
   [[ -z "$_agent_token" ]] && die "agent token cannot be empty"
 
@@ -126,7 +126,7 @@ else
   echo ""
   echo "Watch directories (press Enter on an empty line when done):"
   while true; do
-    read -rp "  Directory path: " _dir
+    read -rp "  Directory path: " _dir </dev/tty
     [[ -z "$_dir" ]] && break
     _dir="${_dir/#\~/${HOME}}"   # expand leading tilde
     watch_sections+="[[agent.watch]]"$'\n'

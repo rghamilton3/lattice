@@ -84,7 +84,7 @@
 				}),
 				EditorView.theme({
 					'&': { height: '100%', backgroundColor: 'var(--color-surface)' },
-					'.cm-scroller': { overflow: 'auto', fontFamily: 'var(--font-mono)', fontSize: '14px' },
+					'.cm-scroller': { overflow: 'auto', fontFamily: 'var(--font-mono)', fontSize: '0.933rem' },
 					'.cm-content': { caretColor: 'var(--color-accent)' }
 				})
 			]

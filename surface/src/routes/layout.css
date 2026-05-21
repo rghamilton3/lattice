@@ -17,12 +17,18 @@
 	--font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
 }
 
-html,
+html {
+	/* Root font size — all Tailwind rem units scale from here.
+	   text-sm  = 0.875rem = 13.1px   (content)
+	   text-xs  = 0.75rem  = 11.25px  (metadata/chrome)
+	   text-base = 1rem    = 15px     (headings/modal) */
+	font-size: 15px;
+}
+
 body {
 	height: 100%;
 	margin: 0;
 	background-color: var(--color-surface);
 	color: var(--color-text);
 	font-family: var(--font-mono);
-	/* Keep 16px root so Tailwind rem units stay at intended sizes */
 }

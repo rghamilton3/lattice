@@ -4,21 +4,27 @@ version = "0.1.0"
 edition = "2024"
 description = "Local file indexer for the Lattice knowledge system"
 
-[[bin]]
-name = "lattice-agent"
-path = "src/main.rs"
-
 [dependencies]
 anyhow = "1"
 blake3 = "1"
 glob = "0.3"
+ksni = { version = "0.3", features = ["blocking"] }
 mime_guess = "2"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 toml = "0.8"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 walkdir = "2"
+
+[[bin]]
+name = "lattice-agent"
+path = "src/main.rs"
+
+[[bin]]
+name = "lattice-tray"
+path = "src/bin/lattice-tray.rs"
 

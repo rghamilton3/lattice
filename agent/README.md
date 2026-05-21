@@ -24,8 +24,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/rghamilton3/lattice/main/ins
 ```
 
 The script detects your architecture (x86\_64 or aarch64), downloads the latest release binary,
-optionally installs `lattice-capture`, writes `~/.config/lattice/config.toml`, and enables the
-systemd user service. Requires `curl` and `jq`.
+optionally installs `lattice-capture` and `lattice-tray`, writes `~/.config/lattice/config.toml`,
+and enables the systemd user service. Requires `curl` and `jq`.
 
 **Optional runtime dependency:** `pdftotext` (poppler-utils) for PDF indexing.
 On Arch: `sudo pacman -S poppler`. Without it, PDF files are skipped with an error log line.
@@ -35,11 +35,29 @@ On Arch: `sudo pacman -S poppler`. Without it, PDF files are skipped with an err
 ```bash
 cargo build --release
 cp target/release/lattice-agent ~/.local/bin/
+cp target/release/lattice-tray ~/.local/bin/
 mkdir -p ~/.config/systemd/user
-cp lattice-agent.service ~/.config/systemd/user/
+cp lattice-agent.service lattice-tray.service ~/.config/systemd/user/
 systemctl --user daemon-reload
-systemctl --user enable --now lattice-agent
+systemctl --user enable --now lattice-agent lattice-tray
 ```
+
+## Tray icon (lattice-tray)
+
+`lattice-tray` is a companion binary that shows the agent's status in the system tray. It
+communicates with the agent over a Unix socket at `$XDG_RUNTIME_DIR/lattice-agent.sock`.
+
+**Tray menu:**
+
+- Status line — scan state, last scan time, files indexed/skipped
+- Spine reachability — reflects the last scan attempt, not a live ping
+- Last error — shown only when errors occurred in the last pass
+- Stop / Start Agent — toggles based on whether the agent is running
+- Restart Agent — restarts the systemd service
+- Exit — stops the agent and quits the tray
+
+**Prerequisites:** your panel must support the StatusNotifierItem protocol.
+On Hyprland, enable waybar's `"tray"` module in your waybar config.
 
 ### Local cache
 

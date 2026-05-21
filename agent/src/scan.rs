@@ -1,11 +1,12 @@
 use crate::cache::Cache;
 use crate::config::{Config, WatchEntry};
 use crate::extract;
+use crate::status::{ScanState, SharedStatus};
 use anyhow::Result;
 use mime_guess::MimeGuess;
 use serde::Serialize;
 use std::path::Path;
-use std::time::UNIX_EPOCH;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, error, info, warn};
 use walkdir::WalkDir;
 
@@ -20,20 +21,59 @@ struct IndexPayload<'a> {
     size_bytes: u64,
 }
 
-pub async fn run_pass(cfg: &Config, cache: &Cache, client: &reqwest::Client) {
+enum ProcessResult {
+    Indexed,
+    Skipped,
+    SpineFail(String),
+}
+
+pub async fn run_pass(cfg: &Config, cache: &Cache, client: &reqwest::Client, status: &SharedStatus) {
+    {
+        let mut s = status.write().unwrap_or_else(|e| {
+            error!(error = %e, "status lock poisoned — exiting");
+            std::process::exit(1)
+        });
+        s.state = ScanState::Scanning;
+    }
+
     info!("starting scan pass");
     let mut indexed = 0u32;
     let mut skipped = 0u32;
     let mut errors = 0u32;
+    let mut spine_errors = 0u32;
+    let mut last_err: Option<String> = None;
 
     for entry in &cfg.watch {
-        let (i, s, e) = scan_watch(cfg, cache, client, entry).await;
+        let (i, sk, e, se, le) = scan_watch(cfg, cache, client, entry).await;
         indexed += i;
-        skipped += s;
+        skipped += sk;
         errors += e;
+        spine_errors += se;
+        if le.is_some() {
+            last_err = le;
+        }
     }
 
     info!(indexed, skipped, errors, "scan pass complete");
+
+    let mut s = status.write().unwrap_or_else(|e| {
+        error!(error = %e, "status lock poisoned — exiting");
+        std::process::exit(1)
+    });
+    s.state = if errors > 0 || spine_errors > 0 {
+        ScanState::Error
+    } else {
+        ScanState::Idle
+    };
+    s.last_scan_at = Some(now_iso());
+    s.last_indexed = indexed;
+    s.last_skipped = skipped;
+    s.last_errors = errors + spine_errors;
+    // Only update spine_ok when we actually tried to contact the spine.
+    if indexed > 0 || spine_errors > 0 {
+        s.spine_ok = spine_errors == 0;
+    }
+    s.last_error_msg = last_err;
 }
 
 async fn scan_watch(
@@ -41,11 +81,11 @@ async fn scan_watch(
     cache: &Cache,
     client: &reqwest::Client,
     entry: &WatchEntry,
-) -> (u32, u32, u32) {
+) -> (u32, u32, u32, u32, Option<String>) {
     let root = Path::new(&entry.path);
     if !root.exists() {
         warn!(path = %entry.path, "watch path does not exist, skipping");
-        return (0, 0, 0);
+        return (0, 0, 0, 0, None);
     }
 
     let patterns: Vec<glob::Pattern> = entry
@@ -61,6 +101,8 @@ async fn scan_watch(
     let mut indexed = 0u32;
     let mut skipped = 0u32;
     let mut errors = 0u32;
+    let mut spine_errors = 0u32;
+    let mut last_err: Option<String> = None;
 
     for dir_entry in WalkDir::new(root)
         .follow_links(false)
@@ -72,6 +114,7 @@ async fn scan_watch(
             Err(err) => {
                 warn!(error = %err, "walkdir error");
                 errors += 1;
+                last_err = Some(err.to_string());
                 continue;
             }
         };
@@ -91,25 +134,30 @@ async fn scan_watch(
         }
 
         match process_file(cfg, cache, client, file_path).await {
-            Ok(true) => indexed += 1,
-            Ok(false) => skipped += 1,
+            Ok(ProcessResult::Indexed) => indexed += 1,
+            Ok(ProcessResult::Skipped) => skipped += 1,
+            Ok(ProcessResult::SpineFail(msg)) => {
+                spine_errors += 1;
+                last_err = Some(msg);
+            }
             Err(e) => {
                 warn!(path = %file_path.display(), error = %e, "file processing failed");
                 errors += 1;
+                last_err = Some(e.to_string());
             }
         }
     }
 
-    (indexed, skipped, errors)
+    (indexed, skipped, errors, spine_errors, last_err)
 }
 
-/// Returns `true` if the file was posted to the spine, `false` if skipped (unchanged).
+/// Returns the outcome of attempting to index one file.
 async fn process_file(
     cfg: &Config,
     cache: &Cache,
     client: &reqwest::Client,
     path: &Path,
-) -> Result<bool> {
+) -> Result<ProcessResult> {
     let meta = std::fs::metadata(path)?;
     let size_bytes = meta.len();
 
@@ -120,7 +168,7 @@ async fn process_file(
             limit = cfg.max_file_bytes,
             "file exceeds size limit, skipping"
         );
-        return Ok(false);
+        return Ok(ProcessResult::Skipped);
     }
 
     let mtime_secs = meta
@@ -136,7 +184,7 @@ async fn process_file(
         && cached.mtime_secs == mtime_secs
         && cached.size_bytes == size_bytes as i64
     {
-        return Ok(false);
+        return Ok(ProcessResult::Skipped);
     }
 
     let content = std::fs::read(path)?;
@@ -147,7 +195,7 @@ async fn process_file(
         && cached.hash == hash
     {
         cache.upsert(&path_str, mtime_secs, size_bytes as i64, &hash);
-        return Ok(false);
+        return Ok(ProcessResult::Skipped);
     }
 
     let mime = MimeGuess::from_path(path)
@@ -158,7 +206,7 @@ async fn process_file(
         Some(t) => t,
         None => {
             debug!(path = %path.display(), mime = %mime, "unsupported mime type, skipping");
-            return Ok(false);
+            return Ok(ProcessResult::Skipped);
         }
     };
 
@@ -185,25 +233,25 @@ async fn process_file(
     match resp {
         Err(e) => {
             error!(path = %path.display(), error = %e, "POST to spine failed, will retry next poll");
+            Ok(ProcessResult::SpineFail(e.to_string()))
         }
         Ok(r) if !r.status().is_success() => {
-            let status = r.status();
+            let http_status = r.status();
             let body = r.text().await.unwrap_or_default();
             error!(
                 path = %path.display(),
-                %status,
+                status = %http_status,
                 body = %body,
                 "spine rejected index payload, will retry next poll"
             );
+            Ok(ProcessResult::SpineFail(format!("spine {http_status}")))
         }
         Ok(_) => {
             cache.upsert(&path_str, mtime_secs, size_bytes as i64, &hash);
             debug!(path = %path.display(), "indexed");
-            return Ok(true);
+            Ok(ProcessResult::Indexed)
         }
     }
-
-    Ok(false)
 }
 
 fn is_hidden(entry: &walkdir::DirEntry) -> bool {
@@ -212,6 +260,14 @@ fn is_hidden(entry: &walkdir::DirEntry) -> bool {
         .to_str()
         .map(|s| s.starts_with('.'))
         .unwrap_or(false)
+}
+
+fn now_iso() -> String {
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    chrono_iso(secs)
 }
 
 fn chrono_iso(unix_secs: i64) -> String {

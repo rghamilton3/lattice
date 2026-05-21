@@ -1,7 +1,9 @@
 mod cache;
 mod config;
 mod extract;
+mod ipc;
 mod scan;
+mod status;
 
 use anyhow::Result;
 use std::time::Duration;
@@ -29,8 +31,14 @@ async fn main() -> Result<()> {
         .timeout(Duration::from_secs(30))
         .build()?;
 
+    let status = status::new_shared();
+
+    // Serve status queries over the Unix socket in the background.
+    let ipc_status = status.clone();
+    tokio::spawn(async move { ipc::serve(ipc_status).await });
+
     loop {
-        scan::run_pass(&cfg, &cache, &client).await;
+        scan::run_pass(&cfg, &cache, &client, &status).await;
         tokio::time::sleep(Duration::from_secs(cfg.poll_interval_minutes * 60)).await;
     }
 }

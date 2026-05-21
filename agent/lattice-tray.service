@@ -1,0 +1,14 @@
+[Unit]
+Description=Lattice agent system tray icon
+Documentation=https://github.com/rghamilton3/lattice
+After=graphical-session.target lattice-agent.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/lattice-tray
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

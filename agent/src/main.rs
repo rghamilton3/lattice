@@ -18,15 +18,23 @@ async fn main() -> Result<()> {
         )
         .init();
 
+    let force = std::env::args().any(|a| a == "--force");
+
     let cfg = config::load()?;
     info!(
         machine_id = %cfg.machine_id,
         spine_url  = %cfg.spine_url,
         interval_m = cfg.poll_interval_minutes,
+        force,
         "lattice-agent starting"
     );
 
     let cache = cache::open()?;
+    if force {
+        cache.clear_known_paths();
+        info!("--force: cleared known-path records, all watch paths will be fully re-indexed");
+    }
+
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .build()?;

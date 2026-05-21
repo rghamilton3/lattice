@@ -44,6 +44,30 @@ impl Cache {
         )
         .ok();
     }
+
+    pub fn is_known_path(&self, path: &str) -> bool {
+        let conn = self.0.lock().unwrap();
+        conn.query_row(
+            "SELECT 1 FROM watch_paths WHERE path = ?1",
+            params![path],
+            |_| Ok(()),
+        )
+        .is_ok()
+    }
+
+    pub fn record_path(&self, path: &str) {
+        let conn = self.0.lock().unwrap();
+        conn.execute(
+            "INSERT OR IGNORE INTO watch_paths (path, first_seen_at) VALUES (?1, datetime('now'))",
+            params![path],
+        )
+        .ok();
+    }
+
+    pub fn clear_known_paths(&self) {
+        let conn = self.0.lock().unwrap();
+        conn.execute("DELETE FROM watch_paths", []).ok();
+    }
 }
 
 pub fn open() -> Result<Cache> {
@@ -63,6 +87,10 @@ pub fn open() -> Result<Cache> {
            size_bytes   INTEGER NOT NULL,
            hash         TEXT NOT NULL,
            last_sent_at TEXT NOT NULL
+         );
+         CREATE TABLE IF NOT EXISTS watch_paths (
+           path         TEXT PRIMARY KEY,
+           first_seen_at TEXT NOT NULL
          );",
     )
     .context("cache schema init failed")?;

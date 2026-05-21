@@ -88,6 +88,11 @@ async fn scan_watch(
         return (0, 0, 0, 0, None);
     }
 
+    let force = !cache.is_known_path(&entry.path);
+    if force {
+        info!(path = %entry.path, "new watch path — forcing full index");
+    }
+
     let patterns: Vec<glob::Pattern> = entry
         .patterns
         .iter()
@@ -133,7 +138,7 @@ async fn scan_watch(
             continue;
         }
 
-        match process_file(cfg, cache, client, file_path).await {
+        match process_file(cfg, cache, client, file_path, force).await {
             Ok(ProcessResult::Indexed) => indexed += 1,
             Ok(ProcessResult::Skipped) => skipped += 1,
             Ok(ProcessResult::SpineFail(msg)) => {
@@ -148,6 +153,7 @@ async fn scan_watch(
         }
     }
 
+    cache.record_path(&entry.path);
     (indexed, skipped, errors, spine_errors, last_err)
 }
 
@@ -157,6 +163,7 @@ async fn process_file(
     cache: &Cache,
     client: &reqwest::Client,
     path: &Path,
+    force: bool,
 ) -> Result<ProcessResult> {
     let meta = std::fs::metadata(path)?;
     let size_bytes = meta.len();
@@ -180,22 +187,26 @@ async fn process_file(
     let path_str = path.to_string_lossy();
 
     // Fast path: if mtime and size match the cache, skip hashing entirely.
-    if let Some(cached) = cache.get(&path_str)
-        && cached.mtime_secs == mtime_secs
-        && cached.size_bytes == size_bytes as i64
-    {
-        return Ok(ProcessResult::Skipped);
+    if !force {
+        if let Some(cached) = cache.get(&path_str)
+            && cached.mtime_secs == mtime_secs
+            && cached.size_bytes == size_bytes as i64
+        {
+            return Ok(ProcessResult::Skipped);
+        }
     }
 
     let content = std::fs::read(path)?;
     let hash = blake3::hash(&content).to_hex().to_string();
 
     // If the hash is unchanged (mtime drift, etc.), update cache metadata and skip.
-    if let Some(cached) = cache.get(&path_str)
-        && cached.hash == hash
-    {
-        cache.upsert(&path_str, mtime_secs, size_bytes as i64, &hash);
-        return Ok(ProcessResult::Skipped);
+    if !force {
+        if let Some(cached) = cache.get(&path_str)
+            && cached.hash == hash
+        {
+            cache.upsert(&path_str, mtime_secs, size_bytes as i64, &hash);
+            return Ok(ProcessResult::Skipped);
+        }
     }
 
     let mime = MimeGuess::from_path(path)

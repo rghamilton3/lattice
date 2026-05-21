@@ -1,42 +1,56 @@
-# sv
+# surface
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+SPA workbench for [Lattice](https://github.com/rghamilton3/lattice) — a personal knowledge management system. Built with [Svelte 5](https://svelte.dev) (runes mode) and [SvelteKit](https://kit.svelte.dev), using [`adapter-static`](https://github.com/sveltejs/kit/tree/main/packages/adapter-static) to emit static files served by [spine](../spine).
 
-## Creating a project
+Provides search, reading panes, and working-doc editing over the spine REST API.
 
-If you're seeing this, you've probably already done this step. Congrats!
+## Architecture
 
-```sh
-# create a new project
-npx sv create my-app
+```
+lattice/
+├── spine/    ← central server (Bun/Elysia)
+├── agent/    ← local file indexer (Rust)
+└── surface/  ← you are here (SvelteKit SPA)
 ```
 
-To recreate this project with the same configuration:
+Built output lands in `build/` and is served by spine from `/`.
 
-```sh
-# recreate this project
-bun x sv@0.15.3 create --template minimal --types ts --add prettier eslint vitest="usages:unit,component" playwright tailwindcss="plugins:typography,forms" sveltekit-adapter="adapter:static" mcp="ide:claude-code+setup:remote" --install bun surface
+## Development
+
+```bash
+bun install
+bun run dev              # Vite dev server on :5173
+bun run build            # static export to build/
+bun run preview          # preview the production build locally
 ```
 
-## Developing
+The dev server expects spine at `http://localhost:3000` (configured via Vite proxy). Run `just dev` from the repo root to start both spine and surface together.
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+## Testing
 
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+```bash
+bun test                 # unit + e2e (Vitest + Playwright)
+bun run test:unit        # unit tests only
+bun run test:e2e         # e2e tests with Playwright
 ```
 
-## Building
+## Checks & linting
 
-To create a production version of your app:
-
-```sh
-npm run build
+```bash
+bun run check            # svelte-check (type-checking)
+bun run lint             # prettier + eslint
+bun run format           # auto-format with prettier
 ```
 
-You can preview the production build with `npm run preview`.
+## Key dependencies
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+| Package | Use |
+|---------|-----|
+| `@tanstack/svelte-query` | Server state (API calls to spine) |
+| `codemirror` + `@codemirror/lang-markdown` | Working-doc editor |
+| `marked` + `marked-katex-extension` | Render markdown + LaTeX |
+| `katex` | LaTeX math rendering |
+| `mermaid` | Mermaid diagram rendering |
+| `dompurify` | Sanitize rendered HTML |
+| `pdfjs-dist` | PDF preview in reading panes |
+| `tailwindcss` v4 | Styling |

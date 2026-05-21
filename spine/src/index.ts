@@ -1,9 +1,28 @@
 import { Elysia, t } from "elysia";
+import { staticPlugin } from "@elysiajs/static";
 import { timingSafeEqual } from "node:crypto";
+import { realpath } from "node:fs/promises";
+import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { initDb } from "./db";
-import { initSearch, writeCaptureFile, refreshIndex, search } from "./search";
+import {
+  initSearch,
+  writeCaptureFile,
+  writeLocalFile,
+  refreshIndex,
+  search,
+} from "./search";
 import type { SearchResult } from "./search";
 import { getAgentToken } from "./config";
+import {
+  WorkingNotFoundError,
+  WorkingConflictError,
+  listWorking,
+  readWorking,
+  createWorking,
+  updateWorking,
+  deleteWorking,
+} from "./working";
 
 const db = initDb();
 await initSearch(db);
@@ -11,6 +30,8 @@ await initSearch(db);
 const AGENT_TOKEN = getAgentToken();
 const ALLOW_HTTP = process.env.ALLOW_HTTP === "true";
 const DEV_USER = process.env.DEV_USER;
+const SURFACE_BUILD =
+  process.env.SURFACE_BUILD ?? join(import.meta.dir, "../../surface/build");
 
 if (!AGENT_TOKEN) {
   console.warn("WARNING: LATTICE_AGENT_TOKEN not set — all agent routes will reject");
@@ -29,101 +50,25 @@ interface CaptureRow {
   ingested_at: string;
 }
 
-function stripFrontmatter(s: string): string {
-  return s.startsWith("---") ? s.replace(/^---[\s\S]*?---\n*/, "") : s;
-}
-
-function escHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function renderPage(opts: {
-  query?: string;
-  results?: SearchResult[];
-  captures?: CaptureRow[];
-}): string {
-  const { query = "", results, captures } = opts;
-
-  let body: string;
-  if (results) {
-    if (results.length === 0) {
-      body = `<p>No results for <em>${escHtml(query)}</em>.</p>`;
-    } else {
-      const items = results
-        .map(
-          (r) => `
-<div class="result">
-  <div class="meta">
-    <span class="score">score: ${r.score.toFixed(3)}</span>
-    &nbsp;·&nbsp; <span class="path">${escHtml(r.path)}</span>
-  </div>
-  <div class="snippet">${escHtml(stripFrontmatter(r.snippet))}</div>
-  <details>
-    <summary>Full text (capture #${r.id})</summary>
-    <pre class="full">${escHtml(stripFrontmatter(r.body))}</pre>
-  </details>
-</div>`
-        )
-        .join("\n");
-      body = `<div class="results">${items}</div>`;
-    }
-  } else {
-    const rows = (captures ?? [])
-      .map(
-        (c) =>
-          `<tr><td>${c.id}</td><td>${escHtml(c.text)}</td><td>${escHtml(c.source)}</td><td>${escHtml(c.captured_at)}</td></tr>`
-      )
-      .join("\n");
-    body = `
-<h2>Recent captures</h2>
-<table>
-<thead><tr><th>ID</th><th>Text</th><th>Source</th><th>Captured At</th></tr></thead>
-<tbody>${rows}</tbody>
-</table>`;
-  }
-
-  const clearLink = query ? ` &nbsp;<a href="/">Clear</a>` : "";
-
-  return `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Lattice</title>
-<style>
-body { font-family: monospace; padding: 1rem; max-width: 960px; margin: 0 auto; }
-h1, h2 { font-size: 1.2rem; margin: 0.5rem 0; }
-form { margin: 1rem 0; display: flex; gap: 0.5rem; align-items: center; }
-input[name=q] { flex: 1; padding: 4px 8px; font-family: monospace; font-size: 1rem; }
-button { padding: 4px 12px; font-family: monospace; cursor: pointer; }
-.result { border: 1px solid #ccc; margin-bottom: 0.75rem; padding: 8px; }
-.meta { font-size: 0.85em; color: #666; margin-bottom: 4px; }
-.score { color: #999; }
-.snippet { background: #f9f9f9; padding: 6px; white-space: pre-wrap; word-break: break-word; }
-.full { background: #f0f0f0; padding: 6px; white-space: pre-wrap; word-break: break-word; margin-top: 4px; }
-details summary { cursor: pointer; margin-top: 4px; font-size: 0.9em; }
-table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
-td, th { border: 1px solid #ccc; padding: 4px 8px; text-align: left; vertical-align: top; }
-th { background: #eee; }
-td:nth-child(2) { max-width: 600px; white-space: pre-wrap; word-break: break-word; }
-</style>
-</head>
-<body>
-<h1>Lattice</h1>
-<form method="get" action="/">
-  <input name="q" value="${escHtml(query)}" placeholder="Search captures…" autocomplete="off">
-  <button type="submit">Search</button>${clearLink}
-</form>
-${body}
-</body>
-</html>`;
+interface FileRow {
+  id: number;
+  machine_id: string;
+  path: string;
+  hash: string;
+  mime_type: string;
+  text: string;
+  modified_at: string;
+  size_bytes: number;
+  indexed_at: string;
 }
 
 const app = new Elysia()
   .get("/ping", () => ({ ok: true }))
+  .use(
+    existsSync(SURFACE_BUILD)
+      ? staticPlugin({ assets: SURFACE_BUILD, prefix: "", indexHTML: true, alwaysStatic: false })
+      : new Elysia()
+  )
 
   .guard(
     {
@@ -142,27 +87,7 @@ const app = new Elysia()
     },
     (app) =>
       app
-        .get(
-          "/",
-          async ({ query }) => {
-            const q = query.q?.trim() ?? "";
-            if (q) {
-              const results = await search(q);
-              return new Response(renderPage({ query: q, results }), {
-                headers: { "content-type": "text/html" },
-              });
-            }
-            const captures = db
-              .query(
-                "SELECT id, text, source, captured_at, ingested_at FROM captures ORDER BY ingested_at DESC LIMIT 50"
-              )
-              .all() as CaptureRow[];
-            return new Response(renderPage({ captures }), {
-              headers: { "content-type": "text/html" },
-            });
-          },
-          { query: t.Object({ q: t.Optional(t.String()) }) }
-        )
+        // ── Captures ──────────────────────────────────────────────────────
         .get(
           "/api/captures",
           ({ query }) => {
@@ -176,6 +101,29 @@ const app = new Elysia()
           { query: t.Object({ limit: t.Optional(t.String()) }) }
         )
         .get(
+          "/api/captures/:id",
+          ({ params, set }) => {
+            const id = parseInt(params.id, 10);
+            if (isNaN(id)) {
+              set.status = 400;
+              return { error: "Invalid id" };
+            }
+            const row = db
+              .query(
+                "SELECT id, text, source, captured_at, ingested_at FROM captures WHERE id = ?"
+              )
+              .get(id) as CaptureRow | null;
+            if (!row) {
+              set.status = 404;
+              return { error: "Not found" };
+            }
+            return row;
+          },
+          { params: t.Object({ id: t.String() }) }
+        )
+
+        // ── Search ────────────────────────────────────────────────────────
+        .get(
           "/api/search",
           async ({ query, set }) => {
             const q = query.q?.trim() ?? "";
@@ -187,6 +135,276 @@ const app = new Elysia()
             return { results };
           },
           { query: t.Object({ q: t.Optional(t.String()) }) }
+        )
+
+        // ── File index ────────────────────────────────────────────────────
+        .get(
+          "/api/files/:id",
+          ({ params, set }) => {
+            const id = parseInt(params.id, 10);
+            if (isNaN(id)) {
+              set.status = 400;
+              return { error: "Invalid id" };
+            }
+            const row = db
+              .query("SELECT * FROM file_index WHERE id = ?")
+              .get(id) as FileRow | null;
+            if (!row) {
+              set.status = 404;
+              return { error: "Not found" };
+            }
+            return row;
+          },
+          { params: t.Object({ id: t.String() }) }
+        )
+        .get(
+          "/api/files/:id/raw",
+          async ({ params, set }) => {
+            const id = parseInt(params.id, 10);
+            if (isNaN(id)) {
+              set.status = 400;
+              return "Invalid id";
+            }
+            const row = db
+              .query("SELECT path, mime_type FROM file_index WHERE id = ?")
+              .get(id) as Pick<FileRow, "path" | "mime_type"> | null;
+            if (!row) {
+              set.status = 404;
+              return "Not found";
+            }
+            // Symlink-swap defense: stored path must equal its canonical form
+            let resolved: string;
+            try {
+              resolved = await realpath(row.path);
+            } catch {
+              set.status = 404;
+              return "File not found on disk";
+            }
+            if (resolved !== row.path) {
+              set.status = 403;
+              return "Forbidden";
+            }
+            return new Response(Bun.file(resolved), {
+              headers: { "Content-Type": row.mime_type },
+            });
+          },
+          { params: t.Object({ id: t.String() }) }
+        )
+
+        // ── Working docs ──────────────────────────────────────────────────
+        .get("/api/working", () => listWorking())
+        .get(
+          "/api/working/:slug",
+          ({ params, set }) => {
+            try {
+              return readWorking(params.slug);
+            } catch (e) {
+              if (e instanceof WorkingNotFoundError) {
+                set.status = 404;
+                return { error: "Not found" };
+              }
+              throw e;
+            }
+          },
+          { params: t.Object({ slug: t.String() }) }
+        )
+        .post(
+          "/api/working",
+          async ({ body, set }) => {
+            let content = body.content;
+
+            if (body.seed_capture_id != null) {
+              const row = db
+                .query("SELECT text, captured_at FROM captures WHERE id = ?")
+                .get(body.seed_capture_id) as Pick<
+                CaptureRow,
+                "text" | "captured_at"
+              > | null;
+              if (row) {
+                content = `# ${body.title}\n\n> Seeded from capture #${body.seed_capture_id} (${row.captured_at})\n\n${row.text}\n`;
+              }
+            } else if (body.seed_file_id != null) {
+              const row = db
+                .query("SELECT text, path FROM file_index WHERE id = ?")
+                .get(body.seed_file_id) as Pick<FileRow, "text" | "path"> | null;
+              if (row) {
+                content = `# ${body.title}\n\n> Seeded from file: ${row.path}\n\n${row.text}\n`;
+              }
+            }
+
+            try {
+              const slug = createWorking(body.title, content);
+              refreshIndex();
+              return { slug };
+            } catch (e) {
+              if (e instanceof WorkingConflictError) {
+                set.status = 409;
+                return { error: "Slug already exists" };
+              }
+              throw e;
+            }
+          },
+          {
+            body: t.Object({
+              title: t.String({ minLength: 1 }),
+              content: t.Optional(t.String()),
+              seed_capture_id: t.Optional(t.Integer()),
+              seed_file_id: t.Optional(t.Integer()),
+            }),
+          }
+        )
+        .put(
+          "/api/working/:slug",
+          ({ params, body, set }) => {
+            try {
+              updateWorking(params.slug, body.content);
+              refreshIndex();
+              return { ok: true };
+            } catch (e) {
+              if (e instanceof WorkingNotFoundError) {
+                set.status = 404;
+                return { error: "Not found" };
+              }
+              throw e;
+            }
+          },
+          {
+            params: t.Object({ slug: t.String() }),
+            body: t.Object({ content: t.String() }),
+          }
+        )
+        .delete(
+          "/api/working/:slug",
+          ({ params, set }) => {
+            try {
+              deleteWorking(params.slug);
+              refreshIndex();
+              return { ok: true };
+            } catch (e) {
+              if (e instanceof WorkingNotFoundError) {
+                set.status = 404;
+                return { error: "Not found" };
+              }
+              throw e;
+            }
+          },
+          { params: t.Object({ slug: t.String() }) }
+        )
+
+        // ── Lateral movement ──────────────────────────────────────────────
+        .get(
+          "/api/similar",
+          async ({ query, set }) => {
+            const { id, kind } = query;
+            let sourceText = "";
+
+            if (kind === "capture") {
+              const numId = parseInt(id, 10);
+              if (isNaN(numId)) {
+                set.status = 400;
+                return { error: "Invalid id" };
+              }
+              const row = db
+                .query("SELECT text FROM captures WHERE id = ?")
+                .get(numId) as { text: string } | null;
+              if (!row) {
+                set.status = 404;
+                return { error: "Not found" };
+              }
+              sourceText = row.text;
+            } else if (kind === "local-file") {
+              const numId = parseInt(id, 10);
+              if (isNaN(numId)) {
+                set.status = 400;
+                return { error: "Invalid id" };
+              }
+              const row = db
+                .query("SELECT text FROM file_index WHERE id = ?")
+                .get(numId) as { text: string } | null;
+              if (!row) {
+                set.status = 404;
+                return { error: "Not found" };
+              }
+              sourceText = row.text;
+            } else {
+              // kind === "working", id is a slug
+              try {
+                const doc = readWorking(id);
+                sourceText = doc.content;
+              } catch (e) {
+                if (e instanceof WorkingNotFoundError) {
+                  set.status = 404;
+                  return { error: "Not found" };
+                }
+                throw e;
+              }
+            }
+
+            const numId = kind !== "working" ? parseInt(id, 10) : NaN;
+            const raw = await search(sourceText.slice(0, 2000));
+            const filtered = raw
+              .filter((r) => !(r.kind === "capture" && r.id === numId))
+              .filter((r) => !(r.kind === "working" && r.slug === id))
+              .slice(0, 10);
+            return { results: filtered };
+          },
+          {
+            query: t.Object({
+              id: t.String({ minLength: 1 }),
+              kind: t.Union([
+                t.Literal("capture"),
+                t.Literal("local-file"),
+                t.Literal("working"),
+              ]),
+            }),
+          }
+        )
+        .get(
+          "/api/nearby",
+          ({ query, set }) => {
+            const ts = query.timestamp?.trim();
+            if (!ts) {
+              set.status = 400;
+              return { error: "timestamp is required" };
+            }
+            const windowHours = Math.min(
+              Math.max(Number(query.window_hours) || 72, 1),
+              720
+            );
+            const base = new Date(ts);
+            if (isNaN(base.getTime())) {
+              set.status = 400;
+              return { error: "Invalid timestamp" };
+            }
+            const lower = new Date(
+              base.getTime() - windowHours * 3_600_000
+            ).toISOString();
+            const upper = new Date(
+              base.getTime() + windowHours * 3_600_000
+            ).toISOString();
+
+            const results = db
+              .query(
+                `SELECT id, 'capture' AS kind, captured_at AS ts,
+                        substr(text, 1, 200) AS snippet, NULL AS machine_id
+                 FROM captures
+                 WHERE captured_at BETWEEN ? AND ?
+                 UNION ALL
+                 SELECT id, 'local-file' AS kind, modified_at AS ts,
+                        substr(text, 1, 200) AS snippet, machine_id
+                 FROM file_index
+                 WHERE modified_at BETWEEN ? AND ?
+                 ORDER BY ts ASC`
+              )
+              .all(lower, upper, lower, upper);
+            return { results };
+          },
+          {
+            query: t.Object({
+              timestamp: t.String({ minLength: 1 }),
+              window_hours: t.Optional(t.String()),
+            }),
+          }
         )
   )
 
@@ -260,6 +478,8 @@ const app = new Elysia()
                 body.size_bytes,
                 new Date().toISOString()
               );
+              writeLocalFile(body.machine_id, body.path, body.hash, body.text);
+              refreshIndex();
               return { ok: true };
             },
             {

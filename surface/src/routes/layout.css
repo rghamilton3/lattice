@@ -1,0 +1,28 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/forms';
+@plugin '@tailwindcss/typography';
+
+@theme {
+	--color-surface: #1e1e2e;
+	--color-surface-raised: #262637;
+	--color-surface-high: #313244;
+	--color-border: #45475a;
+	--color-text: #cdd6f4;
+	--color-text-muted: #6c7086;
+	--color-accent: #cba6f7;
+	--color-accent-dim: #89b4fa;
+	--color-capture: #a6e3a1;
+	--color-file: #89dceb;
+	--color-working: #f9e2af;
+	--font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+}
+
+html,
+body {
+	height: 100%;
+	margin: 0;
+	background-color: var(--color-surface);
+	color: var(--color-text);
+	font-family: var(--font-mono);
+	font-size: 14px;
+}

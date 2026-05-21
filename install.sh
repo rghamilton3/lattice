@@ -105,6 +105,34 @@ if [[ "$_ans" =~ ^[Yy]$ ]]; then
   info "lattice-capture installed to ${INSTALL_DIR}/lattice-capture"
 fi
 
+# ── lattice-tray (optional) ───────────────────────────────────────────────────
+
+echo ""
+read -rp "Install lattice-tray (system tray icon)? [y/N] " _ans </dev/tty
+if [[ "$_ans" =~ ^[Yy]$ ]]; then
+  TRAY_BINARY_ASSET="lattice-tray-${TARGET}"
+  tray_url=$(release_url "$TRAY_BINARY_ASSET")
+  [[ -z "$tray_url" ]] && die "'${TRAY_BINARY_ASSET}' asset not found in the latest release"
+
+  info "Downloading ${TRAY_BINARY_ASSET}…"
+  curl -fSL --progress-bar "$tray_url" -o "${INSTALL_DIR}/lattice-tray"
+  chmod +x "${INSTALL_DIR}/lattice-tray"
+  info "lattice-tray installed to ${INSTALL_DIR}/lattice-tray"
+
+  TRAY_SVC_FILE="${SERVICE_DIR}/lattice-tray.service"
+  tray_svc_url=$(release_url "lattice-tray.service")
+  [[ -z "$tray_svc_url" ]] && die "'lattice-tray.service' asset not found in the latest release"
+
+  mkdir -p "$SERVICE_DIR"
+  curl -fSL --progress-bar "$tray_svc_url" -o "$TRAY_SVC_FILE"
+  info "Tray service unit installed to ${TRAY_SVC_FILE}"
+
+  systemctl --user daemon-reload
+  systemctl --user enable --now lattice-tray
+  info "lattice-tray service enabled and started."
+  info "NOTE: waybar's tray module must be enabled for the icon to appear."
+fi
+
 # ── Config ────────────────────────────────────────────────────────────────────
 
 echo ""
@@ -179,3 +207,4 @@ echo "Installation complete."
 echo "  Status:  systemctl --user status lattice-agent"
 echo "  Logs:    journalctl --user -u lattice-agent -f"
 echo "  Config:  ${CONFIG_FILE}"
+echo "  Tray:    systemctl --user status lattice-tray"

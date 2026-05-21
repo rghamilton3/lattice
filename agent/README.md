@@ -17,39 +17,28 @@ On each poll cycle the agent:
 
 If the spine is unreachable the file is not cached, so it will be retried next cycle.
 
-## Setup
+## Install
 
-### 1. Build
+```bash
+curl -fsSL https://raw.githubusercontent.com/rghamilton3/lattice/main/install.sh | bash
+```
+
+The script detects your architecture (x86\_64 or aarch64), downloads the latest release binary,
+optionally installs `lattice-capture`, writes `~/.config/lattice/config.toml`, and enables the
+systemd user service. Requires `curl` and `jq`.
+
+**Optional runtime dependency:** `pdftotext` (poppler-utils) for PDF indexing.
+On Arch: `sudo pacman -S poppler`. Without it, PDF files are skipped with an error log line.
+
+### Manual setup (development)
 
 ```bash
 cargo build --release
 cp target/release/lattice-agent ~/.local/bin/
-```
-
-Requires poppler-utils for PDF support (`sudo pacman -S poppler` on Arch).
-
-### 2. Configure
-
-The agent shares `~/.config/lattice/config.toml` with `lattice-capture`. If you've already
-set that up, just add an `[agent]` section and one or more `[[agent.watch]]` blocks.
-
-```bash
-mkdir -p ~/.config/lattice
-cp ../config.toml.example ~/.config/lattice/config.toml
-$EDITOR ~/.config/lattice/config.toml
-```
-
-Required: `spine.url`, `spine.agent_token`, at least one `[[agent.watch]]` block.
-
-### 3. Run as a user systemd service
-
-```bash
 mkdir -p ~/.config/systemd/user
 cp lattice-agent.service ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now lattice-agent
-systemctl --user status lattice-agent
-journalctl --user -u lattice-agent -f
 ```
 
 ### Local cache

@@ -24,18 +24,25 @@ const hostname = RPC_HOST.slice(0, colonIdx);
 const port = parseInt(RPC_HOST.slice(colonIdx + 1), 10);
 
 let backoff = 1_000;
-let activeSocket: { write(data: string): void } | null = null;
+let activeSocket: { write(data: string): number | void } | null = null;
 
 function sendReply(message: string): void {
   if (!activeSocket) return;
-  activeSocket.write(
+  const payload =
     JSON.stringify({
       jsonrpc: "2.0",
       method: "send",
       id: Date.now(),
       params: { recipient: [SIGNAL_PHONE], message },
-    }) + "\n"
-  );
+    }) + "\n";
+  try {
+    const wrote = activeSocket.write(payload);
+    if (!wrote) {
+      console.error("[signal-relay] reply write rejected (backpressure/closed), reply dropped");
+    }
+  } catch (err) {
+    console.error("[signal-relay] failed to send reply:", (err as Error).message);
+  }
 }
 
 interface SignalAttachment {
@@ -92,6 +99,7 @@ function connect(): void {
       },
 
       error(_socket, err: Error) {
+        activeSocket = null;
         console.error("[signal-relay] socket error:", err.message);
       },
 
@@ -114,6 +122,9 @@ function handleMessage(msg: unknown): void {
     msg === null ||
     (msg as Record<string, unknown>).method !== "receive"
   ) {
+    if (typeof (msg as Record<string, unknown>).error === "object") {
+      console.error("[signal-relay] RPC error:", JSON.stringify((msg as Record<string, unknown>).error));
+    }
     return;
   }
 

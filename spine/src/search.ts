@@ -57,8 +57,8 @@ let _indexFailures = 0;
 // Serial lock: ensures update() and embed() calls never overlap.
 let _indexLock: Promise<void> = Promise.resolve();
 
-// Test-only reset; not exported via package surface.
-export function _resetSearchForTests(): void {
+/** @internal test-only — do not use from production code. */
+export function __resetSearchForTests(): void {
   _store = null;
   _initFailed = false;
   _indexFailures = 0;

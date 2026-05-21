@@ -15,6 +15,13 @@ interface FakeStoreState {
   searchHits: FakeSearchHit[];
   searchThrows: Error | null;
   updateThrows: Error | null;
+  // Live count of update() invocations currently in flight, and the
+  // high-water mark observed. Used to assert refreshIndex serialization.
+  inflightUpdates: number;
+  maxConcurrentUpdates: number;
+  // When >0, update() awaits this many ms before returning so that
+  // concurrency assertions actually have time to observe overlap.
+  updateDelayMs: number;
 }
 
 export interface FakeStoreHandle {
@@ -23,6 +30,7 @@ export interface FakeStoreHandle {
   setNeedsEmbedding(n: number): void;
   setUpdateError(err: Error | null): void;
   setSearchError(err: Error | null): void;
+  setUpdateDelay(ms: number): void;
 }
 
 let handle: FakeStoreHandle | null = null;
@@ -39,13 +47,27 @@ export function installQmdMock(): FakeStoreHandle {
     searchHits: [],
     searchThrows: null,
     updateThrows: null,
+    inflightUpdates: 0,
+    maxConcurrentUpdates: 0,
+    updateDelayMs: 0,
   };
 
   const fakeStore = {
     async update() {
       state.updateCalls++;
-      if (state.updateThrows) throw state.updateThrows;
-      return { needsEmbedding: state.needsEmbedding };
+      state.inflightUpdates++;
+      if (state.inflightUpdates > state.maxConcurrentUpdates) {
+        state.maxConcurrentUpdates = state.inflightUpdates;
+      }
+      try {
+        if (state.updateDelayMs > 0) {
+          await new Promise((r) => setTimeout(r, state.updateDelayMs));
+        }
+        if (state.updateThrows) throw state.updateThrows;
+        return { needsEmbedding: state.needsEmbedding };
+      } finally {
+        state.inflightUpdates--;
+      }
     },
     async embed() {
       state.embedCalls++;
@@ -73,6 +95,9 @@ export function installQmdMock(): FakeStoreHandle {
     },
     setSearchError(err) {
       state.searchThrows = err;
+    },
+    setUpdateDelay(ms) {
+      state.updateDelayMs = ms;
     },
   };
 

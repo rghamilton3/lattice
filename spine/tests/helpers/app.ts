@@ -28,10 +28,10 @@ export async function buildTestApp(opts: BuildTestAppOptions = {}): Promise<Test
 
   // Import lazily — the modules must read DATABASE_PATH after env is set.
   const { initDb } = await import("../../src/db");
-  const { initSearch, _resetSearchForTests } = await import("../../src/search");
+  const { initSearch, __resetSearchForTests } = await import("../../src/search");
   const { buildApp } = await import("../../src/app");
 
-  _resetSearchForTests();
+  __resetSearchForTests();
 
   const db = initDb();
   await initSearch(db);

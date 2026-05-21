@@ -19,8 +19,8 @@ afterEach(() => {
 describe("initSearch", () => {
   it("backfills capture markdown files from existing DB rows", async () => {
     const { initDb } = await import("../../src/db");
-    const { initSearch, capturesDir, _resetSearchForTests } = await import("../../src/search");
-    _resetSearchForTests();
+    const { initSearch, capturesDir, __resetSearchForTests } = await import("../../src/search");
+    __resetSearchForTests();
 
     const db = initDb();
     db.run(
@@ -41,8 +41,8 @@ describe("initSearch", () => {
 
   it("does not overwrite existing capture markdown files", async () => {
     const { initDb } = await import("../../src/db");
-    const { initSearch, capturesDir, _resetSearchForTests } = await import("../../src/search");
-    _resetSearchForTests();
+    const { initSearch, capturesDir, __resetSearchForTests } = await import("../../src/search");
+    __resetSearchForTests();
 
     const db = initDb();
     db.run(
@@ -56,7 +56,7 @@ describe("initSearch", () => {
     // Tamper with it.
     writeFileSync(file, "tampered content");
 
-    _resetSearchForTests();
+    __resetSearchForTests();
     await initSearch(db);
     expect(readFileSync(file, "utf-8")).toBe("tampered content");
     db.close();
@@ -64,8 +64,8 @@ describe("initSearch", () => {
 
   it("triggers an initial refreshIndex (update + embed when needed)", async () => {
     const { initDb } = await import("../../src/db");
-    const { initSearch, _resetSearchForTests } = await import("../../src/search");
-    _resetSearchForTests();
+    const { initSearch, __resetSearchForTests } = await import("../../src/search");
+    __resetSearchForTests();
 
     qmd.setNeedsEmbedding(3);
     const db = initDb();
@@ -87,8 +87,8 @@ describe("initSearch", () => {
       },
     }));
 
-    const { initSearch, _resetSearchForTests } = await import("../../src/search");
-    _resetSearchForTests();
+    const { initSearch, __resetSearchForTests } = await import("../../src/search");
+    __resetSearchForTests();
     const db = initDb();
     await expect(initSearch(db)).rejects.toThrow("boom");
     db.close();
@@ -97,35 +97,42 @@ describe("initSearch", () => {
 
 describe("search() before initSearch", () => {
   it("returns [] when the store has not been initialized", async () => {
-    const { search, _resetSearchForTests } = await import("../../src/search");
-    _resetSearchForTests();
+    const { search, __resetSearchForTests } = await import("../../src/search");
+    __resetSearchForTests();
     const results = await search("any query");
     expect(results).toEqual([]);
   });
 });
 
 describe("refreshIndex serialization", () => {
-  it("serializes overlapping calls so update() never overlaps", async () => {
+  it("never runs update() concurrently across overlapping calls", async () => {
     const { initDb } = await import("../../src/db");
-    const { initSearch, refreshIndex, _resetSearchForTests } = await import("../../src/search");
-    _resetSearchForTests();
+    const { initSearch, refreshIndex, __resetSearchForTests } = await import("../../src/search");
+    __resetSearchForTests();
     const db = initDb();
+    // Make each update() block long enough that an unserialized impl
+    // would have multiple in-flight at once.
+    qmd.setUpdateDelay(15);
     await initSearch(db);
 
-    // Fire several refreshes back-to-back; they must run sequentially.
     refreshIndex();
     refreshIndex();
     refreshIndex();
-    await new Promise((r) => setTimeout(r, 30));
-    // initSearch already invoked one refreshIndex => 4 total updates expected.
+
+    // Wait for the chained promises to drain (3 fires × 15ms each).
+    await new Promise((r) => setTimeout(r, 100));
+
+    // High-water mark of in-flight update() invocations must be 1 — if the
+    // lock leaked, this would observe at least 2.
+    expect(qmd.state.maxConcurrentUpdates).toBe(1);
     expect(qmd.state.updateCalls).toBeGreaterThanOrEqual(4);
     db.close();
   });
 
   it("swallows update() errors and increments the failure counter", async () => {
     const { initDb } = await import("../../src/db");
-    const { initSearch, refreshIndex, _resetSearchForTests } = await import("../../src/search");
-    _resetSearchForTests();
+    const { initSearch, refreshIndex, __resetSearchForTests } = await import("../../src/search");
+    __resetSearchForTests();
     const db = initDb();
     await initSearch(db);
 

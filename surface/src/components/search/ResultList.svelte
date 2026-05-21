@@ -115,16 +115,16 @@
 				</div>
 				<div class="flex gap-1 px-3 pb-2">
 					<button
-						class="rounded px-2 py-0.5 text-xs text-text-muted hover:bg-surface-high hover:text-text"
+						class="rounded px-2 py-0.5 text-sm text-text-muted hover:bg-surface-high hover:text-text"
 						onclick={() => wb.openInPane(paneIndex, { kind: 'doc', ref: refToDocRef(result) })}
 					>open</button>
 					<button
-						class="rounded px-2 py-0.5 text-xs text-text-muted hover:bg-surface-high hover:text-text"
+						class="rounded px-2 py-0.5 text-sm text-text-muted hover:bg-surface-high hover:text-text"
 						onclick={() => wb.openInOther(paneIndex, { kind: 'doc', ref: refToDocRef(result) })}
 					>open →</button>
 					{#if result.kind !== 'working'}
 						<button
-							class="rounded px-2 py-0.5 text-xs text-text-muted hover:bg-surface-high hover:text-text"
+							class="rounded px-2 py-0.5 text-sm text-text-muted hover:bg-surface-high hover:text-text"
 							onclick={async () => {
 								const title = result.path.split('/').pop() ?? 'untitled';
 								const body: Record<string, unknown> = { title };

@@ -4,6 +4,7 @@
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { captureKeys, fetchCaptures } from '$lib/api/captures';
 	import { searchKeys, fetchSearch } from '$lib/api/search';
+	import { workingKeys, fetchWorkingList } from '$lib/api/working';
 	import ResultList from './ResultList.svelte';
 
 	const { paneIndex, query: initialQuery }: { paneIndex: 0 | 1; query: string } = $props();
@@ -40,6 +41,12 @@
 		queryFn: () => fetchCaptures(30),
 		enabled: browser && debouncedQ.length === 0
 	}));
+
+	const workingQuery = createQuery(() => ({
+		queryKey: workingKeys.list(),
+		queryFn: fetchWorkingList,
+		enabled: browser && debouncedQ.length === 0
+	}));
 </script>
 
 <div class="flex h-full flex-col">
@@ -63,6 +70,18 @@
 				<ResultList {paneIndex} items={searchQuery.data.results} />
 			{/if}
 		{:else}
+			{#if workingQuery.data && workingQuery.data.length > 0}
+				<p class="px-3 pt-2 text-sm text-text-muted">working docs</p>
+				{#each workingQuery.data as doc (doc.slug)}
+					<button
+						class="w-full border-b border-border px-3 py-2 text-left hover:bg-surface-raised"
+						onclick={() => wb.openInPane(paneIndex, { kind: 'editor', slug: doc.slug })}
+					>
+						<div class="truncate text-sm text-text">{doc.title}</div>
+						<div class="mt-0.5 text-sm text-text-muted">{doc.modified_at.slice(0, 10)}</div>
+					</button>
+				{/each}
+			{/if}
 			{#if recentQuery.data && recentQuery.data.length > 0}
 				<p class="px-3 pt-2 text-sm text-text-muted">recent captures</p>
 				{#each recentQuery.data as capture (capture.id)}
@@ -74,7 +93,8 @@
 						<div class="mt-0.5 text-sm text-text-muted">{capture.source} · {capture.captured_at.slice(0, 10)}</div>
 					</button>
 				{/each}
-			{:else}
+			{/if}
+			{#if (!workingQuery.data || workingQuery.data.length === 0) && (!recentQuery.data || recentQuery.data.length === 0)}
 				<p class="p-3 text-sm text-text-muted">start typing to search</p>
 			{/if}
 		{/if}

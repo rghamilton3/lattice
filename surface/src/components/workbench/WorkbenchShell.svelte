@@ -1,8 +1,11 @@
 <script lang="ts">
+	import { useQueryClient } from '@tanstack/svelte-query';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
+	import { workingKeys } from '$lib/api/working';
 	import PaneContainer from './PaneContainer.svelte';
 
 	const wb = getWorkbenchContext();
+	const queryClient = useQueryClient();
 
 	let showNewDocModal = $state(false);
 	let newDocTitle = $state('');
@@ -33,6 +36,7 @@
 			showNewDocModal = false;
 			newDocTitle = '';
 			newDocError = '';
+			queryClient.invalidateQueries({ queryKey: workingKeys.list() });
 			wb.openInPane(wb.focusedPane, { kind: 'editor', slug });
 		} catch {
 			newDocError = 'Network error';

@@ -15,6 +15,11 @@ const agentToken = getAgentToken();
 if (!agentToken) {
   console.warn("WARNING: LATTICE_AGENT_TOKEN not set — all agent routes will reject");
 }
+if (process.env.DEV_USER) {
+  console.warn(
+    `WARNING: DEV_USER="${process.env.DEV_USER}" set — Authentik auth is BYPASSED. Never set this in production.`
+  );
+}
 
 const app = buildApp({
   db,

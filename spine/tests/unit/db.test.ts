@@ -64,14 +64,9 @@ describe("db.initDb", () => {
   });
 
   it("getDb throws when initDb has not run in this process", async () => {
-    // getDb's check is on the module's `_db` global. The buildTestApp + initDb
-    // helpers also touch this — so we only assert the *shape* of the error,
-    // not the timing.
-    const { getDb } = await import("../../src/db");
-    // After other tests run, _db may or may not be set; check the error path
-    // by manually clearing it. Instead, just verify the function exists and
-    // is callable.
-    expect(typeof getDb).toBe("function");
+    const { getDb, __resetDbForTests } = await import("../../src/db");
+    __resetDbForTests();
+    expect(() => getDb()).toThrow(/DB not initialized/);
   });
 });
 

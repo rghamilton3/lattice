@@ -10,23 +10,18 @@ import {
   deleteWorking,
 } from "../working";
 import { refreshIndex } from "../search";
+import type { CaptureRow, FileIndexRow } from "../db/rows";
 
-interface CaptureRow {
-  text: string;
-  captured_at: string;
-}
-
-interface FileRow {
-  text: string;
-  path: string;
-}
+type SeedCaptureRow = Pick<CaptureRow, "text" | "captured_at">;
+type SeedFileRow = Pick<FileIndexRow, "text" | "path">;
 
 export const workingRoutes = (db: Database) =>
   new Elysia()
     .get("/api/working", ({ set }) => {
       try {
         return listWorking();
-      } catch {
+      } catch (e) {
+        console.error("[working] listWorking failed:", e);
         set.status = 500;
         return { error: "Failed to list working docs" };
       }
@@ -41,6 +36,7 @@ export const workingRoutes = (db: Database) =>
             set.status = 404;
             return { error: "Not found" };
           }
+          console.error(`[working] readWorking failed for ${params.slug}:`, e);
           throw e;
         }
       },
@@ -54,7 +50,7 @@ export const workingRoutes = (db: Database) =>
         if (body.seed_capture_id != null) {
           const row = db
             .query("SELECT text, captured_at FROM captures WHERE id = ?")
-            .get(body.seed_capture_id) as CaptureRow | null;
+            .get(body.seed_capture_id) as SeedCaptureRow | null;
           if (!row) {
             set.status = 404;
             return { error: "Capture not found" };
@@ -63,7 +59,7 @@ export const workingRoutes = (db: Database) =>
         } else if (body.seed_file_id != null) {
           const row = db
             .query("SELECT text, path FROM file_index WHERE id = ?")
-            .get(body.seed_file_id) as FileRow | null;
+            .get(body.seed_file_id) as SeedFileRow | null;
           if (!row) {
             set.status = 404;
             return { error: "File not found" };
@@ -80,6 +76,7 @@ export const workingRoutes = (db: Database) =>
             set.status = 409;
             return { error: "Slug already exists" };
           }
+          console.error("[working] createWorking failed:", e);
           throw e;
         }
       },
@@ -104,6 +101,7 @@ export const workingRoutes = (db: Database) =>
             set.status = 404;
             return { error: "Not found" };
           }
+          console.error(`[working] updateWorking failed for ${params.slug}:`, e);
           throw e;
         }
       },
@@ -124,6 +122,7 @@ export const workingRoutes = (db: Database) =>
             set.status = 404;
             return { error: "Not found" };
           }
+          console.error(`[working] deleteWorking failed for ${params.slug}:`, e);
           throw e;
         }
       },

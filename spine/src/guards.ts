@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 
-export interface AutheliaGuardOptions {
+export interface AuthentikGuardOptions {
   allowHttp: boolean;
   devUser: string | undefined;
 }
@@ -20,7 +20,7 @@ function tokenMatches(a: string, b: string): boolean {
   return timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
-export function autheliaBeforeHandle({ allowHttp, devUser }: AutheliaGuardOptions) {
+export function authentikBeforeHandle({ allowHttp, devUser }: AuthentikGuardOptions) {
   return ({ headers, set }: BeforeHandleCtx): string | undefined => {
     if (!allowHttp && headers["x-forwarded-proto"] !== "https") {
       set.status = 400;

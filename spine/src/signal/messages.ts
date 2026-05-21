@@ -11,6 +11,18 @@ export interface ParsedSignalMessage {
   attachments: SignalAttachment[];
 }
 
+export type ParseSkipReason =
+  | "wrong-method"
+  | "no-envelope"
+  | "wrong-sender"
+  | "no-data-message"
+  | "empty-payload";
+
+export interface ParseDebugHook {
+  skip(reason: ParseSkipReason): void;
+}
+
+/** @internal */
 export function placeholderText(attachments: SignalAttachment[]): string {
   const labels = attachments.map((a) => {
     if (a.contentType?.startsWith("audio/")) return "voice note";
@@ -22,17 +34,20 @@ export function placeholderText(attachments: SignalAttachment[]): string {
 // Inspect a Signal JSON-RPC frame and decide whether it should be relayed.
 // Returns null on skip (wrong method, wrong sender, empty payload). Returns
 // a normalized payload otherwise. `now` is injected so callers can use a clock
-// for fallback timestamps.
+// for fallback timestamps. Pass `debug` to distinguish skip reasons — Signal
+// CLI envelope changes show up as a sudden spike in one bucket.
 export function parseSignalMessage(
   msg: unknown,
   selfNumber: string,
-  now: () => Date = () => new Date()
+  now: () => Date = () => new Date(),
+  debug?: ParseDebugHook
 ): ParsedSignalMessage | null {
   if (
     typeof msg !== "object" ||
     msg === null ||
     (msg as Record<string, unknown>).method !== "receive"
   ) {
+    debug?.skip("wrong-method");
     return null;
   }
 
@@ -40,18 +55,30 @@ export function parseSignalMessage(
     | Record<string, unknown>
     | undefined;
   const envelope = params?.envelope as Record<string, unknown> | undefined;
-  if (!envelope) return null;
-  if (envelope.sourceNumber !== selfNumber) return null;
+  if (!envelope) {
+    debug?.skip("no-envelope");
+    return null;
+  }
+  if (envelope.sourceNumber !== selfNumber) {
+    debug?.skip("wrong-sender");
+    return null;
+  }
 
   const dataMessage = envelope.dataMessage as Record<string, unknown> | null | undefined;
-  if (!dataMessage) return null;
+  if (!dataMessage) {
+    debug?.skip("no-data-message");
+    return null;
+  }
 
   const rawText = dataMessage.message;
   const text = typeof rawText === "string" ? rawText.trim() : "";
   const attachments =
     (dataMessage.attachments as SignalAttachment[] | null | undefined) ?? [];
 
-  if (!text && attachments.length === 0) return null;
+  if (!text && attachments.length === 0) {
+    debug?.skip("empty-payload");
+    return null;
+  }
 
   const captureText = text || placeholderText(attachments);
 

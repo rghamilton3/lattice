@@ -1,18 +1,7 @@
 import { Elysia, t } from "elysia";
 import type { Database } from "bun:sqlite";
 import { realpath } from "node:fs/promises";
-
-interface FileRow {
-  id: number;
-  machine_id: string;
-  path: string;
-  hash: string;
-  mime_type: string;
-  text: string;
-  modified_at: string;
-  size_bytes: number;
-  indexed_at: string;
-}
+import type { FileIndexRow } from "../db/rows";
 
 export const filesRoutes = (db: Database) =>
   new Elysia()
@@ -26,7 +15,7 @@ export const filesRoutes = (db: Database) =>
         }
         const row = db
           .query("SELECT * FROM file_index WHERE id = ?")
-          .get(id) as FileRow | null;
+          .get(id) as FileIndexRow | null;
         if (!row) {
           set.status = 404;
           return { error: "Not found" };
@@ -45,18 +34,31 @@ export const filesRoutes = (db: Database) =>
         }
         const row = db
           .query("SELECT path, mime_type FROM file_index WHERE id = ?")
-          .get(id) as Pick<FileRow, "path" | "mime_type"> | null;
+          .get(id) as Pick<FileIndexRow, "path" | "mime_type"> | null;
         if (!row) {
           set.status = 404;
           return "Not found";
         }
-        // Symlink-swap defense: stored path must equal its canonical form
+        // Symlink-swap defense: stored path must equal its canonical form.
+        // Discriminate realpath errors — collapsing ELOOP into 404 conflates
+        // legitimate "not found" with the symlink-attack signal we're guarding.
         let resolved: string;
         try {
           resolved = await realpath(row.path);
-        } catch {
-          set.status = 404;
-          return "File not found on disk";
+        } catch (e) {
+          const code = (e as NodeJS.ErrnoException).code;
+          if (code === "ENOENT") {
+            set.status = 404;
+            return "File not found on disk";
+          }
+          if (code === "ELOOP") {
+            console.warn(`[files] ELOOP resolving ${row.path}`);
+            set.status = 403;
+            return "Forbidden";
+          }
+          console.error(`[files] realpath failed (${code ?? "unknown"}) for ${row.path}:`, e);
+          set.status = 500;
+          return "Internal error";
         }
         if (resolved !== row.path) {
           set.status = 403;

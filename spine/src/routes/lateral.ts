@@ -3,61 +3,79 @@ import type { Database } from "bun:sqlite";
 import { search } from "../search";
 import { WorkingNotFoundError, readWorking } from "../working";
 
+type LateralSourceKind = "capture" | "local-file" | "working";
+
+type LateralSource =
+  | { kind: "capture"; id: number }
+  | { kind: "local-file"; id: number }
+  | { kind: "working"; slug: string };
+
+function parseLateralSource(
+  kind: LateralSourceKind,
+  raw: string
+): LateralSource | { error: string } {
+  if (kind === "working") return { kind, slug: raw };
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) return { error: "Invalid id" };
+  return { kind, id };
+}
+
 export const lateralRoutes = (db: Database) =>
   new Elysia()
     .get(
       "/api/similar",
       async ({ query, set }) => {
-        const { id, kind } = query;
-        let sourceText = "";
+        const source = parseLateralSource(query.kind, query.id);
+        if ("error" in source) {
+          set.status = 400;
+          return { error: source.error };
+        }
 
-        if (kind === "capture") {
-          const numId = parseInt(id, 10);
-          if (isNaN(numId)) {
-            set.status = 400;
-            return { error: "Invalid id" };
-          }
-          const row = db
-            .query("SELECT text FROM captures WHERE id = ?")
-            .get(numId) as { text: string } | null;
-          if (!row) {
-            set.status = 404;
-            return { error: "Not found" };
-          }
-          sourceText = row.text;
-        } else if (kind === "local-file") {
-          const numId = parseInt(id, 10);
-          if (isNaN(numId)) {
-            set.status = 400;
-            return { error: "Invalid id" };
-          }
-          const row = db
-            .query("SELECT text FROM file_index WHERE id = ?")
-            .get(numId) as { text: string } | null;
-          if (!row) {
-            set.status = 404;
-            return { error: "Not found" };
-          }
-          sourceText = row.text;
-        } else {
-          // kind === "working", id is a slug
-          try {
-            const doc = readWorking(id);
-            sourceText = doc.content;
-          } catch (e) {
-            if (e instanceof WorkingNotFoundError) {
+        let sourceText: string;
+        switch (source.kind) {
+          case "capture": {
+            const row = db
+              .query("SELECT text FROM captures WHERE id = ?")
+              .get(source.id) as { text: string } | null;
+            if (!row) {
               set.status = 404;
               return { error: "Not found" };
             }
-            throw e;
+            sourceText = row.text;
+            break;
+          }
+          case "local-file": {
+            const row = db
+              .query("SELECT text FROM file_index WHERE id = ?")
+              .get(source.id) as { text: string } | null;
+            if (!row) {
+              set.status = 404;
+              return { error: "Not found" };
+            }
+            sourceText = row.text;
+            break;
+          }
+          case "working": {
+            try {
+              sourceText = readWorking(source.slug).content;
+            } catch (e) {
+              if (e instanceof WorkingNotFoundError) {
+                set.status = 404;
+                return { error: "Not found" };
+              }
+              throw e;
+            }
+            break;
           }
         }
 
-        const numId = kind !== "working" ? parseInt(id, 10) : NaN;
         const raw = await search(sourceText.slice(0, 2000));
         const filtered = raw
-          .filter((r) => !(r.kind === "capture" && r.id === numId))
-          .filter((r) => !(r.kind === "working" && r.slug === id))
+          .filter((r) => {
+            if (source.kind === "capture" && r.kind === "capture" && r.id === source.id) return false;
+            if (source.kind === "working" && r.kind === "working" && r.slug === source.slug) return false;
+            return true;
+          })
           .slice(0, 10);
         return { results: filtered };
       },
@@ -80,10 +98,11 @@ export const lateralRoutes = (db: Database) =>
           set.status = 400;
           return { error: "timestamp is required" };
         }
-        const windowHours = Math.min(
-          Math.max(Number(query.window_hours) || 72, 1),
-          720
-        );
+        // Treat "abc"/missing/"0" as default 72; let the clamp handle negatives
+        // so window_hours=-5 still maps to the 1h floor (matches prior behavior).
+        const parsed = Number(query.window_hours);
+        const rawWindow = Number.isFinite(parsed) && parsed !== 0 ? parsed : 72;
+        const windowHours = Math.min(Math.max(rawWindow, 1), 720);
         const base = new Date(ts);
         if (isNaN(base.getTime())) {
           set.status = 400;

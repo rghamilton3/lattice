@@ -75,6 +75,7 @@ export function listWorking(): WorkingDocSummary[] {
         return [{ slug, title: extractTitle(content, slug), modified_at: stat.mtime.toISOString() }];
       } catch (e: any) {
         if (e.code === "ENOENT") return [];
+        console.error(`[working] listWorking read failed for ${filePath}:`, e);
         throw e;
       }
     })

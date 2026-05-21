@@ -71,6 +71,29 @@ describe("POST /api/agent/capture", () => {
     );
     expect(res.status).toBe(422);
   });
+
+  it("rolls back the DB row when writeCaptureFile fails (no orphan rows)", async () => {
+    // Force writeCaptureFile to throw by removing the captures dir that
+    // initSearch created. The handler's db.transaction(...) wrapper must
+    // ROLLBACK the INSERT so a retry doesn't leave duplicate rows.
+    const { capturesDir } = await import("../../src/search");
+    const { rmSync } = await import("node:fs");
+    rmSync(capturesDir(), { recursive: true, force: true });
+
+    const res = await app.app.handle(
+      agentPost("/api/agent/capture", {
+        text: "should rollback",
+        source: "test",
+        captured_at: "2026-01-01T00:00:00Z",
+      })
+    );
+    expect(res.status).toBe(500);
+
+    const count = (
+      app.db.query("SELECT COUNT(*) AS c FROM captures").get() as { c: number }
+    ).c;
+    expect(count).toBe(0);
+  });
 });
 
 describe("POST /api/agent/index", () => {
@@ -201,7 +224,7 @@ describe("POST /api/agent/capture/:id/attachments", () => {
     });
   });
 
-  it("strips directory components from signal_id (basename only)", async () => {
+  it("rejects signal_id with directory components (400)", async () => {
     const captureId = await seedCapture();
     const res = await app.app.handle(
       agentPost(`/api/agent/capture/${captureId}/attachments`, {
@@ -212,11 +235,69 @@ describe("POST /api/agent/capture/:id/attachments", () => {
         size_bytes: 1,
       })
     );
-    expect(res.status).toBe(200);
-    // File is stored as basename "escape.aac" under the per-capture dir,
-    // not at a parent path.
-    const stored = join(app.env.attachmentsDir, String(captureId), "escape.aac");
-    expect(existsSync(stored)).toBe(true);
+    expect(res.status).toBe(400);
+    // Nothing should have been written under the capture dir or one level up.
+    expect(existsSync(join(app.env.attachmentsDir, String(captureId), "escape.aac"))).toBe(false);
+    expect(existsSync(join(app.env.attachmentsDir, "escape.aac"))).toBe(false);
+  });
+
+  it("rejects signal_id of '.' or '..' (400)", async () => {
+    const captureId = await seedCapture();
+    for (const sid of [".", ".."]) {
+      const res = await app.app.handle(
+        agentPost(`/api/agent/capture/${captureId}/attachments`, {
+          signal_id: sid,
+          content_type: "audio/aac",
+          filename: "v.aac",
+          data: Buffer.from("x").toString("base64"),
+          size_bytes: 1,
+        })
+      );
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("rejects signal_id containing a slash (400)", async () => {
+    const captureId = await seedCapture();
+    const res = await app.app.handle(
+      agentPost(`/api/agent/capture/${captureId}/attachments`, {
+        signal_id: "a/b",
+        content_type: "audio/aac",
+        filename: "v.aac",
+        data: Buffer.from("x").toString("base64"),
+        size_bytes: 1,
+      })
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects empty signal_id at the schema (422)", async () => {
+    const captureId = await seedCapture();
+    const res = await app.app.handle(
+      agentPost(`/api/agent/capture/${captureId}/attachments`, {
+        signal_id: "",
+        content_type: "audio/aac",
+        filename: "v.aac",
+        data: Buffer.from("x").toString("base64"),
+        size_bytes: 1,
+      })
+    );
+    expect(res.status).toBe(422);
+  });
+
+  it("rejects when size_bytes does not match the decoded data length (400)", async () => {
+    const captureId = await seedCapture();
+    const res = await app.app.handle(
+      agentPost(`/api/agent/capture/${captureId}/attachments`, {
+        signal_id: "att-mismatch",
+        content_type: "audio/aac",
+        filename: "v.aac",
+        data: Buffer.from("ab").toString("base64"), // decodes to 2 bytes
+        size_bytes: 99,
+      })
+    );
+    expect(res.status).toBe(400);
+    expect(existsSync(join(app.env.attachmentsDir, String(captureId), "att-mismatch"))).toBe(false);
   });
 
   it("returns 404 when the capture does not exist", async () => {

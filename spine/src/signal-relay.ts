@@ -1,5 +1,6 @@
 import {
   type SignalAttachment,
+  type ParseDebugHook,
   parseSignalMessage,
   isRpcError,
 } from "./signal/messages";
@@ -76,8 +77,12 @@ function connect(): void {
           if (!trimmed) continue;
           try {
             handleMessage(JSON.parse(trimmed));
-          } catch {
-            console.error("[signal-relay] failed to parse line:", line.slice(0, 120));
+          } catch (err) {
+            console.error(
+              "[signal-relay] failed to parse line:",
+              line.slice(0, 120),
+              (err as Error).message
+            );
           }
         }
       },
@@ -107,8 +112,13 @@ function connect(): void {
   });
 }
 
+const debugHook: ParseDebugHook | undefined =
+  process.env.SIGNAL_RELAY_DEBUG === "1"
+    ? { skip: (reason) => console.debug(`[signal-relay] skipped: ${reason}`) }
+    : undefined;
+
 function handleMessage(msg: unknown): void {
-  const parsed = parseSignalMessage(msg, SIGNAL_PHONE);
+  const parsed = parseSignalMessage(msg, SIGNAL_PHONE, undefined, debugHook);
   if (!parsed) {
     if (isRpcError(msg)) {
       console.error("[signal-relay] RPC error:", JSON.stringify((msg as Record<string, unknown>).error));

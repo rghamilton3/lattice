@@ -3,6 +3,8 @@ import {
   placeholderText,
   parseSignalMessage,
   isRpcError,
+  type ParseSkipReason,
+  type ParseDebugHook,
 } from "../../src/signal/messages";
 
 const SELF = "+15551234567";
@@ -116,6 +118,35 @@ describe("parseSignalMessage", () => {
     const msg = envelope({ timestamp: undefined }, { message: "hi" });
     const parsed = parseSignalMessage(msg, SELF, () => fixed);
     expect(parsed?.capturedAt).toBe(fixed.toISOString());
+  });
+});
+
+describe("parseSignalMessage debug hook", () => {
+  function mkHook(): { reasons: ParseSkipReason[]; hook: ParseDebugHook } {
+    const reasons: ParseSkipReason[] = [];
+    return { reasons, hook: { skip: (r) => reasons.push(r) } };
+  }
+
+  it("reports each skip reason exactly once per invocation", () => {
+    const cases: Array<[ParseSkipReason, unknown]> = [
+      ["wrong-method", { method: "send", params: {} }],
+      ["no-envelope", { method: "receive", params: {} }],
+      ["wrong-sender", envelope({ sourceNumber: "+19999999999" }, { message: "hi" })],
+      ["no-data-message", envelope({}, null)],
+      ["empty-payload", envelope({}, { message: "   " })],
+    ];
+    for (const [expected, msg] of cases) {
+      const { reasons, hook } = mkHook();
+      expect(parseSignalMessage(msg, SELF, undefined, hook)).toBeNull();
+      expect(reasons).toEqual([expected]);
+    }
+  });
+
+  it("does not call skip on a successful parse", () => {
+    const { reasons, hook } = mkHook();
+    const msg = envelope({}, { message: "hi" });
+    expect(parseSignalMessage(msg, SELF, undefined, hook)).not.toBeNull();
+    expect(reasons).toEqual([]);
   });
 });
 

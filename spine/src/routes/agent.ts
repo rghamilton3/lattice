@@ -13,17 +13,23 @@ export const agentRoutes = (db: Database, { attachmentsDir }: AgentRoutesOptions
     .post(
       "/capture",
       ({ body }) => {
-        const row = db
-          .prepare(
-            "INSERT INTO captures (text, source, captured_at, ingested_at) VALUES (?, ?, ?, ?) RETURNING id"
-          )
-          .get(
-            body.text,
-            body.source,
-            body.captured_at,
-            new Date().toISOString()
-          ) as { id: number };
-        writeCaptureFile(row.id, body.text, body.source, body.captured_at);
+        // Atomic INSERT + markdown write: if writeCaptureFile throws (ENOSPC,
+        // EACCES, …) bun:sqlite's transaction wrapper ROLLBACKs the row, so
+        // a client retry doesn't leave duplicate DB rows with no on-disk file.
+        const row = db.transaction(() => {
+          const inserted = db
+            .prepare(
+              "INSERT INTO captures (text, source, captured_at, ingested_at) VALUES (?, ?, ?, ?) RETURNING id"
+            )
+            .get(
+              body.text,
+              body.source,
+              body.captured_at,
+              new Date().toISOString()
+            ) as { id: number };
+          writeCaptureFile(inserted.id, body.text, body.source, body.captured_at);
+          return inserted;
+        })();
         refreshIndex();
         return { id: row.id };
       },
@@ -93,11 +99,24 @@ export const agentRoutes = (db: Database, { attachmentsDir }: AgentRoutesOptions
           set.status = 404;
           return { error: "capture not found" };
         }
-        const storedName = basename(body.signal_id) || Date.now().toString();
+        // basename(".") === "." and basename("..") === "..", so a plain
+        // round-trip check is not enough — reject the dot-dirs explicitly.
+        // Require the id to already be a bare filename so the storedName
+        // round-trips and a retry-with-same-id is deterministic.
+        const sid = body.signal_id;
+        if (sid === "." || sid === ".." || basename(sid) !== sid) {
+          set.status = 400;
+          return { error: "invalid signal_id" };
+        }
+        const bytes = Buffer.from(body.data, "base64");
+        if (bytes.length !== body.size_bytes) {
+          set.status = 400;
+          return { error: "size_bytes does not match decoded data length" };
+        }
         const dir = join(attachmentsDir, String(captureId));
         mkdirSync(dir, { recursive: true });
-        writeFileSync(join(dir, storedName), Buffer.from(body.data, "base64"));
-        const storedPath = `${captureId}/${storedName}`;
+        writeFileSync(join(dir, sid), bytes);
+        const storedPath = `${captureId}/${sid}`;
         const row = db
           .prepare(
             `INSERT INTO capture_attachments
@@ -106,7 +125,7 @@ export const agentRoutes = (db: Database, { attachmentsDir }: AgentRoutesOptions
           )
           .get(
             captureId,
-            body.signal_id,
+            sid,
             body.content_type,
             body.filename,
             body.size_bytes,
@@ -119,7 +138,7 @@ export const agentRoutes = (db: Database, { attachmentsDir }: AgentRoutesOptions
         params: t.Object({ id: t.String() }),
         body: t.Object({
           content_type: t.String({ minLength: 1 }),
-          signal_id: t.String(),
+          signal_id: t.String({ minLength: 1 }),
           filename: t.String(),
           data: t.String({ minLength: 1 }),
           size_bytes: t.Integer({ minimum: 0 }),

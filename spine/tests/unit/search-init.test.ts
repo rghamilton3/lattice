@@ -17,6 +17,21 @@ afterEach(() => {
 });
 
 describe("initSearch", () => {
+  it("creates the working/ dir so QMD's glob does not fail on fresh deploys", async () => {
+    const { initDb } = await import("../../src/db");
+    const { initSearch, __resetSearchForTests } = await import("../../src/search");
+    const { workingDir } = await import("../../src/working");
+    __resetSearchForTests();
+
+    // mkTestEnv allocates an empty tmp dir; no working/ subdir exists yet.
+    expect(existsSync(workingDir())).toBe(false);
+
+    const db = initDb();
+    await initSearch(db);
+    expect(existsSync(workingDir())).toBe(true);
+    db.close();
+  });
+
   it("backfills capture markdown files from existing DB rows", async () => {
     const { initDb } = await import("../../src/db");
     const { initSearch, capturesDir, __resetSearchForTests } = await import("../../src/search");
@@ -137,20 +152,27 @@ describe("refreshIndex serialization", () => {
 
   it("swallows update() errors and increments the failure counter", async () => {
     const { initDb } = await import("../../src/db");
-    const { initSearch, refreshIndex, __resetSearchForTests } = await import("../../src/search");
+    const {
+      initSearch,
+      refreshIndex,
+      __resetSearchForTests,
+      __getIndexFailuresForTests,
+    } = await import("../../src/search");
     __resetSearchForTests();
     const db = initDb();
     await initSearch(db);
 
+    const before = __getIndexFailuresForTests();
     qmd.setUpdateError(new Error("transient"));
     refreshIndex();
-    // Lock should not hang or throw to the caller.
     await new Promise((r) => setTimeout(r, 20));
+    expect(__getIndexFailuresForTests()).toBe(before + 1);
+
     qmd.setUpdateError(null);
     refreshIndex();
     await new Promise((r) => setTimeout(r, 20));
-    // No assertion on counter value — just verifying no unhandled rejection.
-    expect(true).toBe(true);
+    // Success path must NOT increment the counter.
+    expect(__getIndexFailuresForTests()).toBe(before + 1);
     db.close();
   });
 });

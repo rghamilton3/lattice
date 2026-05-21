@@ -1,20 +1,14 @@
 import { Elysia, t } from "elysia";
 import type { Database } from "bun:sqlite";
-
-interface CaptureRow {
-  id: number;
-  text: string;
-  source: string;
-  captured_at: string;
-  ingested_at: string;
-}
+import type { CaptureRow } from "../db/rows";
 
 export const capturesRoutes = (db: Database) =>
   new Elysia()
     .get(
       "/api/captures",
       ({ query }) => {
-        const limit = Math.min(Number(query.limit) || 50, 200);
+        const raw = query.limit ? Number(query.limit) : 50;
+        const limit = Math.min(Number.isFinite(raw) && raw > 0 ? raw : 50, 200);
         return db
           .query(
             "SELECT id, text, source, captured_at, ingested_at FROM captures ORDER BY ingested_at DESC LIMIT ?"

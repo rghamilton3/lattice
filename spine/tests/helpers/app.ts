@@ -21,7 +21,7 @@ export interface BuildTestAppOptions {
 //   - buildApp() wired with caller-supplied auth knobs
 //
 // Defaults to allowHttp=true and devUser="dev@local" so most tests don't need to
-// think about the HTTPS/Authelia guards. Override per-test as needed.
+// think about the HTTPS/Authentik guards. Override per-test as needed.
 export async function buildTestApp(opts: BuildTestAppOptions = {}): Promise<TestApp> {
   const env = mkTestEnv();
   const qmd = installQmdMock();

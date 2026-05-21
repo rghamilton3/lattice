@@ -2,7 +2,7 @@ import { Elysia } from "elysia";
 import { staticPlugin } from "@elysiajs/static";
 import { existsSync } from "node:fs";
 import type { Database } from "bun:sqlite";
-import { autheliaBeforeHandle, agentBeforeHandle } from "./guards";
+import { authentikBeforeHandle, agentBeforeHandle } from "./guards";
 import { capturesRoutes } from "./routes/captures";
 import { searchRoutes } from "./routes/search";
 import { filesRoutes } from "./routes/files";
@@ -31,7 +31,7 @@ export function buildApp(deps: AppDeps) {
     .get("/ping", () => ({ ok: true }))
     .use(surface)
     .guard(
-      { beforeHandle: autheliaBeforeHandle({ allowHttp, devUser }) },
+      { beforeHandle: authentikBeforeHandle({ allowHttp, devUser }) },
       (app) =>
         app
           .use(capturesRoutes(db))

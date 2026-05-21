@@ -64,6 +64,18 @@ describe("GET /api/files/:id/raw", () => {
     expect(await res.text()).toBe("File not found on disk");
   });
 
+  it("returns 403 on ELOOP (circular symlink) instead of swallowing it as 404", async () => {
+    // Create a → b → a; realpath() raises ELOOP rather than returning a path.
+    const a = join(app.env.dir, "loop-a");
+    const b = join(app.env.dir, "loop-b");
+    symlinkSync(b, a);
+    symlinkSync(a, b);
+    const { id } = seedFile(app, a);
+    const res = await app.app.handle(req(`/api/files/${id}/raw`));
+    expect(res.status).toBe(403);
+    expect(await res.text()).toBe("Forbidden");
+  });
+
   it("returns 403 when the stored path resolves to a different canonical path (symlink-swap defense)", async () => {
     const realDir = join(app.env.dir, "real");
     mkdirSync(realDir);

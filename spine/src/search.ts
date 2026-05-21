@@ -65,11 +65,21 @@ export function __resetSearchForTests(): void {
   _indexLock = Promise.resolve();
 }
 
+/** @internal test-only — do not use from production code. */
+export function __getIndexFailuresForTests(): number {
+  return _indexFailures;
+}
+
 export async function initSearch(db: Database): Promise<void> {
   const captures = capturesDir();
   const localFiles = localFilesDir();
+  const working = workingDir();
+  // QMD's glob over `working` runs at createStore time; without the dir
+  // present it raises and trips _initFailed. Pre-refactor working.ts mkdir'd
+  // at module load; now it only mkdirs lazily, so init must do it.
   mkdirSync(captures, { recursive: true });
   mkdirSync(localFiles, { recursive: true });
+  mkdirSync(working, { recursive: true });
 
   const rows = db
     .query("SELECT id, text, source, captured_at FROM captures")
@@ -88,7 +98,7 @@ export async function initSearch(db: Database): Promise<void> {
       config: {
         collections: {
           captures: { path: captures, pattern: "**/*.md" },
-          working: { path: workingDir(), pattern: "**/*.md" },
+          working: { path: working, pattern: "**/*.md" },
           "local-files": { path: localFiles, pattern: "**/*.md" },
         },
       },

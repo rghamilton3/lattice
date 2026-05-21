@@ -7,7 +7,7 @@ afterEach(async () => {
   await app?.cleanup();
 });
 
-describe("Authelia guard (non-agent routes)", () => {
+describe("Authentik guard (non-agent routes)", () => {
   it("rejects with 400 when ALLOW_HTTP=false and x-forwarded-proto != https", async () => {
     app = await buildTestApp({ allowHttp: false, devUser: undefined });
     const res = await app.app.handle(req("/api/captures"));
@@ -15,7 +15,7 @@ describe("Authelia guard (non-agent routes)", () => {
     expect(await res.text()).toBe("HTTPS required");
   });
 
-  it("accepts when ALLOW_HTTP=false but x-forwarded-proto=https + Authelia header", async () => {
+  it("accepts when ALLOW_HTTP=false but x-forwarded-proto=https + Authentik header", async () => {
     app = await buildTestApp({ allowHttp: false, devUser: undefined });
     const res = await app.app.handle(
       req("/api/captures", {
@@ -28,7 +28,7 @@ describe("Authelia guard (non-agent routes)", () => {
     expect(res.status).toBe(200);
   });
 
-  it("rejects with 401 when ALLOW_HTTP=true but no Authelia header and no DEV_USER", async () => {
+  it("rejects with 401 when ALLOW_HTTP=true but no Authentik header and no DEV_USER", async () => {
     app = await buildTestApp({ allowHttp: true, devUser: undefined });
     const res = await app.app.handle(req("/api/captures"));
     expect(res.status).toBe(401);

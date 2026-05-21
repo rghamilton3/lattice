@@ -1,0 +1,26 @@
+# Lattice configuration — shared by spine and agent.
+# Place at ~/.config/lattice/config.toml
+
+[spine]
+url           = "https://lattice.rghsoftware.com"
+agent_token   = "REPLACE_WITH_YOUR_BEARER_TOKEN"
+database_path = "/var/lib/lattice/lattice.db"
+
+[agent]
+# Optional: defaults to the system hostname.
+# machine_id = "personal-laptop"
+
+# Optional: how often to scan watched paths (minutes). Default: 15.
+# poll_interval_minutes = 15
+
+# Optional: files larger than this are skipped. Default: 10 MB.
+# max_file_bytes = 10485760
+
+[[agent.watch]]
+path     = "/home/user/Documents/notes"
+patterns = ["**/*.md", "**/*.txt", "**/*.pdf"]
+
+# Add more [[agent.watch]] blocks for additional directories:
+# [[agent.watch]]
+# path     = "/home/user/Books"
+# patterns = ["**/*.pdf"]

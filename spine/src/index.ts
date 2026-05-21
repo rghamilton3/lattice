@@ -3,11 +3,12 @@ import { timingSafeEqual } from "node:crypto";
 import { initDb } from "./db";
 import { initSearch, writeCaptureFile, refreshIndex, search } from "./search";
 import type { SearchResult } from "./search";
+import { getAgentToken } from "./config";
 
 const db = initDb();
 await initSearch(db);
 
-const AGENT_TOKEN = process.env.LATTICE_AGENT_TOKEN;
+const AGENT_TOKEN = getAgentToken();
 const ALLOW_HTTP = process.env.ALLOW_HTTP === "true";
 const DEV_USER = process.env.DEV_USER;
 

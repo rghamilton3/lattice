@@ -7,28 +7,41 @@
 #   lattice-capture "some thought"
 #   echo "some thought" | lattice-capture
 #
-# Config: ~/.config/lattice/config (shell variable format, sourced at startup)
-#   LATTICE_AGENT_TOKEN=...   bearer token
-#   SPINE_URL=...             spine base URL (default: http://localhost:3000)
-#   SOURCE=...                capture source tag (default: desktop-hotkey)
+# Config: ~/.config/lattice/config.toml (shared with lattice-agent)
+#   [spine]
+#   url         = "https://lattice.rghsoftware.com"
+#   agent_token = "..."
 set -euo pipefail
 
-CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/lattice/config"
-# shellcheck source=/dev/null
-[[ -f "$CONFIG" ]] && . "$CONFIG"
+CONFIG_TOML="${XDG_CONFIG_HOME:-$HOME/.config}/lattice/config.toml"
+
+# Read a value from the TOML config: toml_get <section> <key>
+toml_get() {
+  python3 - "$CONFIG_TOML" "$1" "$2" <<'EOF'
+import sys
+try:
+    import tomllib
+except ImportError:
+    sys.exit(0)
+with open(sys.argv[1], "rb") as f:
+    cfg = tomllib.load(f)
+print(cfg.get(sys.argv[2], {}).get(sys.argv[3], ""), end="")
+EOF
+}
 
 QUEUE_DB="${XDG_DATA_HOME:-$HOME/.local/share}/lattice/queue.db"
+SPINE_URL="${SPINE_URL:-$(toml_get spine url)}"
 SPINE_URL="${SPINE_URL:-http://localhost:3000}"
 SOURCE="${SOURCE:-desktop-hotkey}"
-TOKEN="${LATTICE_AGENT_TOKEN:-$(cat "${XDG_CONFIG_HOME:-$HOME/.config}/lattice/token" 2>/dev/null)}"
+TOKEN="${LATTICE_AGENT_TOKEN:-$(toml_get spine agent_token)}"
 
 notify() {
   notify-send "Lattice" "$1" --urgency="${2:-low}" 2>/dev/null || true
 }
 
 if [[ -z "$TOKEN" ]]; then
-  notify "LATTICE_AGENT_TOKEN not set" critical
-  echo "Error: LATTICE_AGENT_TOKEN not set" >&2
+  notify "agent_token not set in $CONFIG_TOML" critical
+  echo "Error: spine.agent_token not set in $CONFIG_TOML" >&2
   exit 1
 fi
 

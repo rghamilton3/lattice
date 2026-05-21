@@ -1,11 +1,12 @@
 import { Database } from "bun:sqlite";
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
+import { getDatabasePath } from "./config";
 
 let _db: Database | null = null;
 
 export function initDb(): Database {
-  const path = process.env.DATABASE_PATH ?? "./lattice.dev.db";
+  const path = getDatabasePath();
   const db = new Database(path);
 
   db.run("PRAGMA journal_mode = WAL");

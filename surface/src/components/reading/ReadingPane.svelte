@@ -103,30 +103,30 @@
 	<!-- toolbar -->
 	<div class="flex shrink-0 flex-wrap items-center gap-1 border-b border-border bg-surface-raised px-2 py-1">
 		<button
-			class="rounded px-2 py-0.5 text-xs text-text-muted hover:bg-surface-high hover:text-text"
+			class="rounded px-2 py-0.5 text-sm text-text-muted hover:bg-surface-high hover:text-text"
 			onclick={openMoreLikeThis}
 			title="Semantic neighbors"
 		>≈ similar</button>
 		<button
-			class="rounded px-2 py-0.5 text-xs text-text-muted hover:bg-surface-high hover:text-text"
+			class="rounded px-2 py-0.5 text-sm text-text-muted hover:bg-surface-high hover:text-text"
 			onclick={openMentions}
 			title="Search for selected text"
 		>" mentions</button>
 		{#if timestamp}
 			<button
-				class="rounded px-2 py-0.5 text-xs text-text-muted hover:bg-surface-high hover:text-text"
+				class="rounded px-2 py-0.5 text-sm text-text-muted hover:bg-surface-high hover:text-text"
 				onclick={openNearby}
 				title="Items from ±72h"
 			>⟳ nearby</button>
 		{/if}
 		{#if ref.kind === 'working'}
 			<button
-				class="rounded px-2 py-0.5 text-xs text-text-muted hover:bg-surface-high hover:text-text"
+				class="rounded px-2 py-0.5 text-sm text-text-muted hover:bg-surface-high hover:text-text"
 				onclick={() => wb.openInPane(paneIndex, { kind: 'editor', slug: ref.slug })}
 			>✎ edit</button>
 		{:else}
 			<button
-				class="rounded px-2 py-0.5 text-xs text-text-muted hover:bg-surface-high hover:text-text"
+				class="rounded px-2 py-0.5 text-sm text-text-muted hover:bg-surface-high hover:text-text"
 				onclick={promoteToWorking}
 			>↑ promote</button>
 		{/if}
@@ -135,7 +135,7 @@
 	<!-- content -->
 	<div class="min-h-0 flex-1 overflow-hidden">
 		{#if isLoading}
-			<p class="p-3 text-xs text-text-muted">loading…</p>
+			<p class="p-3 text-sm text-text-muted">loading…</p>
 		{:else if isError}
 			<p class="p-3 text-xs text-red-400">error loading document</p>
 		{:else if ref.kind === 'capture' && captureQuery.data}

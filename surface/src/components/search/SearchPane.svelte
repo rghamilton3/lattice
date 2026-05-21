@@ -56,26 +56,26 @@
 	<div class="min-h-0 flex-1 overflow-y-auto">
 		{#if debouncedQ.length > 0}
 			{#if searchQuery.isLoading}
-				<p class="p-3 text-xs text-text-muted">searching…</p>
+				<p class="p-3 text-sm text-text-muted">searching…</p>
 			{:else if searchQuery.isError}
-				<p class="p-3 text-xs text-red-400">error: {searchQuery.error?.message}</p>
+				<p class="p-3 text-sm text-red-400">error: {searchQuery.error?.message}</p>
 			{:else if searchQuery.data}
 				<ResultList {paneIndex} items={searchQuery.data.results} />
 			{/if}
 		{:else}
 			{#if recentQuery.data && recentQuery.data.length > 0}
-				<p class="px-3 pt-2 text-xs text-text-muted">recent captures</p>
+				<p class="px-3 pt-2 text-sm text-text-muted">recent captures</p>
 				{#each recentQuery.data as capture (capture.id)}
 					<button
 						class="w-full border-b border-border px-3 py-2 text-left hover:bg-surface-raised"
 						onclick={() => wb.openInPane(paneIndex, { kind: 'doc', ref: { kind: 'capture', id: capture.id } })}
 					>
-						<div class="truncate text-xs text-text">{capture.text.slice(0, 120)}</div>
-						<div class="mt-0.5 text-xs text-text-muted">{capture.source} · {capture.captured_at.slice(0, 10)}</div>
+						<div class="truncate text-sm text-text">{capture.text.slice(0, 120)}</div>
+						<div class="mt-0.5 text-sm text-text-muted">{capture.source} · {capture.captured_at.slice(0, 10)}</div>
 					</button>
 				{/each}
 			{:else}
-				<p class="p-3 text-xs text-text-muted">start typing to search</p>
+				<p class="p-3 text-sm text-text-muted">start typing to search</p>
 			{/if}
 		{/if}
 	</div>

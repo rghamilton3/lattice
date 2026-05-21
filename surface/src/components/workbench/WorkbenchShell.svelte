@@ -48,10 +48,10 @@
 		class="flex h-8 w-full shrink-0 items-center gap-2 border-b border-border bg-surface-raised px-3"
 		style="position:absolute; top:0; left:0; z-index:10;"
 	>
-		<span class="text-accent font-bold tracking-widest">lattice</span>
+		<span class="text-sm text-accent font-bold tracking-widest">lattice</span>
 		<span class="text-text-muted mx-1">·</span>
 		<button
-			class="rounded px-2 py-0.5 text-xs text-text-muted hover:bg-surface-high hover:text-text"
+			class="rounded px-2 py-0.5 text-sm text-text-muted hover:bg-surface-high hover:text-text"
 			onclick={() => {
 				showNewDocModal = true;
 				newDocTitle = '';
@@ -88,14 +88,14 @@
 		aria-label="New working doc"
 	>
 		<div class="w-96 rounded border border-border bg-surface-raised p-4">
-			<p class="mb-2 text-sm text-text">New working doc</p>
+			<p class="mb-2 text-base text-text">New working doc</p>
 			<!-- svelte-ignore a11y_autofocus -->
 			<input
 				autofocus
 				type="text"
 				bind:value={newDocTitle}
 				placeholder="Title…"
-				class="w-full rounded border border-border bg-surface px-2 py-1 text-sm text-text outline-none focus:border-accent"
+				class="w-full rounded border border-border bg-surface px-2 py-1 text-base text-text outline-none focus:border-accent"
 				onkeydown={(e) => {
 					if (e.key === 'Enter') confirmNewDoc();
 					if (e.key === 'Escape') {

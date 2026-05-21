@@ -24,5 +24,5 @@ body {
 	background-color: var(--color-surface);
 	color: var(--color-text);
 	font-family: var(--font-mono);
-	font-size: 14px;
+	/* Keep 16px root so Tailwind rem units stay at intended sizes */
 }

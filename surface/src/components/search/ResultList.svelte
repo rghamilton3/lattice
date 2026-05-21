@@ -93,11 +93,11 @@
 
 <div class="h-full overflow-y-auto">
 	{#if isLoading}
-		<p class="p-3 text-xs text-text-muted">loading…</p>
+		<p class="p-3 text-sm text-text-muted">loading…</p>
 	{:else if loadError}
-		<p class="p-3 text-xs text-red-400">{loadError}</p>
+		<p class="p-3 text-sm text-red-400">{loadError}</p>
 	{:else if displayItems.length === 0}
-		<p class="p-3 text-xs text-text-muted">no results</p>
+		<p class="p-3 text-sm text-text-muted">no results</p>
 	{:else}
 		{#each displayItems as result, i (i)}
 			<div class="border-b border-border">
@@ -111,7 +111,7 @@
 							<span class="ml-auto text-xs text-text-muted">{result.score.toFixed(2)}</span>
 						{/if}
 					</div>
-					<p class="mt-1 line-clamp-3 text-xs text-text">{result.snippet}</p>
+					<p class="mt-1 line-clamp-3 text-sm text-text">{result.snippet}</p>
 				</div>
 				<div class="flex gap-1 px-3 pb-2">
 					<button

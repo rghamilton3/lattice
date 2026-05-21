@@ -84,7 +84,7 @@
 				}),
 				EditorView.theme({
 					'&': { height: '100%', backgroundColor: 'var(--color-surface)' },
-					'.cm-scroller': { overflow: 'auto', fontFamily: 'var(--font-mono)', fontSize: '13px' },
+					'.cm-scroller': { overflow: 'auto', fontFamily: 'var(--font-mono)', fontSize: '14px' },
 					'.cm-content': { caretColor: 'var(--color-accent)' }
 				})
 			]
@@ -110,12 +110,12 @@
 
 <div class="flex h-full flex-col">
 	<div class="flex shrink-0 items-center gap-2 border-b border-border bg-surface-raised px-2 py-1">
-		<span class="truncate text-xs text-text-muted">{slug}{isDirty ? ' ·' : ''}</span>
+		<span class="truncate text-sm text-text">{slug}{isDirty ? ' ·' : ''}</span>
 		{#if isDirty}
-			<span class="text-xs text-text-muted">unsaved</span>
+			<span class="text-sm text-text-muted">unsaved</span>
 		{/if}
 		<button
-			class="rounded px-2 py-0.5 text-xs text-text-muted hover:bg-surface-high hover:text-text disabled:opacity-40"
+			class="rounded px-2 py-0.5 text-sm text-text-muted hover:bg-surface-high hover:text-text disabled:opacity-40"
 			disabled={!isDirty || saveMutation.isPending}
 			onclick={() => saveNow()}
 		>save</button>
@@ -126,7 +126,7 @@
 
 	<div class="min-h-0 flex-1 overflow-hidden">
 		{#if docQuery.isLoading}
-			<p class="p-3 text-xs text-text-muted">loading…</p>
+			<p class="p-3 text-sm text-text-muted">loading…</p>
 		{:else if docQuery.isError}
 			<p class="p-3 text-xs text-red-400">error loading doc</p>
 		{:else}

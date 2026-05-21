@@ -45,14 +45,18 @@ jobs:
       - name: Build
         run: cargo zigbuild --release --target ${{ matrix.target }}
 
-      - name: Rename binary
-        run: cp target/${{ matrix.target }}/release/lattice-agent ../lattice-agent-${{ matrix.target }}
+      - name: Rename binaries
+        run: |
+          cp target/${{ matrix.target }}/release/lattice-agent ../lattice-agent-${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/lattice-tray ../lattice-tray-${{ matrix.target }}
 
-      - name: Upload artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: lattice-agent-${{ matrix.target }}
-          path: lattice-agent-${{ matrix.target }}
+          path: |
+            lattice-agent-${{ matrix.target }}
+            lattice-tray-${{ matrix.target }}
 
   release:
     name: Publish GitHub Release
@@ -72,6 +76,7 @@ jobs:
         run: |
           cp spine/scripts/lattice-capture.sh lattice-capture
           cp agent/lattice-agent.service lattice-agent.service
+          cp agent/lattice-tray.service lattice-tray.service
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -80,5 +85,8 @@ jobs:
           files: |
             lattice-agent-x86_64-unknown-linux-musl
             lattice-agent-aarch64-unknown-linux-musl
+            lattice-tray-x86_64-unknown-linux-musl
+            lattice-tray-aarch64-unknown-linux-musl
             lattice-capture
             lattice-agent.service
+            lattice-tray.service

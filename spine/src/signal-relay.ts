@@ -1,3 +1,10 @@
+import {
+  type SignalAttachment,
+  type ParseDebugHook,
+  parseSignalMessage,
+  isRpcError,
+} from "./signal/messages";
+
 const AGENT_TOKEN = process.env.LATTICE_AGENT_TOKEN ?? "";
 const SIGNAL_PHONE = process.env.SIGNAL_PHONE_NUMBER ?? "";
 const RPC_HOST = process.env.SIGNAL_RPC_HOST ?? "127.0.0.1:7583";
@@ -45,21 +52,6 @@ function sendReply(message: string): void {
   }
 }
 
-interface SignalAttachment {
-  id?: string;
-  contentType?: string;
-  filename?: string;
-  size?: number;
-}
-
-function placeholderText(attachments: SignalAttachment[]): string {
-  const labels = attachments.map((a) => {
-    if (a.contentType?.startsWith("audio/")) return "voice note";
-    return a.filename ? `attachment: ${a.filename}` : "attachment";
-  });
-  return `[${labels.join(", ")}]`;
-}
-
 function connect(): void {
   let buffer = "";
 
@@ -85,8 +77,12 @@ function connect(): void {
           if (!trimmed) continue;
           try {
             handleMessage(JSON.parse(trimmed));
-          } catch {
-            console.error("[signal-relay] failed to parse line:", line.slice(0, 120));
+          } catch (err) {
+            console.error(
+              "[signal-relay] failed to parse line:",
+              line.slice(0, 120),
+              (err as Error).message
+            );
           }
         }
       },
@@ -116,44 +112,24 @@ function connect(): void {
   });
 }
 
+const debugHook: ParseDebugHook | undefined =
+  process.env.SIGNAL_RELAY_DEBUG === "1"
+    ? { skip: (reason) => console.debug(`[signal-relay] skipped: ${reason}`) }
+    : undefined;
+
 function handleMessage(msg: unknown): void {
-  if (
-    typeof msg !== "object" ||
-    msg === null ||
-    (msg as Record<string, unknown>).method !== "receive"
-  ) {
-    if (typeof (msg as Record<string, unknown>).error === "object") {
+  const parsed = parseSignalMessage(msg, SIGNAL_PHONE, undefined, debugHook);
+  if (!parsed) {
+    if (isRpcError(msg)) {
       console.error("[signal-relay] RPC error:", JSON.stringify((msg as Record<string, unknown>).error));
     }
     return;
   }
 
-  const params = (msg as Record<string, unknown>).params as Record<string, unknown> | undefined;
-  const envelope = params?.envelope as Record<string, unknown> | undefined;
-  if (!envelope) return;
-
-  if (envelope.sourceNumber !== SIGNAL_PHONE) return;
-
-  const dataMessage = envelope.dataMessage as Record<string, unknown> | null | undefined;
-  if (!dataMessage) return;
-
-  const rawText = dataMessage.message;
-  const text = typeof rawText === "string" ? rawText.trim() : "";
-  const attachments = (dataMessage.attachments as SignalAttachment[] | null | undefined) ?? [];
-
-  if (!text && attachments.length === 0) return;
-
-  const captureText = text || placeholderText(attachments);
-
-  // Signal timestamps are Unix ms; fall back to now if absent.
-  const ts = typeof envelope.timestamp === "number"
-    ? new Date(envelope.timestamp).toISOString()
-    : new Date().toISOString();
-
-  postCapture(captureText, ts)
+  postCapture(parsed.captureText, parsed.capturedAt)
     .then((captureId) => {
-      if (attachments.length === 0 || !SIGNAL_ATTACHMENTS_DIR) return;
-      for (const att of attachments) {
+      if (parsed.attachments.length === 0 || !SIGNAL_ATTACHMENTS_DIR) return;
+      for (const att of parsed.attachments) {
         postAttachment(captureId, att).catch((err: Error) =>
           console.error(`[signal-relay] failed to store attachment ${att.id}:`, err.message)
         );

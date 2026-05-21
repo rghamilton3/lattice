@@ -7,13 +7,18 @@ import {
   unlinkSync,
   writeFileSync,
 } from "fs";
-import { basename, join, resolve } from "path";
-import { dirname } from "node:path";
+import { basename, dirname, join, resolve } from "path";
 
-const DB_PATH = resolve(process.env.DATABASE_PATH ?? "./lattice.dev.db");
-export const WORKING_DIR = join(dirname(DB_PATH), "working");
+export function workingDir(): string {
+  const dbPath = resolve(process.env.DATABASE_PATH ?? "./lattice.dev.db");
+  return join(dirname(dbPath), "working");
+}
 
-mkdirSync(WORKING_DIR, { recursive: true });
+function ensureWorkingDir(): string {
+  const dir = workingDir();
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
 
 export class WorkingNotFoundError extends Error {
   constructor(slug: string) {
@@ -58,17 +63,19 @@ function extractTitle(content: string, slug: string): string {
 }
 
 export function listWorking(): WorkingDocSummary[] {
-  const files = readdirSync(WORKING_DIR).filter((f) => f.endsWith(".md"));
+  const dir = ensureWorkingDir();
+  const files = readdirSync(dir).filter((f) => f.endsWith(".md"));
   return files
     .flatMap((f) => {
       const slug = basename(f, ".md");
-      const filePath = join(WORKING_DIR, f);
+      const filePath = join(dir, f);
       try {
         const content = readFileSync(filePath, "utf-8");
         const stat = statSync(filePath);
         return [{ slug, title: extractTitle(content, slug), modified_at: stat.mtime.toISOString() }];
       } catch (e: any) {
         if (e.code === "ENOENT") return [];
+        console.error(`[working] listWorking read failed for ${filePath}:`, e);
         throw e;
       }
     })
@@ -77,7 +84,7 @@ export function listWorking(): WorkingDocSummary[] {
 
 export function readWorking(slug: string): WorkingDocFull {
   assertValidSlug(slug);
-  const filePath = join(WORKING_DIR, `${slug}.md`);
+  const filePath = join(ensureWorkingDir(), `${slug}.md`);
   if (!existsSync(filePath)) throw new WorkingNotFoundError(slug);
   const content = readFileSync(filePath, "utf-8");
   const stat = statSync(filePath);
@@ -92,7 +99,7 @@ export function readWorking(slug: string): WorkingDocFull {
 export function createWorking(title: string, content?: string): string {
   const slug = titleToSlug(title);
   if (!slug) throw new Error(`Title produces empty slug: "${title}"`);
-  const filePath = join(WORKING_DIR, `${slug}.md`);
+  const filePath = join(ensureWorkingDir(), `${slug}.md`);
   if (existsSync(filePath)) throw new WorkingConflictError(slug);
   const body = content ?? `# ${title}\n\n`;
   writeFileSync(filePath, body, "utf-8");
@@ -101,14 +108,14 @@ export function createWorking(title: string, content?: string): string {
 
 export function updateWorking(slug: string, content: string): void {
   assertValidSlug(slug);
-  const filePath = join(WORKING_DIR, `${slug}.md`);
+  const filePath = join(ensureWorkingDir(), `${slug}.md`);
   if (!existsSync(filePath)) throw new WorkingNotFoundError(slug);
   writeFileSync(filePath, content, "utf-8");
 }
 
 export function deleteWorking(slug: string): void {
   assertValidSlug(slug);
-  const filePath = join(WORKING_DIR, `${slug}.md`);
+  const filePath = join(ensureWorkingDir(), `${slug}.md`);
   if (!existsSync(filePath)) throw new WorkingNotFoundError(slug);
   unlinkSync(filePath);
 }

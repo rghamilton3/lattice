@@ -6,6 +6,17 @@ import { getDatabasePath } from "./config";
 let _db: Database | null = null;
 
 export function initDb(): Database {
+  // Close any previous handle so tests calling initDb() across cases don't
+  // leak SQLite file descriptors. No-op in production (single call at boot).
+  if (_db) {
+    try {
+      _db.close();
+    } catch (e) {
+      console.warn("[db] close failed during reinit:", (e as Error).message);
+    }
+    _db = null;
+  }
+
   const path = getDatabasePath();
   const db = new Database(path);
 
@@ -22,6 +33,18 @@ export function initDb(): Database {
 export function getDb(): Database {
   if (!_db) throw new Error("DB not initialized — call initDb() first");
   return _db;
+}
+
+/** @internal test-only — do not use from production code. */
+export function __resetDbForTests(): void {
+  if (_db) {
+    try {
+      _db.close();
+    } catch {
+      // already closed
+    }
+    _db = null;
+  }
 }
 
 function runMigrations(db: Database): void {

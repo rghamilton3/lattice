@@ -24,12 +24,10 @@ function readLatticeConfig(): LatticeConfig {
   }
 }
 
-const _cfg = readLatticeConfig();
-
 export function getAgentToken(): string | undefined {
-  return process.env.LATTICE_AGENT_TOKEN ?? _cfg.spine?.agent_token;
+  return process.env.LATTICE_AGENT_TOKEN ?? readLatticeConfig().spine?.agent_token;
 }
 
 export function getDatabasePath(): string {
-  return process.env.DATABASE_PATH ?? _cfg.spine?.database_path ?? "./lattice.dev.db";
+  return process.env.DATABASE_PATH ?? readLatticeConfig().spine?.database_path ?? "./lattice.dev.db";
 }

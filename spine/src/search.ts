@@ -3,7 +3,7 @@ import type { QMDStore } from "@tobilu/qmd";
 import type { Database } from "bun:sqlite";
 import { join, dirname, basename, resolve } from "path";
 import { mkdirSync, writeFileSync, existsSync, unlinkSync } from "fs";
-import { WORKING_DIR } from "./working";
+import { workingDir } from "./working";
 
 interface CaptureData {
   id: number;
@@ -23,20 +23,31 @@ export interface SearchResult {
   slug?: string;
 }
 
-const DB_PATH = resolve(process.env.DATABASE_PATH ?? "./lattice.dev.db");
-const CAPTURES_DIR = join(dirname(DB_PATH), "captures");
-export const LOCAL_FILES_DIR = join(dirname(DB_PATH), "local-files");
-const QMD_DB_PATH = join(dirname(DB_PATH), "lattice.qmd.db");
+function dbDir(): string {
+  return dirname(resolve(process.env.DATABASE_PATH ?? "./lattice.dev.db"));
+}
+
+export function capturesDir(): string {
+  return join(dbDir(), "captures");
+}
+
+export function localFilesDir(): string {
+  return join(dbDir(), "local-files");
+}
+
+function qmdDbPath(): string {
+  return join(dbDir(), "lattice.qmd.db");
+}
 
 function sanitize(s: string): string {
   return s.replace(/[\r\n]/g, " ");
 }
 
-function captureToMarkdown({ id, text, source, captured_at }: CaptureData): string {
+export function captureToMarkdown({ id, text, source, captured_at }: CaptureData): string {
   return `---\nid: ${id}\nsource: ${sanitize(source)}\ncaptured_at: ${sanitize(captured_at)}\n---\n\n${text}\n`;
 }
 
-function localFileToMarkdown(machineId: string, path: string, text: string): string {
+export function localFileToMarkdown(machineId: string, path: string, text: string): string {
   return `---\nmachine_id: ${sanitize(machineId)}\npath: ${sanitize(path)}\n---\n\n${text}\n`;
 }
 
@@ -46,16 +57,26 @@ let _indexFailures = 0;
 // Serial lock: ensures update() and embed() calls never overlap.
 let _indexLock: Promise<void> = Promise.resolve();
 
+// Test-only reset; not exported via package surface.
+export function _resetSearchForTests(): void {
+  _store = null;
+  _initFailed = false;
+  _indexFailures = 0;
+  _indexLock = Promise.resolve();
+}
+
 export async function initSearch(db: Database): Promise<void> {
-  mkdirSync(CAPTURES_DIR, { recursive: true });
-  mkdirSync(LOCAL_FILES_DIR, { recursive: true });
+  const captures = capturesDir();
+  const localFiles = localFilesDir();
+  mkdirSync(captures, { recursive: true });
+  mkdirSync(localFiles, { recursive: true });
 
   const rows = db
     .query("SELECT id, text, source, captured_at FROM captures")
     .all() as CaptureData[];
 
   for (const row of rows) {
-    const filePath = join(CAPTURES_DIR, `${row.id}.md`);
+    const filePath = join(captures, `${row.id}.md`);
     if (!existsSync(filePath)) {
       writeFileSync(filePath, captureToMarkdown(row));
     }
@@ -63,12 +84,12 @@ export async function initSearch(db: Database): Promise<void> {
 
   try {
     _store = await createStore({
-      dbPath: QMD_DB_PATH,
+      dbPath: qmdDbPath(),
       config: {
         collections: {
-          captures: { path: CAPTURES_DIR, pattern: "**/*.md" },
-          working: { path: WORKING_DIR, pattern: "**/*.md" },
-          "local-files": { path: LOCAL_FILES_DIR, pattern: "**/*.md" },
+          captures: { path: captures, pattern: "**/*.md" },
+          working: { path: workingDir(), pattern: "**/*.md" },
+          "local-files": { path: localFiles, pattern: "**/*.md" },
         },
       },
     });
@@ -88,13 +109,13 @@ export function writeCaptureFile(
   captured_at: string
 ): void {
   writeFileSync(
-    join(CAPTURES_DIR, `${id}.md`),
+    join(capturesDir(), `${id}.md`),
     captureToMarkdown({ id, text, source, captured_at })
   );
 }
 
 export function writeLocalFile(machineId: string, path: string, hash: string, text: string, prevHash?: string): void {
-  const machineDir = join(LOCAL_FILES_DIR, machineId);
+  const machineDir = join(localFilesDir(), machineId);
   mkdirSync(machineDir, { recursive: true });
   if (prevHash && prevHash !== hash) {
     const oldFile = join(machineDir, `${prevHash}.md`);
@@ -126,9 +147,12 @@ export async function search(q: string): Promise<SearchResult[]> {
     if (_initFailed) console.warn("[qmd] search called but initSearch failed — returning empty results");
     return [];
   }
+  const captures = capturesDir();
+  const working = workingDir();
+  const localFiles = localFilesDir();
   const results = await _store.search({ query: q, limit: 20 });
   return results.flatMap((r): SearchResult[] => {
-    if (r.file.startsWith(CAPTURES_DIR + "/")) {
+    if (r.file.startsWith(captures + "/")) {
       const id = parseInt(basename(r.file, ".md"), 10);
       if (isNaN(id)) return [];
       return [
@@ -142,7 +166,7 @@ export async function search(q: string): Promise<SearchResult[]> {
         },
       ];
     }
-    if (r.file.startsWith(WORKING_DIR + "/")) {
+    if (r.file.startsWith(working + "/")) {
       const slug = basename(r.file, ".md");
       return [
         {
@@ -156,9 +180,9 @@ export async function search(q: string): Promise<SearchResult[]> {
         },
       ];
     }
-    if (r.file.startsWith(LOCAL_FILES_DIR + "/")) {
-      // Path: LOCAL_FILES_DIR/<machine_id>/<hash>.md
-      const parts = r.file.slice(LOCAL_FILES_DIR.length + 1).split("/");
+    if (r.file.startsWith(localFiles + "/")) {
+      // Path: localFiles/<machine_id>/<hash>.md
+      const parts = r.file.slice(localFiles.length + 1).split("/");
       const machine_id = parts[0];
       return [
         {

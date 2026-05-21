@@ -5,6 +5,7 @@
 
 # Local helper / state
 .spine-snapshot/
+spine/working/
 
 # Per-tool agent caches at root (component-specific ignores live in their dirs)
 .serena/

@@ -69,13 +69,28 @@ pub fn load() -> Result<Config> {
         root.agent.machine_id
     };
 
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_owned());
+    let watch = root
+        .agent
+        .watch
+        .into_iter()
+        .map(|mut e| {
+            if e.path.starts_with("~/") {
+                e.path = format!("{}{}", home, &e.path[1..]);
+            } else if e.path == "~" {
+                e.path = home.clone();
+            }
+            e
+        })
+        .collect();
+
     Ok(Config {
         spine_url: root.spine.url.trim_end_matches('/').to_owned(),
         agent_token: root.spine.agent_token,
         machine_id,
         poll_interval_minutes: root.agent.poll_interval_minutes,
         max_file_bytes: root.agent.max_file_bytes,
-        watch: root.agent.watch,
+        watch,
     })
 }
 

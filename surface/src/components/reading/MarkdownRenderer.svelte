@@ -20,6 +20,9 @@
 	});
 
 	async function renderMarkdown(md: string): Promise<string> {
+		// Local non-reactive collection inside an async function — SvelteMap would add
+		// reactivity overhead for a value that's never read from the template.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const mermaidBlocks = new Map<string, string>();
 
 		const instance = new Marked();
@@ -54,7 +57,7 @@
 			}
 		});
 
-		return await instance.parse(md) as string;
+		return (await instance.parse(md)) as string;
 	}
 
 	$effect(() => {
@@ -66,7 +69,7 @@
 	});
 </script>
 
-<div class="prose prose-invert prose-sm max-w-none p-4 h-full overflow-y-auto">
+<div class="prose prose-sm h-full max-w-none overflow-y-auto p-4 prose-invert">
 	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 	{@html html}
 </div>

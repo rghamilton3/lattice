@@ -1,0 +1,455 @@
+/* =========================================================================
+   Lattice — ADHD-aware redesign tokens
+   Theme is set via data-theme on <html>; density via data-density.
+   Color baseline is greyscale; color carries semantic load only.
+   ========================================================================= */
+
+:root {
+	/* Type */
+	--font-ui: 'Inter', ui-sans-serif, system-ui, sans-serif;
+	--font-reading: 'Inter', ui-sans-serif, system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+	--fs-body: 16px;
+	--fs-small: 14px;
+	--fs-xs: 12.5px;
+	--fs-h: 18px;
+	--fs-h2: 22px;
+	--lh-body: 1.55;
+	--lh-tight: 1.35;
+	--reading-max: 68ch;
+
+	/* Spacing (comfortable) */
+	--gap-1: 6px;
+	--gap-2: 10px;
+	--gap-3: 14px;
+	--gap-4: 20px;
+	--gap-5: 28px;
+	--gap-6: 40px;
+	--radius-sm: 6px;
+	--radius: 10px;
+	--radius-lg: 14px;
+
+	/* Motion — short, restrained */
+	--t-fast: 120ms;
+	--t-base: 180ms;
+	--ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+}
+
+[data-density='compact'] {
+	--fs-body: 14.5px;
+	--fs-small: 13px;
+	--fs-xs: 11.5px;
+	--fs-h: 16px;
+	--fs-h2: 19px;
+	--lh-body: 1.45;
+	--gap-1: 4px;
+	--gap-2: 7px;
+	--gap-3: 10px;
+	--gap-4: 14px;
+	--gap-5: 20px;
+	--gap-6: 28px;
+}
+
+[data-density='spacious'] {
+	--fs-body: 17px;
+	--fs-small: 15px;
+	--fs-h: 20px;
+	--fs-h2: 26px;
+	--lh-body: 1.65;
+	--gap-1: 8px;
+	--gap-2: 14px;
+	--gap-3: 18px;
+	--gap-4: 26px;
+	--gap-5: 36px;
+	--gap-6: 52px;
+}
+
+/* ---- Themes ---- */
+
+/* Calm light — warm off-white, near-neutral text */
+[data-theme='light'] {
+	--bg: oklch(98.5% 0.005 85);
+	--bg-raised: oklch(96.5% 0.006 85);
+	--bg-high: oklch(93.5% 0.008 85);
+	--bg-deep: oklch(91% 0.009 85);
+	--line: oklch(89% 0.008 85);
+	--line-strong: oklch(82% 0.01 85);
+	--text: oklch(22% 0.012 270);
+	--text-soft: oklch(40% 0.012 270);
+	--text-mute: oklch(55% 0.01 270);
+	--text-faint: oklch(70% 0.008 270);
+
+	/* Semantic — all same chroma, vary hue. Used sparingly. */
+	--c-alarm: oklch(56% 0.16 28); /* red — true alarm only */
+	--c-caution: oklch(62% 0.13 78); /* amber */
+	--c-info: oklch(56% 0.1 245); /* blue */
+	--c-ok: oklch(54% 0.1 155); /* green */
+	--c-accent: oklch(50% 0.09 248); /* primary action — calm blue */
+
+	/* Kind tints (very low chroma surfaces, not text) */
+	--kind-capture-bg: oklch(96% 0.018 155);
+	--kind-capture-fg: oklch(38% 0.06 155);
+	--kind-file-bg: oklch(96% 0.018 245);
+	--kind-file-fg: oklch(38% 0.06 245);
+	--kind-working-bg: oklch(96% 0.02 80);
+	--kind-working-fg: oklch(40% 0.07 80);
+
+	--shadow-pop: 0 1px 1px rgba(20, 20, 30, 0.04), 0 8px 24px -8px rgba(20, 20, 30, 0.1);
+	--shadow-card: 0 1px 0 rgba(20, 20, 30, 0.03);
+	color-scheme: light;
+}
+
+/* Dark calm — desaturated, not pitch */
+[data-theme='dark'] {
+	--bg: oklch(18.5% 0.01 270);
+	--bg-raised: oklch(22% 0.012 270);
+	--bg-high: oklch(26% 0.013 270);
+	--bg-deep: oklch(15% 0.01 270);
+	--line: oklch(30% 0.013 270);
+	--line-strong: oklch(38% 0.014 270);
+	--text: oklch(92% 0.01 90);
+	--text-soft: oklch(78% 0.01 90);
+	--text-mute: oklch(62% 0.01 90);
+	--text-faint: oklch(48% 0.01 90);
+
+	--c-alarm: oklch(70% 0.14 28);
+	--c-caution: oklch(76% 0.12 78);
+	--c-info: oklch(72% 0.1 245);
+	--c-ok: oklch(70% 0.1 155);
+	--c-accent: oklch(76% 0.09 248);
+
+	--kind-capture-bg: oklch(28% 0.03 155);
+	--kind-capture-fg: oklch(82% 0.08 155);
+	--kind-file-bg: oklch(28% 0.03 245);
+	--kind-file-fg: oklch(82% 0.08 245);
+	--kind-working-bg: oklch(30% 0.04 80);
+	--kind-working-fg: oklch(84% 0.1 80);
+
+	--shadow-pop: 0 1px 1px rgba(0, 0, 0, 0.3), 0 12px 28px -8px rgba(0, 0, 0, 0.4);
+	--shadow-card: 0 1px 0 rgba(0, 0, 0, 0.18);
+	color-scheme: dark;
+}
+
+/* Sepia — low-stress reading; muted contrast (per COGA) */
+[data-theme='sepia'] {
+	--bg: oklch(94% 0.02 75);
+	--bg-raised: oklch(91% 0.022 75);
+	--bg-high: oklch(87% 0.024 75);
+	--bg-deep: oklch(89% 0.022 75);
+	--line: oklch(83% 0.022 75);
+	--line-strong: oklch(75% 0.024 75);
+	--text: oklch(28% 0.025 60);
+	--text-soft: oklch(42% 0.022 60);
+	--text-mute: oklch(54% 0.02 60);
+	--text-faint: oklch(66% 0.018 60);
+
+	--c-alarm: oklch(48% 0.14 28);
+	--c-caution: oklch(54% 0.13 78);
+	--c-info: oklch(48% 0.1 245);
+	--c-ok: oklch(48% 0.1 155);
+	--c-accent: oklch(44% 0.1 38);
+
+	--kind-capture-bg: oklch(89% 0.03 130);
+	--kind-capture-fg: oklch(35% 0.06 130);
+	--kind-file-bg: oklch(89% 0.03 230);
+	--kind-file-fg: oklch(35% 0.06 230);
+	--kind-working-bg: oklch(88% 0.04 70);
+	--kind-working-fg: oklch(38% 0.08 70);
+
+	--shadow-pop: 0 1px 1px rgba(80, 60, 30, 0.06), 0 10px 24px -8px rgba(80, 60, 30, 0.14);
+	--shadow-card: 0 1px 0 rgba(80, 60, 30, 0.05);
+	color-scheme: light;
+}
+
+/* ---- Base ---- */
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+html,
+body,
+#root {
+	height: 100%;
+}
+body {
+	margin: 0;
+	font-family: var(--font-ui);
+	font-size: var(--fs-body);
+	line-height: var(--lh-body);
+	background: var(--bg);
+	color: var(--text);
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+}
+button,
+input,
+textarea,
+select {
+	font: inherit;
+	color: inherit;
+}
+button {
+	background: none;
+	border: 0;
+	padding: 0;
+	cursor: pointer;
+	color: inherit;
+}
+::selection {
+	background: color-mix(in oklch, var(--c-accent) 28%, transparent);
+}
+
+/* Reduced motion — replace transitions with cross-fades only. */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 1ms !important;
+		scroll-behavior: auto !important;
+	}
+}
+
+/* ---- Building blocks ---- */
+.row {
+	display: flex;
+	align-items: center;
+	gap: var(--gap-2);
+}
+.col {
+	display: flex;
+	flex-direction: column;
+}
+.mono {
+	font-family: var(--font-mono);
+	font-variant-ligatures: none;
+}
+.mute {
+	color: var(--text-mute);
+}
+.faint {
+	color: var(--text-faint);
+}
+.soft {
+	color: var(--text-soft);
+}
+
+.kbd {
+	font-family: var(--font-mono);
+	font-size: 11.5px;
+	padding: 1px 6px;
+	border: 1px solid var(--line);
+	border-bottom-width: 2px;
+	border-radius: 5px;
+	color: var(--text-mute);
+	background: var(--bg);
+	line-height: 1;
+}
+
+.divider {
+	height: 1px;
+	background: var(--line);
+}
+
+/* Buttons */
+.btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 10px;
+	border-radius: var(--radius-sm);
+	font-size: var(--fs-small);
+	color: var(--text-soft);
+	transition:
+		background var(--t-fast) var(--ease),
+		color var(--t-fast) var(--ease);
+	white-space: nowrap;
+}
+.btn:hover {
+	background: var(--bg-high);
+	color: var(--text);
+}
+.btn[aria-pressed='true'] {
+	background: var(--bg-high);
+	color: var(--text);
+}
+.btn-ghost {
+	color: var(--text-mute);
+}
+.btn-primary {
+	background: var(--c-accent);
+	color: var(--bg);
+	font-weight: 500;
+}
+.btn-primary:hover {
+	filter: brightness(0.96);
+	background: var(--c-accent);
+	color: var(--bg);
+}
+
+.chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 2px 8px;
+	border-radius: 999px;
+	font-size: var(--fs-xs);
+	background: var(--bg-high);
+	color: var(--text-soft);
+	line-height: 1.4;
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+.chip-capture {
+	background: var(--kind-capture-bg);
+	color: var(--kind-capture-fg);
+}
+.chip-file {
+	background: var(--kind-file-bg);
+	color: var(--kind-file-fg);
+}
+.chip-working {
+	background: var(--kind-working-bg);
+	color: var(--kind-working-fg);
+}
+
+/* Cards */
+.card {
+	background: var(--bg-raised);
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	box-shadow: var(--shadow-card);
+}
+
+/* Inputs */
+.input {
+	width: 100%;
+	background: var(--bg);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-sm);
+	padding: 8px 10px;
+	font-size: var(--fs-small);
+	color: var(--text);
+	outline: none;
+	transition:
+		border-color var(--t-fast) var(--ease),
+		box-shadow var(--t-fast) var(--ease);
+}
+.input:focus {
+	border-color: var(--c-accent);
+	box-shadow: 0 0 0 3px color-mix(in oklch, var(--c-accent) 18%, transparent);
+}
+
+/* Subtle striped placeholder image */
+.placeholder-img {
+	background: repeating-linear-gradient(135deg, var(--bg-high) 0 6px, var(--bg-deep) 6px 12px);
+	border: 1px dashed var(--line-strong);
+	color: var(--text-mute);
+	font-family: var(--font-mono);
+	font-size: 11px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: var(--radius-sm);
+}
+
+/* Scrollbars — quiet */
+*::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+	background: color-mix(in oklch, var(--text-mute) 24%, transparent);
+	border-radius: 999px;
+	border: 2px solid transparent;
+	background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+	background: color-mix(in oklch, var(--text-mute) 40%, transparent);
+	background-clip: padding-box;
+	border: 2px solid transparent;
+}
+*::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+/* Reading typography */
+.prose {
+	font-family: var(--font-reading);
+	font-size: var(--fs-body);
+	line-height: var(--lh-body);
+	color: var(--text);
+	max-width: var(--reading-max);
+	text-wrap: pretty;
+}
+.prose h1 {
+	font-size: 26px;
+	line-height: 1.25;
+	margin: 0 0 12px;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+}
+.prose h2 {
+	font-size: 20px;
+	line-height: 1.3;
+	margin: 28px 0 8px;
+	font-weight: 600;
+}
+.prose h3 {
+	font-size: 17px;
+	line-height: 1.3;
+	margin: 22px 0 6px;
+	font-weight: 600;
+}
+.prose p {
+	margin: 0 0 14px;
+}
+.prose ul,
+.prose ol {
+	margin: 0 0 14px;
+	padding-left: 22px;
+}
+.prose li {
+	margin: 2px 0;
+}
+.prose code {
+	font-family: var(--font-mono);
+	font-size: 0.92em;
+	background: var(--bg-high);
+	padding: 1px 5px;
+	border-radius: 4px;
+}
+.prose pre {
+	font-family: var(--font-mono);
+	font-size: 0.92em;
+	background: var(--bg-high);
+	padding: 12px 14px;
+	border-radius: var(--radius-sm);
+	overflow: auto;
+}
+.prose blockquote {
+	border-left: 3px solid var(--line-strong);
+	padding: 2px 0 2px 14px;
+	margin: 0 0 14px;
+	color: var(--text-soft);
+}
+.prose a {
+	color: var(--c-accent);
+	text-decoration: none;
+	border-bottom: 1px solid color-mix(in oklch, var(--c-accent) 35%, transparent);
+}
+.prose a:hover {
+	border-bottom-color: var(--c-accent);
+}
+.prose hr {
+	border: 0;
+	border-top: 1px solid var(--line);
+	margin: 22px 0;
+}
+
+/* No-op class — kept so JSX is unchanged; entrance is instant for robustness. */
+.soft-in {
+	opacity: 1;
+}

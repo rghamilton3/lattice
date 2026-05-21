@@ -25,7 +25,9 @@
 				const data = await res.arrayBuffer();
 				const pdf = await pdfjs.getDocument({ data }).promise;
 
-				// Remove previous canvases
+				// PDF.js owns the canvas lifecycle below — Svelte doesn't render these,
+				// so direct DOM manipulation is the integration boundary.
+				// eslint-disable-next-line svelte/no-dom-manipulating
 				while (container.firstChild) container.removeChild(container.firstChild);
 
 				for (let i = 1; i <= pdf.numPages; i++) {
@@ -35,6 +37,7 @@
 					canvas.width = viewport.width;
 					canvas.height = viewport.height;
 					canvas.className = 'mb-2 max-w-full';
+					// eslint-disable-next-line svelte/no-dom-manipulating
 					container.appendChild(canvas);
 					const ctx = canvas.getContext('2d')!;
 					await page.render({ canvasContext: ctx, canvas, viewport }).promise;

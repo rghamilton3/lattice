@@ -9,8 +9,8 @@
 
 	function paneTitle(c: PaneContent): string {
 		switch (c.kind) {
-			case 'empty':
-				return 'empty';
+			case 'home':
+				return 'home';
 			case 'search':
 				return c.query ? `search: ${c.query}` : 'search';
 			case 'results':
@@ -26,17 +26,19 @@
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
-	class="flex h-full flex-col"
+	class="pane flex h-full flex-col"
+	data-focused={wb.focusedPane === paneIndex}
 	role="region"
 	aria-label="Pane {paneIndex + 1}"
 	tabindex="-1"
-	onclick={() => (wb.focusedPane = paneIndex)}
-	onkeydown={() => (wb.focusedPane = paneIndex)}
+	onclick={(e) => {
+		if (e.target === e.currentTarget) wb.focusedPane = paneIndex;
+	}}
+	onkeydown={(e) => {
+		if (e.target === e.currentTarget) wb.focusedPane = paneIndex;
+	}}
 >
-	<div
-		class="flex h-7 shrink-0 items-center border-b border-border bg-surface-raised px-2 text-xs"
-		class:border-accent={wb.focusedPane === paneIndex}
-	>
+	<div class="flex h-7 shrink-0 items-center border-b border-border bg-surface-raised px-2 text-xs">
 		<span class="truncate text-text-muted">{paneTitle(content)}</span>
 		{#if paneIndex === 1}
 			<button

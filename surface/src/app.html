@@ -4,6 +4,32 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			rel="stylesheet"
+			href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+		/>
+		<script>
+			(function () {
+				try {
+					var s = JSON.parse(localStorage.getItem('lattice.session') || '{}');
+					var root = document.documentElement;
+					root.dataset.theme = s.theme === 'dark' || s.theme === 'sepia' ? s.theme : 'light';
+					root.dataset.density =
+						s.density === 'compact' || s.density === 'spacious' ? s.density : 'comfortable';
+					if (typeof s.font === 'string' && s.font) {
+						root.style.setProperty(
+							'--font-ui',
+							"'" + s.font + "', ui-sans-serif, system-ui, sans-serif"
+						);
+					}
+				} catch (e) {
+					document.documentElement.dataset.theme = 'light';
+					document.documentElement.dataset.density = 'comfortable';
+				}
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

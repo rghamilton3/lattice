@@ -1,6 +1,16 @@
 import { apiFetch } from './client';
 import type { SearchResult } from '$lib/types';
 
+export type DocKind = 'capture' | 'local-file' | 'working';
+
+export interface NearbyResult {
+	id: number;
+	kind: DocKind;
+	ts: string;
+	snippet: string;
+	machine_id?: string;
+}
+
 export const searchKeys = {
 	search: (q: string) => ['search', q] as const,
 	similar: (id: number | string, kind: string) => ['similar', { id, kind }] as const,
@@ -14,7 +24,7 @@ export function fetchSearch(q: string): Promise<{ results: SearchResult[] }> {
 
 export function fetchSimilar(
 	id: number | string,
-	kind: 'capture' | 'local-file' | 'working'
+	kind: DocKind
 ): Promise<{ results: SearchResult[] }> {
 	return apiFetch(`/api/similar?id=${encodeURIComponent(id)}&kind=${kind}`);
 }
@@ -22,7 +32,7 @@ export function fetchSimilar(
 export function fetchNearby(
 	timestamp: string,
 	window_hours = 72
-): Promise<{ results: Array<{ id: number; kind: string; ts: string; snippet: string; machine_id?: string }> }> {
+): Promise<{ results: NearbyResult[] }> {
 	return apiFetch(
 		`/api/nearby?timestamp=${encodeURIComponent(timestamp)}&window_hours=${window_hours}`
 	);

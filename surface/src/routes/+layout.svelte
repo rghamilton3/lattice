@@ -1,5 +1,9 @@
 <script lang="ts">
 	import './layout.css';
+	import '$lib/styles/components.css';
+	import '$components/home/home.css';
+	import '$components/search/search.css';
+	import '$components/process/process.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
 	import { browser } from '$app/environment';
@@ -13,6 +17,24 @@
 
 	const workbench = new WorkbenchStore();
 	setWorkbenchContext(workbench);
+
+	$effect(() => {
+		const root = document.documentElement;
+		root.dataset.theme = workbench.theme;
+		root.dataset.density = workbench.density;
+		root.style.setProperty(
+			'--font-ui',
+			`'${workbench.font}', ui-sans-serif, system-ui, sans-serif`
+		);
+		// Read every persisted field so the effect re-runs on any change.
+		// Centralizing persistence here lets components mutate state directly
+		// without remembering to call wb.persist().
+		void workbench.posture;
+		void workbench.focusMode;
+		void workbench.vimMode;
+		void workbench.dismissedCaptureIds;
+		workbench.persist();
+	});
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>

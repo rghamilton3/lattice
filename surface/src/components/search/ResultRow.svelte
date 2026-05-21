@@ -1,0 +1,110 @@
+<script lang="ts">
+	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
+	import { createWorking } from '$lib/api/working';
+	import type { SearchResult, DocRef } from '$lib/types';
+	import Icon from '$components/icons/Icon.svelte';
+
+	const { paneIndex, result }: { paneIndex: 0 | 1; result: SearchResult } = $props();
+
+	const wb = getWorkbenchContext();
+
+	const chipClass = $derived(
+		result.kind === 'local-file'
+			? 'chip chip-file'
+			: result.kind === 'capture'
+				? 'chip chip-capture'
+				: 'chip chip-working'
+	);
+
+	const title = $derived(
+		result.kind === 'capture'
+			? `capture #${result.id}`
+			: result.kind === 'local-file'
+				? (result.path.split('/').pop() ?? result.path)
+				: `${result.slug}.md`
+	);
+
+	function refToDocRef(r: SearchResult): DocRef {
+		if (r.kind === 'capture') return { kind: 'capture', id: r.id };
+		if (r.kind === 'working') return { kind: 'working', slug: r.slug };
+		return { kind: 'file', id: r.id };
+	}
+
+	function similarSource(r: SearchResult) {
+		return {
+			kind: 'similar' as const,
+			id: r.id,
+			docKind: r.kind
+		};
+	}
+
+	let promoteError = $state('');
+
+	async function promote() {
+		if (result.kind === 'working') return;
+		promoteError = '';
+		const baseTitle = result.path.split('/').pop() ?? 'untitled';
+		const params =
+			result.kind === 'capture'
+				? { title: baseTitle, seed_capture_id: result.id }
+				: { title: baseTitle, seed_file_id: result.id };
+		try {
+			const { slug } = await createWorking(params);
+			wb.openInPane(paneIndex, { kind: 'editor', slug });
+		} catch (e) {
+			promoteError = e instanceof Error ? e.message : 'promote failed';
+		}
+	}
+</script>
+
+<article class="result">
+	<div class="result-head">
+		<span class={chipClass}>{result.kind}</span>
+		{#if result.kind === 'local-file'}
+			<span class="mono faint" style="font-size:12px">@{result.machine_id}</span>
+		{/if}
+		<span class="mono faint" style="font-size:12px">{title}</span>
+		{#if result.score > 0}
+			<span class="row" style="margin-left:auto">
+				<span class="score-bar" title={`score ${result.score.toFixed(2)}`}>
+					<span class="score-fill" style={`width:${Math.round(result.score * 100)}%`}></span>
+				</span>
+				<span
+					class="mono faint"
+					style="font-size:11px; width:36px; text-align:right; display:inline-block"
+				>
+					{result.score.toFixed(2)}
+				</span>
+			</span>
+		{/if}
+	</div>
+	<p class="result-snippet">{result.snippet}</p>
+	<div class="result-actions">
+		<button
+			class="btn"
+			onclick={() => wb.openInPane(paneIndex, { kind: 'doc', ref: refToDocRef(result) })}
+		>
+			<Icon name="arrow-right" size={13} /> Open
+		</button>
+		<button
+			class="btn btn-ghost"
+			onclick={() => wb.openInOther(paneIndex, { kind: 'doc', ref: refToDocRef(result) })}
+		>
+			<Icon name="split" size={13} /> Open in split
+		</button>
+		{#if result.kind !== 'working'}
+			<button class="btn btn-ghost" onclick={promote}>
+				<Icon name="promote" size={13} /> Promote
+			</button>
+			{#if promoteError}
+				<span class="faint" style="font-size:11px; color:var(--c-alarm)">{promoteError}</span>
+			{/if}
+		{/if}
+		<button
+			class="btn btn-ghost"
+			onclick={() => wb.openInOther(paneIndex, { kind: 'results', source: similarSource(result) })}
+		>
+			<Icon name="sim" size={13} /> Similar
+		</button>
+	</div>
+</article>

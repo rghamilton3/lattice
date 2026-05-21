@@ -1,9 +1,25 @@
 // ── Spine API response types ──────────────────────────────────────────────────
 
 export type SearchResult =
-	| { kind: 'capture';    id: number; score: number; snippet: string; body: string; path: string }
-	| { kind: 'local-file'; id: number; score: number; snippet: string; body: string; path: string; machine_id: string }
-	| { kind: 'working';    id: number; score: number; snippet: string; body: string; path: string; slug: string };
+	| { kind: 'capture'; id: number; score: number; snippet: string; body: string; path: string }
+	| {
+			kind: 'local-file';
+			id: number;
+			score: number;
+			snippet: string;
+			body: string;
+			path: string;
+			machine_id: string;
+	  }
+	| {
+			kind: 'working';
+			id: number;
+			score: number;
+			snippet: string;
+			body: string;
+			path: string;
+			slug: string;
+	  };
 
 export interface Capture {
 	id: number;
@@ -55,7 +71,7 @@ export type LateralSource =
 // ── Per-pane content ──────────────────────────────────────────────────────────
 
 export type PaneContent =
-	| { kind: 'empty' }
+	| { kind: 'home' }
 	| { kind: 'search'; query: string }
 	| { kind: 'results'; source: LateralSource }
 	| { kind: 'doc'; ref: DocRef }

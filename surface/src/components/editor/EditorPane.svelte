@@ -2,7 +2,13 @@
 	import { createQuery, createMutation, useQueryClient } from '@tanstack/svelte-query';
 	import { browser } from '$app/environment';
 	import { EditorState, Compartment } from '@codemirror/state';
-	import { EditorView, keymap, lineNumbers, drawSelection, highlightActiveLine } from '@codemirror/view';
+	import {
+		EditorView,
+		keymap,
+		lineNumbers,
+		drawSelection,
+		highlightActiveLine
+	} from '@codemirror/view';
 	import { defaultKeymap, historyKeymap, history } from '@codemirror/commands';
 	import { searchKeymap } from '@codemirror/search';
 	import { markdown } from '@codemirror/lang-markdown';
@@ -10,6 +16,7 @@
 	import { vim, Vim } from '@replit/codemirror-vim';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { workingKeys, fetchWorking, updateWorking } from '$lib/api/working';
+	import Icon from '$components/icons/Icon.svelte';
 	import VimToggle from './VimToggle.svelte';
 
 	const { slug, paneIndex }: { slug: string; paneIndex: 0 | 1 } = $props();
@@ -19,7 +26,7 @@
 
 	let editorContainer: HTMLDivElement | undefined = $state();
 	let view: EditorView | null = null;
-	let vimCompartment = new Compartment();
+	const vimCompartment = new Compartment();
 	let isDirty = $state(false);
 	let saveTimer: ReturnType<typeof setTimeout> | null = null;
 	let saveStatus = $state<'' | 'saved' | 'error'>('');
@@ -38,7 +45,9 @@
 			isDirty = false;
 			saveStatus = 'saved';
 			if (statusTimer) clearTimeout(statusTimer);
-			statusTimer = setTimeout(() => { saveStatus = ''; }, 2000);
+			statusTimer = setTimeout(() => {
+				saveStatus = '';
+			}, 2000);
 			qc.invalidateQueries({ queryKey: workingKeys.detail(slug) });
 		},
 		onError: (err) => {
@@ -71,7 +80,10 @@
 
 	// Wire vim ex commands (global registry — last-mounted editor wins when two are open simultaneously)
 	Vim.defineEx('write', 'w', () => saveNow());
-	Vim.defineEx('wq', 'wq', () => { saveNow(); goBack(); });
+	Vim.defineEx('wq', 'wq', () => {
+		saveNow();
+		goBack();
+	});
 	Vim.defineEx('quit', 'q', (_cm: unknown, params: { argString?: string }) => {
 		const force = params?.argString?.trim() === '!';
 		if (!force && isDirty && !window.confirm('Unsaved changes. Leave without saving?')) return;
@@ -100,7 +112,13 @@
 				oneDark,
 				vimCompartment.of(buildVimExtension(wb.vimMode)),
 				keymap.of([
-					{ key: 'Ctrl-s', run: () => { saveNow(); return true; } },
+					{
+						key: 'Ctrl-s',
+						run: () => {
+							saveNow();
+							return true;
+						}
+					},
 					...defaultKeymap,
 					...historyKeymap,
 					...searchKeymap
@@ -110,7 +128,11 @@
 				}),
 				EditorView.theme({
 					'&': { height: '100%', backgroundColor: 'var(--color-surface)' },
-					'.cm-scroller': { overflow: 'auto', fontFamily: 'var(--font-mono)', fontSize: '0.933rem' },
+					'.cm-scroller': {
+						overflow: 'auto',
+						fontFamily: 'var(--font-mono)',
+						fontSize: '0.933rem'
+					},
 					'.cm-content': { caretColor: 'var(--color-accent)' }
 				})
 			]
@@ -135,35 +157,32 @@
 	});
 </script>
 
-<div class="flex h-full flex-col">
-	<div class="flex shrink-0 items-center gap-2 border-b border-border bg-surface-raised px-2 py-1">
-		<button
-			class="rounded px-2 py-0.5 text-sm text-text hover:bg-surface-high"
-			onclick={goBack}
-		>← back</button>
-		<span class="truncate text-sm text-text">{slug}{isDirty ? ' ·' : ''}</span>
+<div class="editor-shell">
+	<div class="editor-status">
+		<button class="btn btn-ghost" title="Back to search" onclick={goBack}>
+			<Icon name="arrow-right" size={14} class="rotate-180" /> Back
+		</button>
+		<span class="mono faint truncate" style="font-size:12px">{slug}.md</span>
 		{#if isDirty}
-			<span class="text-sm text-text-muted">unsaved</span>
+			<span class="mute" style="font-size:12px">· unsaved</span>
 		{:else if saveStatus === 'saved'}
-			<span class="text-sm text-green-500">saved</span>
+			<span style="font-size:12px; color:var(--c-ok)">· saved</span>
 		{:else if saveStatus === 'error'}
-			<span class="text-sm text-red-400" title={saveErrorMsg}>save failed</span>
+			<span style="font-size:12px; color:var(--c-alarm)" title={saveErrorMsg}>· save failed</span>
 		{/if}
-		<button
-			class="rounded px-2 py-0.5 text-sm text-text-muted hover:bg-surface-high hover:text-text disabled:opacity-40"
-			disabled={saveMutation.isPending}
-			onclick={() => saveNow()}
-		>save</button>
-		<div class="ml-auto">
+		<span class="row" style="margin-left:auto; gap:6px">
+			<span class="kbd">:w</span>
 			<VimToggle />
-		</div>
+		</span>
 	</div>
 
 	<div class="min-h-0 flex-1 overflow-hidden">
 		{#if docQuery.isLoading}
-			<p class="p-3 text-sm text-text-muted">loading…</p>
+			<p class="p-3 text-sm" style="color:var(--text-mute)">loading…</p>
 		{:else if docQuery.isError}
-			<p class="p-3 text-xs text-red-400">{docQuery.error?.message ?? 'error loading doc'}</p>
+			<p class="p-3 text-xs" style="color:var(--c-alarm)">
+				{docQuery.error?.message ?? 'error loading doc'}
+			</p>
 		{:else}
 			<div bind:this={editorContainer} class="h-full"></div>
 		{/if}

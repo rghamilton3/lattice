@@ -2,33 +2,225 @@
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
 
-@theme {
-	--color-surface: #1e1e2e;
-	--color-surface-raised: #262637;
-	--color-surface-high: #313244;
-	--color-border: #45475a;
-	--color-text: #cdd6f4;
-	--color-text-muted: #9399b2;
-	--color-accent: #cba6f7;
-	--color-accent-dim: #89b4fa;
-	--color-capture: #a6e3a1;
-	--color-file: #89dceb;
-	--color-working: #f9e2af;
-	--font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+/* =========================================================================
+   Lattice — design tokens. Themes via [data-theme] on <html>; density via
+   [data-density]. Light/dark/sepia palettes.
+   ========================================================================= */
+
+:root {
+	/* Type */
+	--font-ui: 'Inter', ui-sans-serif, system-ui, sans-serif;
+	--font-reading: 'Inter', ui-sans-serif, system-ui, sans-serif;
+	--font-mono-stack: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+	--fs-body: 16px;
+	--fs-small: 14px;
+	--fs-xs: 12.5px;
+	--fs-h: 18px;
+	--fs-h2: 22px;
+	--lh-body: 1.55;
+	--lh-tight: 1.35;
+	--reading-max: 68ch;
+
+	/* Spacing (comfortable) */
+	--gap-1: 6px;
+	--gap-2: 10px;
+	--gap-3: 14px;
+	--gap-4: 20px;
+	--gap-5: 28px;
+	--gap-6: 40px;
+	--radius-sm: 6px;
+	--radius: 10px;
+	--radius-lg: 14px;
+
+	/* Motion — short, restrained */
+	--t-fast: 120ms;
+	--t-base: 180ms;
+	--ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+}
+
+[data-density='compact'] {
+	--fs-body: 14.5px;
+	--fs-small: 13px;
+	--fs-xs: 11.5px;
+	--fs-h: 16px;
+	--fs-h2: 19px;
+	--lh-body: 1.45;
+	--gap-1: 4px;
+	--gap-2: 7px;
+	--gap-3: 10px;
+	--gap-4: 14px;
+	--gap-5: 20px;
+	--gap-6: 28px;
+}
+
+[data-density='spacious'] {
+	--fs-body: 17px;
+	--fs-small: 15px;
+	--fs-h: 20px;
+	--fs-h2: 26px;
+	--lh-body: 1.65;
+	--gap-1: 8px;
+	--gap-2: 14px;
+	--gap-3: 18px;
+	--gap-4: 26px;
+	--gap-5: 36px;
+	--gap-6: 52px;
+}
+
+/* ---- Themes ---- */
+
+/* Calm light — warm off-white, near-neutral text */
+[data-theme='light'] {
+	--bg: oklch(98.5% 0.005 85);
+	--bg-raised: oklch(96.5% 0.006 85);
+	--bg-high: oklch(93.5% 0.008 85);
+	--bg-deep: oklch(91% 0.009 85);
+	--line: oklch(89% 0.008 85);
+	--line-strong: oklch(82% 0.01 85);
+	--text: oklch(22% 0.012 270);
+	--text-soft: oklch(40% 0.012 270);
+	--text-mute: oklch(55% 0.01 270);
+	--text-faint: oklch(70% 0.008 270);
+
+	--c-alarm: oklch(56% 0.16 28);
+	--c-caution: oklch(62% 0.13 78);
+	--c-info: oklch(56% 0.1 245);
+	--c-ok: oklch(54% 0.1 155);
+	--c-accent: oklch(50% 0.09 248);
+
+	--kind-capture-bg: oklch(96% 0.018 155);
+	--kind-capture-fg: oklch(38% 0.06 155);
+	--kind-file-bg: oklch(96% 0.018 245);
+	--kind-file-fg: oklch(38% 0.06 245);
+	--kind-working-bg: oklch(96% 0.02 80);
+	--kind-working-fg: oklch(40% 0.07 80);
+
+	--shadow-pop: 0 1px 1px rgba(20, 20, 30, 0.04), 0 8px 24px -8px rgba(20, 20, 30, 0.1);
+	--shadow-card: 0 1px 0 rgba(20, 20, 30, 0.03);
+	color-scheme: light;
+}
+
+/* Dark calm — desaturated, not pitch */
+[data-theme='dark'] {
+	--bg: oklch(18.5% 0.01 270);
+	--bg-raised: oklch(22% 0.012 270);
+	--bg-high: oklch(26% 0.013 270);
+	--bg-deep: oklch(15% 0.01 270);
+	--line: oklch(30% 0.013 270);
+	--line-strong: oklch(38% 0.014 270);
+	--text: oklch(92% 0.01 90);
+	--text-soft: oklch(78% 0.01 90);
+	--text-mute: oklch(62% 0.01 90);
+	--text-faint: oklch(48% 0.01 90);
+
+	--c-alarm: oklch(70% 0.14 28);
+	--c-caution: oklch(76% 0.12 78);
+	--c-info: oklch(72% 0.1 245);
+	--c-ok: oklch(70% 0.1 155);
+	--c-accent: oklch(76% 0.09 248);
+
+	--kind-capture-bg: oklch(28% 0.03 155);
+	--kind-capture-fg: oklch(82% 0.08 155);
+	--kind-file-bg: oklch(28% 0.03 245);
+	--kind-file-fg: oklch(82% 0.08 245);
+	--kind-working-bg: oklch(30% 0.04 80);
+	--kind-working-fg: oklch(84% 0.1 80);
+
+	--shadow-pop: 0 1px 1px rgba(0, 0, 0, 0.3), 0 12px 28px -8px rgba(0, 0, 0, 0.4);
+	--shadow-card: 0 1px 0 rgba(0, 0, 0, 0.18);
+	color-scheme: dark;
+}
+
+/* Sepia — low-stress reading; muted contrast (per COGA) */
+[data-theme='sepia'] {
+	--bg: oklch(94% 0.02 75);
+	--bg-raised: oklch(91% 0.022 75);
+	--bg-high: oklch(87% 0.024 75);
+	--bg-deep: oklch(89% 0.022 75);
+	--line: oklch(83% 0.022 75);
+	--line-strong: oklch(75% 0.024 75);
+	--text: oklch(28% 0.025 60);
+	--text-soft: oklch(42% 0.022 60);
+	--text-mute: oklch(54% 0.02 60);
+	--text-faint: oklch(66% 0.018 60);
+
+	--c-alarm: oklch(48% 0.14 28);
+	--c-caution: oklch(54% 0.13 78);
+	--c-info: oklch(48% 0.1 245);
+	--c-ok: oklch(48% 0.1 155);
+	--c-accent: oklch(44% 0.1 38);
+
+	--kind-capture-bg: oklch(89% 0.03 130);
+	--kind-capture-fg: oklch(35% 0.06 130);
+	--kind-file-bg: oklch(89% 0.03 230);
+	--kind-file-fg: oklch(35% 0.06 230);
+	--kind-working-bg: oklch(88% 0.04 70);
+	--kind-working-fg: oklch(38% 0.08 70);
+
+	--shadow-pop: 0 1px 1px rgba(80, 60, 30, 0.06), 0 10px 24px -8px rgba(80, 60, 30, 0.14);
+	--shadow-card: 0 1px 0 rgba(80, 60, 30, 0.05);
+	color-scheme: light;
+}
+
+/* ---- Tailwind utility-class bindings ----
+   `@theme inline` keeps utility classes referencing the design-token vars
+   directly, so flipping [data-theme] cascades through to bg-*, text-*, etc. */
+@theme inline {
+	--color-surface: var(--bg);
+	--color-surface-raised: var(--bg-raised);
+	--color-surface-high: var(--bg-high);
+	--color-surface-deep: var(--bg-deep);
+	--color-border: var(--line);
+	--color-border-strong: var(--line-strong);
+	--color-text: var(--text);
+	--color-text-soft: var(--text-soft);
+	--color-text-muted: var(--text-mute);
+	--color-text-faint: var(--text-faint);
+	--color-accent: var(--c-accent);
+	--color-alarm: var(--c-alarm);
+	--color-caution: var(--c-caution);
+	--color-info: var(--c-info);
+	--color-ok: var(--c-ok);
+	--color-capture: var(--kind-capture-fg);
+	--color-capture-bg: var(--kind-capture-bg);
+	--color-capture-fg: var(--kind-capture-fg);
+	--color-file: var(--kind-file-fg);
+	--color-file-bg: var(--kind-file-bg);
+	--color-file-fg: var(--kind-file-fg);
+	--color-working: var(--kind-working-fg);
+	--color-working-bg: var(--kind-working-bg);
+	--color-working-fg: var(--kind-working-fg);
+	--font-mono: var(--font-mono-stack);
+	--font-sans: var(--font-ui);
 }
 
 html {
-	/* Root font size — all Tailwind rem units scale from here.
-	   text-sm  = 0.875rem = 14px   (content)
-	   text-xs  = 0.75rem  = 12px   (metadata/chrome)
-	   text-base = 1rem    = 16px   (headings/modal) */
 	font-size: 16px;
 }
 
 body {
 	height: 100%;
 	margin: 0;
-	background-color: var(--color-surface);
-	color: var(--color-text);
-	font-family: var(--font-mono);
+	background-color: var(--bg);
+	color: var(--text);
+	font-family: var(--font-ui);
+	font-size: var(--fs-body);
+	line-height: var(--lh-body);
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+}
+
+::selection {
+	background: color-mix(in oklch, var(--c-accent) 28%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 1ms !important;
+		scroll-behavior: auto !important;
+	}
 }

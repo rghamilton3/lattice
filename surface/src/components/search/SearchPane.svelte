@@ -1,17 +1,18 @@
 <script lang="ts">
 	import { createQuery } from '@tanstack/svelte-query';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { browser } from '$app/environment';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
-	import { captureKeys, fetchCaptures } from '$lib/api/captures';
 	import { searchKeys, fetchSearch } from '$lib/api/search';
-	import { workingKeys, fetchWorkingList } from '$lib/api/working';
-	import ResultList from './ResultList.svelte';
+	import type { SearchResult } from '$lib/types';
+	import Icon from '$components/icons/Icon.svelte';
+	import Facets, { type Kind, type Sort } from './Facets.svelte';
+	import ResultRow from './ResultRow.svelte';
 
 	const { paneIndex, query: initialQuery }: { paneIndex: 0 | 1; query: string } = $props();
 
 	const wb = getWorkbenchContext();
 
-	// Use a local copy so the state isn't tied to the prop reference
 	let input = $state('');
 	let debouncedQ = $state('');
 
@@ -19,6 +20,7 @@
 		input = initialQuery;
 		debouncedQ = initialQuery;
 	});
+
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 	function onInput(e: Event) {
@@ -30,73 +32,113 @@
 		}, 300);
 	}
 
+	// Don't let a pending debounce callback fire after unmount and clobber
+	// whatever pane the user navigated to.
+	$effect(() => () => {
+		if (debounceTimer) clearTimeout(debounceTimer);
+	});
+
 	const searchQuery = createQuery(() => ({
 		queryKey: searchKeys.search(debouncedQ),
 		queryFn: () => fetchSearch(debouncedQ),
 		enabled: browser && debouncedQ.length > 0
 	}));
 
-	const recentQuery = createQuery(() => ({
-		queryKey: captureKeys.list(30),
-		queryFn: () => fetchCaptures(30),
-		enabled: browser && debouncedQ.length === 0
-	}));
+	const defaultKinds: Kind[] = ['capture', 'local-file', 'working'];
+	const kindFilter = new SvelteSet<Kind>(defaultKinds);
+	let sort = $state<Sort>('recency');
 
-	const workingQuery = createQuery(() => ({
-		queryKey: workingKeys.list(),
-		queryFn: fetchWorkingList,
-		enabled: browser && debouncedQ.length === 0
-	}));
+	function toggleKind(k: Kind) {
+		if (kindFilter.has(k)) kindFilter.delete(k);
+		else kindFilter.add(k);
+	}
+
+	function resetFacets() {
+		kindFilter.clear();
+		for (const k of defaultKinds) kindFilter.add(k);
+	}
+
+	// Stale facet from a previous query (e.g. "0 of 30") would confuse the user.
+	// Reset to defaults whenever the active query changes.
+	let lastQuery = '';
+	$effect(() => {
+		if (debouncedQ !== lastQuery) {
+			lastQuery = debouncedQ;
+			resetFacets();
+		}
+	});
+
+	const rawResults = $derived<SearchResult[]>(searchQuery.data?.results ?? []);
+
+	const filtered = $derived<SearchResult[]>(
+		rawResults.filter((r) => kindFilter.has(r.kind as Kind))
+	);
+
+	// "Recency-broken" should tie-break ties (|Δscore| < 0.02) by modified_at desc;
+	// but SearchResult has no modified_at yet — so we keep spine's order in that mode
+	// and only re-sort when the user explicitly asks for score-only.
+	// TODO(spine): switch to true tie-broken sort once SearchResult.modified_at exists.
+	const displayed = $derived<SearchResult[]>(
+		sort === 'score' ? [...filtered].sort((a, b) => b.score - a.score) : filtered
+	);
 </script>
 
-<div class="flex h-full flex-col">
-	<div class="shrink-0 border-b border-border p-2">
+<div class="search-view">
+	<div class="search-bar">
+		<Icon name="search" size={16} />
+		<!-- svelte-ignore a11y_autofocus -->
 		<input
+			autofocus
 			type="text"
+			class="search-input"
 			value={input}
 			oninput={onInput}
-			placeholder="search…"
-			class="w-full rounded border border-border bg-surface px-2 py-1 text-sm text-text outline-none focus:border-accent"
+			placeholder="What were you trying to find?"
 		/>
+		{#if debouncedQ.length > 0}
+			<span class="faint mono" style="font-size:12px">
+				{displayed.length} of {rawResults.length} results
+			</span>
+		{/if}
 	</div>
 
-	<div class="min-h-0 flex-1 overflow-y-auto">
-		{#if debouncedQ.length > 0}
-			{#if searchQuery.isLoading}
-				<p class="p-3 text-sm text-text-muted">searching…</p>
+	<div class="search-body">
+		<Facets
+			clustersEnabled={wb.featureFlags.clusters}
+			{kindFilter}
+			{toggleKind}
+			{sort}
+			setSort={(s) => (sort = s)}
+		/>
+
+		<section class="results">
+			{#if debouncedQ.length === 0}
+				<div class="results-empty soft">
+					Type to search across captures, files, and working docs.
+				</div>
+			{:else if searchQuery.isLoading}
+				<div class="results-empty soft">searching…</div>
 			{:else if searchQuery.isError}
-				<p class="p-3 text-sm text-red-400">error: {searchQuery.error?.message}</p>
-			{:else if searchQuery.data}
-				<ResultList {paneIndex} items={searchQuery.data.results} />
-			{/if}
-		{:else}
-			{#if workingQuery.data && workingQuery.data.length > 0}
-				<p class="bg-surface-raised px-3 pt-3 pb-1 text-xs uppercase tracking-wider text-text-muted">working docs</p>
-				{#each workingQuery.data as doc (doc.slug)}
-					<button
-						class="w-full border-b border-border px-3 py-2 text-left hover:bg-surface-raised"
-						onclick={() => wb.openInPane(paneIndex, { kind: 'editor', slug: doc.slug })}
-					>
-						<div class="truncate text-sm text-text">{doc.title}</div>
-						<div class="mt-0.5 text-sm text-text-muted">{doc.modified_at.slice(0, 10)}</div>
+				<div class="results-empty soft" style="color:var(--c-alarm)">
+					error: {searchQuery.error?.message}
+				</div>
+			{:else if rawResults.length === 0}
+				<div class="results-empty soft">No results for "{debouncedQ}".</div>
+			{:else if displayed.length === 0}
+				<div class="results-empty soft">
+					No matches in the kinds you have selected.
+					<button class="btn btn-ghost" style="margin-left:8px" onclick={resetFacets}>
+						reset filters
 					</button>
+				</div>
+			{:else}
+				{#each displayed as result (`${result.kind}:${result.id}`)}
+					<ResultRow {paneIndex} {result} />
 				{/each}
+				<div class="results-foot faint" style="font-size:12px">
+					Most recent first. "similar / mentions / nearby" live inside each opened result.
+				</div>
 			{/if}
-			{#if recentQuery.data && recentQuery.data.length > 0}
-				<p class="border-t border-border bg-surface-raised px-3 pt-3 pb-1 text-xs uppercase tracking-wider text-text-muted">recent captures</p>
-				{#each recentQuery.data as capture (capture.id)}
-					<button
-						class="w-full border-b border-border px-3 py-2 text-left hover:bg-surface-raised"
-						onclick={() => wb.openInPane(paneIndex, { kind: 'doc', ref: { kind: 'capture', id: capture.id } })}
-					>
-						<div class="truncate text-sm text-text">{capture.text.slice(0, 120)}</div>
-						<div class="mt-0.5 text-sm text-text-muted">{capture.source} · {capture.captured_at.slice(0, 10)}</div>
-					</button>
-				{/each}
-			{/if}
-			{#if (!workingQuery.data || workingQuery.data.length === 0) && (!recentQuery.data || recentQuery.data.length === 0)}
-				<p class="p-3 text-sm text-text-muted">start typing to search</p>
-			{/if}
-		{/if}
+		</section>
 	</div>
 </div>

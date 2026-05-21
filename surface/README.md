@@ -42,15 +42,57 @@ bun run lint             # prettier + eslint
 bun run format           # auto-format with prettier
 ```
 
+## Keyboard
+
+Global shortcuts (active outside text inputs):
+
+| Key   | Action                                     |
+| ----- | ------------------------------------------ |
+| `c`   | Quick capture                              |
+| `⌘J`  | Quick capture                              |
+| `⌘⇧J` | New working doc                            |
+| `⌘K`  | Command palette                            |
+| `⌘.`  | Toggle focus mode (fade chrome)            |
+| `⌘/`  | Jump to search                             |
+| `⌃⌥V` | Toggle vim mode                            |
+| `Esc` | Close any open overlay (capture / palette) |
+
+Inside Process Mode (the triage flow) the keys are `k` keep · `a` archive · `p` promote · `t` task · `␣` skip · `Esc` exit.
+
+## Deep links
+
+`adapter-static` serves the SPA from `index.html` for every path. The following query params restore state on first paint:
+
+| Param                  | Effect                                 |
+| ---------------------- | -------------------------------------- |
+| `?view=home`           | Canonical landing — opens Home pane    |
+| `?view=search`         | Opens search pane with empty query     |
+| `?ref=working:my-slug` | Opens a working doc directly           |
+| `?ref=capture:123`     | Opens capture #123 in the reading pane |
+| `?ref=file:42`         | Opens file #42 in the reading pane     |
+
+When no query params are present, `localStorage` (`lattice.session`) restores theme, density, font, posture, focus mode, vim mode, view, and the dismissed-capture set.
+
+## Feature flags
+
+Phase-1 dark features ship behind build-time env vars. Set any of these to `false` (or `0`) before `bun run build` to disable; anything else keeps the default:
+
+| Variable                              | Default | Hides                                              |
+| ------------------------------------- | ------- | -------------------------------------------------- |
+| `PUBLIC_LATTICE_FEATURE_RESURFACING`  | `true`  | "From your past" rail on Home                      |
+| `PUBLIC_LATTICE_FEATURE_RELATED_RAIL` | `true`  | Related-doc rail at the bottom of the reading pane |
+| `PUBLIC_LATTICE_FEATURE_TRIAGE`       | `true`  | "Process 10 in 5 min" button + ProcessMode flow    |
+| `PUBLIC_LATTICE_FEATURE_CLUSTERS`     | `false` | Cluster facet (no spine endpoint yet)              |
+
 ## Key dependencies
 
-| Package | Use |
-|---------|-----|
-| `@tanstack/svelte-query` | Server state (API calls to spine) |
-| `codemirror` + `@codemirror/lang-markdown` | Working-doc editor |
-| `marked` + `marked-katex-extension` | Render markdown + LaTeX |
-| `katex` | LaTeX math rendering |
-| `mermaid` | Mermaid diagram rendering |
-| `dompurify` | Sanitize rendered HTML |
-| `pdfjs-dist` | PDF preview in reading panes |
-| `tailwindcss` v4 | Styling |
+| Package                                    | Use                               |
+| ------------------------------------------ | --------------------------------- |
+| `@tanstack/svelte-query`                   | Server state (API calls to spine) |
+| `codemirror` + `@codemirror/lang-markdown` | Working-doc editor                |
+| `marked` + `marked-katex-extension`        | Render markdown + LaTeX           |
+| `katex`                                    | LaTeX math rendering              |
+| `mermaid`                                  | Mermaid diagram rendering         |
+| `dompurify`                                | Sanitize rendered HTML            |
+| `pdfjs-dist`                               | PDF preview in reading panes      |
+| `tailwindcss` v4                           | Styling                           |

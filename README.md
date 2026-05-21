@@ -17,7 +17,7 @@ See [`plan.md`](./plan.md) for the full architecture and phased build plan.
 On any Linux machine you want to index:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rghamilton3/lattice/main/install.sh | bash
+bash <(curl -fsSL https://raw.githubusercontent.com/rghamilton3/lattice/main/install.sh)
 ```
 
 The installer prompts for your spine URL, agent token, and watch directories, then installs

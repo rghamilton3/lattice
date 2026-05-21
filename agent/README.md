@@ -20,7 +20,7 @@ If the spine is unreachable the file is not cached, so it will be retried next c
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rghamilton3/lattice/main/install.sh | bash
+bash <(curl -fsSL https://raw.githubusercontent.com/rghamilton3/lattice/main/install.sh)
 ```
 
 The script detects your architecture (x86\_64 or aarch64), downloads the latest release binary,

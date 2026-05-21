@@ -3,35 +3,36 @@
 //! Reads ~/.config/lattice/config.toml, presents a GTK4 form, and writes
 //! changes back using toml_edit (preserves comments and formatting).
 //! Launched as a subprocess by lattice-tray.
+//! May invoke `systemctl --user restart lattice-agent`.
 
 use gtk4::{
     prelude::*, Adjustment, Application, ApplicationWindow, Box as GBox,
     Button, Entry, Frame, Grid, Label, Orientation, PolicyType, ScrolledWindow,
     SpinButton, TextView,
 };
+use lattice_agent::config::config_path;
 use std::cell::{Cell, RefCell};
-use std::path::PathBuf;
 use std::rc::Rc;
 
 const APP_ID: &str = "com.rghsoftware.lattice.config";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-fn config_path() -> PathBuf {
-    let base = match std::env::var("XDG_CONFIG_HOME") {
-        Ok(v) => PathBuf::from(v),
-        Err(_) => {
-            let home = std::env::var("HOME").unwrap_or_else(|_| "/root".into());
-            PathBuf::from(home).join(".config")
-        }
-    };
-    base.join("lattice").join("config.toml")
-}
-
-fn systemctl_restart() {
-    let _ = std::process::Command::new("systemctl")
+fn systemctl_restart(parent: &ApplicationWindow) -> bool {
+    match std::process::Command::new("systemctl")
         .args(["--user", "restart", "lattice-agent"])
-        .spawn();
+        .status()
+    {
+        Err(e) => {
+            show_error(parent, &format!("systemctl failed to run:\n{e}"));
+            false
+        }
+        Ok(s) if !s.success() => {
+            show_error(parent, &format!("systemctl restart returned exit code {:?}", s.code()));
+            false
+        }
+        Ok(_) => true,
+    }
 }
 
 // ── Watch row ─────────────────────────────────────────────────────────────────
@@ -152,9 +153,12 @@ fn prompt_restart(parent: &ApplicationWindow) {
         let d = dialog.downgrade();
         let p = parent.downgrade();
         restart.connect_clicked(move |_| {
-            systemctl_restart();
+            if let Some(win) = p.upgrade() {
+                if systemctl_restart(&win) {
+                    win.close();
+                }
+            }
             d.upgrade().map(|w| w.close());
-            p.upgrade().map(|w| w.close());
         });
     }
 
@@ -523,6 +527,13 @@ fn build_ui(app: &Application) {
 
             let mut d = doc_c.borrow_mut();
 
+            if !d.contains_key("spine") {
+                d.insert("spine", toml_edit::Item::Table(toml_edit::Table::new()));
+            }
+            if !d.contains_key("agent") {
+                d.insert("agent", toml_edit::Item::Table(toml_edit::Table::new()));
+            }
+
             d["spine"]["url"] = toml_edit::value(new_url);
             d["spine"]["agent_token"] = toml_edit::value(new_tok);
 
@@ -561,7 +572,10 @@ fn build_ui(app: &Application) {
             let output = d.to_string();
             drop(d);
 
-            match std::fs::write(&path_c, output) {
+            let tmp = path_c.with_extension("toml.tmp");
+            let write_result = std::fs::write(&tmp, &output)
+                .and_then(|_| std::fs::rename(&tmp, &path_c));
+            match write_result {
                 Ok(_) => prompt_restart(&win_c),
                 Err(e) => show_error(&win_c, &format!("Failed to save config:\n{e}")),
             }
@@ -656,5 +670,72 @@ patterns = ["**/*.md"]
         }
         let output = doc.to_string();
         assert!(!output.contains("[[agent.watch]]"), "watch section removed");
+    }
+
+    #[test]
+    fn fresh_config_missing_sections_produce_table_headers() {
+        let mut doc: toml_edit::DocumentMut = "".parse().unwrap();
+
+        if !doc.contains_key("spine") {
+            doc.insert("spine", toml_edit::Item::Table(toml_edit::Table::new()));
+        }
+        if !doc.contains_key("agent") {
+            doc.insert("agent", toml_edit::Item::Table(toml_edit::Table::new()));
+        }
+
+        doc["spine"]["url"] = toml_edit::value("https://example.com");
+        doc["spine"]["agent_token"] = toml_edit::value("tok");
+        doc["agent"]["poll_interval_minutes"] = toml_edit::value(15i64);
+        doc["agent"]["max_file_bytes"] = toml_edit::value(10485760i64);
+
+        let output = doc.to_string();
+        assert!(!output.contains("spine = {"), "spine must not be an inline table");
+        assert!(!output.contains("agent = {"), "agent must not be an inline table");
+        assert!(output.contains("[spine]"), "spine must be a section header");
+        assert!(output.contains("[agent]"), "agent must be a section header");
+    }
+
+    #[test]
+    fn empty_machine_id_removes_key() {
+        let input = r#"[spine]
+url = "https://example.com"
+agent_token = "tok"
+
+[agent]
+machine_id = "my-machine"
+poll_interval_minutes = 15
+max_file_bytes = 10485760
+"#;
+        let mut doc: toml_edit::DocumentMut = input.parse().unwrap();
+        // Simulate save handler with empty machine_id field
+        if let Some(t) = doc["agent"].as_table_mut() {
+            t.remove("machine_id");
+        }
+        let output = doc.to_string();
+        assert!(!output.contains("machine_id"), "machine_id must be removed when cleared");
+    }
+
+    #[test]
+    fn watch_patterns_with_blank_lines_filtered() {
+        let buf_text = "**/*.md\n\n  \n**/*.txt\n";
+        let pats: Vec<String> = buf_text
+            .lines()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+            .collect();
+        assert_eq!(pats, ["**/*.md", "**/*.txt"]);
+    }
+
+    #[test]
+    fn all_blank_watch_patterns_yield_empty_list() {
+        let buf_text = "\n\n   \n";
+        let pats: Vec<String> = buf_text
+            .lines()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+            .collect();
+        assert!(pats.is_empty());
     }
 }

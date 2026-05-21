@@ -40,13 +40,13 @@ struct AgentStatus {
 const COLOR_STOPPED: [u8; 3] = [130, 130, 130];
 // Green — idle, spine reachable
 const COLOR_IDLE: [u8; 3] = [79, 174, 74];
-// Orange — idle, spine unreachable
+// Orange — idle with spine unreachable, or state unknown
 const COLOR_WARN: [u8; 3] = [255, 152, 0];
 // Blue  — scan in progress
 const COLOR_SCAN: [u8; 3] = [66, 133, 244];
 // Red   — scan error
 const COLOR_ERR: [u8; 3] = [219, 68, 55];
-// Yellow — tray can't reach IPC socket (distinct from COLOR_WARN: spine unreachable)
+// Yellow — IPC error (socket unreachable, timeout, write failure, or bad response)
 const COLOR_IPC: [u8; 3] = [255, 200, 0];
 
 /// Renders a 16×16 anti-aliased filled circle in ARGB32 network-byte-order.
@@ -335,9 +335,11 @@ fn friendly_time(iso: &str) -> String {
     }
 }
 
-/// Parses "YYYY-MM-DDTHH:MM:SSZ" into seconds since Unix epoch.
+/// Parses an ISO 8601 UTC timestamp into seconds since Unix epoch.
+/// Reads exactly bytes 0–18 (`YYYY-MM-DDTHH:MM:SS`); everything from byte 19
+/// onward (fractional seconds, timezone offsets) is silently ignored, so
+/// `+05:00` offsets are dropped rather than rejected or adjusted.
 fn parse_iso_secs(s: &str) -> Option<u64> {
-    // Expect exactly "2006-01-02T15:04:05Z"
     let b = s.as_bytes();
     if b.len() < 20 {
         return None;
@@ -369,7 +371,12 @@ fn spawn_config_ui() {
 
     match std::process::Command::new(&config_bin).spawn() {
         Ok(_) => {}
-        Err(e) => tracing::warn!(bin = %config_bin.display(), error = %e, "failed to launch lattice-config"),
+        Err(e) => {
+            tracing::warn!(bin = %config_bin.display(), error = %e, "failed to launch lattice-config");
+            let _ = std::process::Command::new("notify-send")
+                .args(["Lattice", &format!("Could not open config editor: {e}")])
+                .spawn();
+        }
     }
 }
 
@@ -396,6 +403,55 @@ fn color_for(result: &FetchResult) -> [u8; 3] {
             ScanState::Error => COLOR_ERR,
             ScanState::Unknown => COLOR_WARN,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_iso_secs;
+
+    #[test]
+    fn known_timestamp() {
+        // 2024-01-15T11:50:00Z = 1705319400 (cross-checked with date -d)
+        assert_eq!(parse_iso_secs("2024-01-15T11:50:00Z"), Some(1705319400));
+    }
+
+    #[test]
+    fn epoch() {
+        assert_eq!(parse_iso_secs("1970-01-01T00:00:00Z"), Some(0));
+    }
+
+    #[test]
+    fn year_boundary() {
+        // 2023-12-31T23:59:59Z = 1704067199
+        assert_eq!(parse_iso_secs("2023-12-31T23:59:59Z"), Some(1704067199));
+    }
+
+    #[test]
+    fn leap_year_feb29() {
+        // 2024-02-29T00:00:00Z = 1709164800
+        assert_eq!(parse_iso_secs("2024-02-29T00:00:00Z"), Some(1709164800));
+    }
+
+    #[test]
+    fn too_short_returns_none() {
+        assert_eq!(parse_iso_secs("2024-01"), None);
+        assert_eq!(parse_iso_secs(""), None);
+    }
+
+    #[test]
+    fn non_numeric_field_returns_none() {
+        assert_eq!(parse_iso_secs("20XX-01-01T00:00:00Z"), None);
+        assert_eq!(parse_iso_secs("2024-MM-01T00:00:00Z"), None);
+    }
+
+    #[test]
+    fn timezone_offset_silently_dropped() {
+        // Bytes past index 19 are ignored; result equals the bare UTC time.
+        assert_eq!(
+            parse_iso_secs("2024-01-15T11:50:00+05:00"),
+            parse_iso_secs("2024-01-15T11:50:00Z"),
+        );
     }
 }
 

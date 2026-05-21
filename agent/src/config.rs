@@ -94,7 +94,7 @@ pub fn load() -> Result<Config> {
     })
 }
 
-fn config_path() -> PathBuf {
+pub fn config_path() -> PathBuf {
     xdg_config_home().join("lattice").join("config.toml")
 }
 

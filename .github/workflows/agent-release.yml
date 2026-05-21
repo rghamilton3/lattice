@@ -58,9 +58,42 @@ jobs:
             lattice-agent-${{ matrix.target }}
             lattice-tray-${{ matrix.target }}
 
+  build-config:
+    name: Build lattice-config (x86_64 linux-gnu)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GTK4 dev headers
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: agent
+          key: x86_64-linux-gnu-config
+
+      - name: Build lattice-config
+        run: cargo build --release --bin lattice-config
+
+      - name: Rename binary
+        run: cp target/release/lattice-config ../lattice-config-x86_64-unknown-linux-gnu
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lattice-config-x86_64
+          path: lattice-config-x86_64-unknown-linux-gnu
+
   release:
     name: Publish GitHub Release
-    needs: build
+    needs: [build, build-config]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -87,6 +120,7 @@ jobs:
             lattice-agent-aarch64-unknown-linux-musl
             lattice-tray-x86_64-unknown-linux-musl
             lattice-tray-aarch64-unknown-linux-musl
+            lattice-config-x86_64-unknown-linux-gnu
             lattice-capture
             lattice-agent.service
             lattice-tray.service

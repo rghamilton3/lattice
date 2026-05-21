@@ -119,6 +119,26 @@ if [[ "$_ans" =~ ^[Yy]$ ]]; then
   chmod +x "${INSTALL_DIR}/lattice-tray"
   info "lattice-tray installed to ${INSTALL_DIR}/lattice-tray"
 
+  # lattice-config is a GTK4 GUI tool; it ships as a dynamically linked linux-gnu
+  # binary (GTK4 can't be MUSL statically linked), so the asset name differs.
+  case "$(uname -m)" in
+    x86_64)  CONFIG_BINARY_ASSET="lattice-config-x86_64-unknown-linux-gnu" ;;
+    *)       CONFIG_BINARY_ASSET="" ;;
+  esac
+  if [[ -n "$CONFIG_BINARY_ASSET" ]]; then
+    config_url=$(release_url "$CONFIG_BINARY_ASSET")
+    if [[ -n "$config_url" ]]; then
+      info "Downloading ${CONFIG_BINARY_ASSET}…"
+      curl -fSL --progress-bar "$config_url" -o "${INSTALL_DIR}/lattice-config"
+      chmod +x "${INSTALL_DIR}/lattice-config"
+      info "lattice-config installed to ${INSTALL_DIR}/lattice-config"
+    else
+      warn "'${CONFIG_BINARY_ASSET}' not found in release — skipping lattice-config"
+    fi
+  else
+    warn "lattice-config is only available for x86_64 — skipping (build from source to install)"
+  fi
+
   TRAY_SVC_FILE="${SERVICE_DIR}/lattice-tray.service"
   tray_svc_url=$(release_url "lattice-tray.service")
   [[ -z "$tray_svc_url" ]] && die "'lattice-tray.service' asset not found in the latest release"

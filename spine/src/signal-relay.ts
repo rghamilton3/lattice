@@ -24,6 +24,19 @@ const hostname = RPC_HOST.slice(0, colonIdx);
 const port = parseInt(RPC_HOST.slice(colonIdx + 1), 10);
 
 let backoff = 1_000;
+let activeSocket: { write(data: string): void } | null = null;
+
+function sendReply(message: string): void {
+  if (!activeSocket) return;
+  activeSocket.write(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      method: "send",
+      id: Date.now(),
+      params: { recipient: [SIGNAL_PHONE], message },
+    }) + "\n"
+  );
+}
 
 interface SignalAttachment {
   id?: string;
@@ -50,6 +63,7 @@ function connect(): void {
       open(socket) {
         console.log(`[signal-relay] connected to ${RPC_HOST}`);
         backoff = 1_000;
+        activeSocket = socket;
         socket.write(
           JSON.stringify({ jsonrpc: "2.0", method: "subscribeReceive", id: 1 }) + "\n"
         );
@@ -71,6 +85,7 @@ function connect(): void {
       },
 
       close() {
+        activeSocket = null;
         console.log(`[signal-relay] disconnected — retrying in ${backoff / 1000}s`);
         setTimeout(connect, backoff);
         backoff = Math.min(backoff * 2, 60_000);
@@ -154,6 +169,7 @@ async function postCapture(text: string, captured_at: string): Promise<number> {
 
   const { id } = (await res.json()) as { id: number };
   console.log(`[signal-relay] captured id=${id}: ${text.slice(0, 80)}`);
+  sendReply(`✓ #${id}`);
   return id;
 }
 

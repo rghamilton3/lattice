@@ -103,6 +103,10 @@
 	<!-- toolbar -->
 	<div class="flex shrink-0 flex-wrap items-center gap-1 border-b border-border bg-surface-raised px-2 py-1">
 		<button
+			class="rounded px-2 py-0.5 text-sm text-text hover:bg-surface-high"
+			onclick={() => wb.openInPane(paneIndex, { kind: 'search', query: '' })}
+		>← back</button>
+		<button
 			class="rounded px-2 py-0.5 text-sm text-text-muted hover:bg-surface-high hover:text-text"
 			onclick={openMoreLikeThis}
 			title="Semantic neighbors"

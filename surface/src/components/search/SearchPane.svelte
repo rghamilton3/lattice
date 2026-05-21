@@ -71,7 +71,7 @@
 			{/if}
 		{:else}
 			{#if workingQuery.data && workingQuery.data.length > 0}
-				<p class="px-3 pt-2 text-sm text-text-muted">working docs</p>
+				<p class="bg-surface-raised px-3 pt-3 pb-1 text-xs uppercase tracking-wider text-text-muted">working docs</p>
 				{#each workingQuery.data as doc (doc.slug)}
 					<button
 						class="w-full border-b border-border px-3 py-2 text-left hover:bg-surface-raised"
@@ -83,7 +83,7 @@
 				{/each}
 			{/if}
 			{#if recentQuery.data && recentQuery.data.length > 0}
-				<p class="px-3 pt-2 text-sm text-text-muted">recent captures</p>
+				<p class="border-t border-border bg-surface-raised px-3 pt-3 pb-1 text-xs uppercase tracking-wider text-text-muted">recent captures</p>
 				{#each recentQuery.data as capture (capture.id)}
 					<button
 						class="w-full border-b border-border px-3 py-2 text-left hover:bg-surface-raised"

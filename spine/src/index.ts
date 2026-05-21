@@ -124,6 +124,26 @@ const app = new Elysia()
           },
           { params: t.Object({ id: t.String() }) }
         )
+        .post(
+          "/api/captures",
+          ({ body }) => {
+            const now = new Date().toISOString();
+            const row = db
+              .prepare(
+                "INSERT INTO captures (text, source, captured_at, ingested_at) VALUES (?, ?, ?, ?) RETURNING id"
+              )
+              .get(body.text, body.source, now, now) as { id: number };
+            writeCaptureFile(row.id, body.text, body.source, now);
+            refreshIndex();
+            return { id: row.id };
+          },
+          {
+            body: t.Object({
+              text: t.String({ minLength: 1 }),
+              source: t.String({ minLength: 1 }),
+            }),
+          }
+        )
 
         // ── Search ────────────────────────────────────────────────────────
         .get(

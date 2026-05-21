@@ -6,6 +6,17 @@ import { getDatabasePath } from "./config";
 let _db: Database | null = null;
 
 export function initDb(): Database {
+  // Close any previous handle so tests calling initDb() across cases don't
+  // leak SQLite file descriptors. No-op in production (single call at boot).
+  if (_db) {
+    try {
+      _db.close();
+    } catch {
+      // already closed
+    }
+    _db = null;
+  }
+
   const path = getDatabasePath();
   const db = new Database(path);
 

@@ -87,11 +87,17 @@ describe("initSearch", () => {
       },
     }));
 
-    const { initSearch, __resetSearchForTests } = await import("../../src/search");
-    __resetSearchForTests();
-    const db = initDb();
-    await expect(initSearch(db)).rejects.toThrow("boom");
-    db.close();
+    try {
+      const { initSearch, __resetSearchForTests } = await import("../../src/search");
+      __resetSearchForTests();
+      const db = initDb();
+      await expect(initSearch(db)).rejects.toThrow("boom");
+      db.close();
+    } finally {
+      // Restore the working mock so later tests in this file (and in any
+      // file that runs after this one) get a non-throwing createStore.
+      qmd = installQmdMock();
+    }
   });
 });
 

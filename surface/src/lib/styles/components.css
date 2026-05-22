@@ -254,6 +254,7 @@
 }
 
 .statusbar {
+	position: relative;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -261,6 +262,14 @@
 	border-top: 1px solid var(--line);
 	background: var(--bg);
 	font-family: var(--font-ui);
+}
+.statusbar-tagline {
+	position: absolute;
+	left: 50%;
+	transform: translateX(-50%);
+	font-size: 12px;
+	white-space: nowrap;
+	pointer-events: none;
 }
 .status-dot {
 	width: 8px;

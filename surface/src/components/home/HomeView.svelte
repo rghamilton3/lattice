@@ -241,9 +241,5 @@
 				</div>
 			{/if}
 		</section>
-
-		<div class="home-foot faint">
-			Lattice · ADHD-aware substrate · captured loosely, retrieved intelligently
-		</div>
 	</div>
 </div>

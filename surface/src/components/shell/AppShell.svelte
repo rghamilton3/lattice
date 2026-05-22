@@ -103,6 +103,9 @@
 			<span class="faint" style="font-size:12px">agents&nbsp;·&nbsp;—</span>
 			<span class="faint" style="font-size:12px">sync&nbsp;·&nbsp;pending</span>
 		</div>
+		<span class="faint statusbar-tagline">
+			Lattice&nbsp;·&nbsp;ADHD-aware substrate&nbsp;·&nbsp;captured loosely, retrieved intelligently
+		</span>
 		<div class="row" style="gap:12px; font-size:12px">
 			<span class="faint">posture · {wb.posture}</span>
 			<span class="faint">

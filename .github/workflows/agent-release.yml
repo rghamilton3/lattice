@@ -1,4 +1,4 @@
-name: Release — lattice-agent
+name: Release lattice-agent
 
 on:
   push:

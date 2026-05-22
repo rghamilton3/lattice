@@ -1,7 +1,15 @@
 // ── Spine API response types ──────────────────────────────────────────────────
 
 export type SearchResult =
-	| { kind: 'capture'; id: number; score: number; snippet: string; body: string; path: string }
+	| {
+			kind: 'capture';
+			id: number;
+			score: number;
+			snippet: string;
+			body: string;
+			path: string;
+			modified_at: string;
+	  }
 	| {
 			kind: 'local-file';
 			id: number;
@@ -10,6 +18,7 @@ export type SearchResult =
 			body: string;
 			path: string;
 			machine_id: string;
+			modified_at: string;
 	  }
 	| {
 			kind: 'working';
@@ -19,6 +28,7 @@ export type SearchResult =
 			body: string;
 			path: string;
 			slug: string;
+			modified_at: string;
 	  };
 
 export interface Capture {

@@ -53,7 +53,8 @@
 							score: 0,
 							snippet: r.snippet,
 							body: r.snippet,
-							path: `capture/${r.id}`
+							path: `capture/${r.id}`,
+							modified_at: ''
 						}
 					];
 				if (r.kind === 'local-file')
@@ -65,7 +66,8 @@
 							snippet: r.snippet,
 							body: r.snippet,
 							path: `local-file/${r.id}`,
-							machine_id: r.machine_id ?? ''
+							machine_id: r.machine_id ?? '',
+							modified_at: ''
 						}
 					];
 				return [];

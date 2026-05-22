@@ -1,4 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
+import { writeFileSync, statSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import { buildTestApp, json, req, type TestApp } from '../helpers/app';
 
 let app: TestApp;
@@ -24,6 +26,11 @@ describe('GET /api/search', () => {
 	});
 
 	it('returns mapped capture hits from the mocked store', async () => {
+		app.db
+			.query(
+				'INSERT INTO captures (id, text, source, captured_at, ingested_at) VALUES (?, ?, ?, ?, ?)',
+			)
+			.run(42, 'test text', 'test source', '2024-01-15T10:00:00.000Z', '2024-01-15T10:00:00.000Z');
 		app.qmd.setHits([
 			{
 				file: 'qmd://captures/42.md',
@@ -44,11 +51,15 @@ describe('GET /api/search', () => {
 				body: 'full body',
 				path: 'captures/42.md',
 				kind: 'capture',
+				modified_at: '2024-01-15T10:00:00.000Z',
 			},
 		]);
 	});
 
 	it('returns mapped working-doc hits with slug', async () => {
+		const workingPath = join(dirname(app.env.dbPath), 'working', 'my-note.md');
+		writeFileSync(workingPath, '# My Note\n');
+		const expectedMtime = statSync(workingPath).mtime.toISOString();
 		app.qmd.setHits([
 			{
 				file: 'qmd://working/my-note.md',
@@ -69,11 +80,26 @@ describe('GET /api/search', () => {
 				path: 'working/my-note.md',
 				kind: 'working',
 				slug: 'my-note',
+				modified_at: expectedMtime,
 			},
 		]);
 	});
 
 	it('returns mapped local-file hits with machine_id', async () => {
+		app.db
+			.query(
+				'INSERT INTO file_index (machine_id, path, hash, mime_type, text, modified_at, size_bytes, indexed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+			)
+			.run(
+				'laptop-1',
+				'/docs/file.md',
+				'abc',
+				'text/plain',
+				'content',
+				'2024-03-20T08:00:00.000Z',
+				100,
+				'2024-03-20T08:00:00.000Z',
+			);
 		app.qmd.setHits([
 			{
 				file: 'qmd://local-files/laptop-1/abc.md',
@@ -89,6 +115,7 @@ describe('GET /api/search', () => {
 			kind: 'local-file',
 			machine_id: 'laptop-1',
 			score: 0.5,
+			modified_at: '2024-03-20T08:00:00.000Z',
 		});
 	});
 

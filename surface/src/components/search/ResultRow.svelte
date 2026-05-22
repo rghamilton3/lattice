@@ -3,6 +3,7 @@
 	import { createWorking } from '$lib/api/working';
 	import type { SearchResult, DocRef } from '$lib/types';
 	import Icon from '$components/icons/Icon.svelte';
+	import { relTime } from '$lib/utils/relTime';
 
 	const { paneIndex, result }: { paneIndex: 0 | 1; result: SearchResult } = $props();
 
@@ -38,6 +39,8 @@
 		};
 	}
 
+	const modifiedLabel = $derived(relTime(result.modified_at, Date.now()));
+
 	let promoteError = $state('');
 
 	async function promote() {
@@ -64,6 +67,9 @@
 			<span class="mono faint" style="font-size:12px">@{result.machine_id}</span>
 		{/if}
 		<span class="mono faint" style="font-size:12px">{title}</span>
+		{#if modifiedLabel}
+			<span class="faint" style="font-size:11px">{modifiedLabel}</span>
+		{/if}
 		{#if result.score > 0}
 			<span class="row" style="margin-left:auto">
 				<span class="score-bar" title={`score ${result.score.toFixed(2)}`}>

@@ -53,17 +53,11 @@ async fn main() -> Result<()> {
 
         // Wait for either the poll interval to elapse or a reindex command to arrive.
         // Multiple ForceReindex commands coalesce: we drain the channel before acting.
-        let sleep = tokio::time::sleep(Duration::from_secs(cfg.poll_interval_minutes * 60));
-        tokio::pin!(sleep);
-        let force_reindex = loop {
-            tokio::select! {
-                _ = &mut sleep => break false,
-                Some(cmd) = cmd_rx.recv() => match cmd {
-                    AgentCommand::ForceReindex => {
-                        while cmd_rx.try_recv().is_ok() {}
-                        break true;
-                    }
-                },
+        let force_reindex = tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(cfg.poll_interval_minutes * 60)) => false,
+            cmd = cmd_rx.recv() => {
+                while cmd_rx.try_recv().is_ok() {}
+                matches!(cmd, Some(AgentCommand::ForceReindex))
             }
         };
 

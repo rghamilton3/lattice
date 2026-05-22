@@ -193,26 +193,24 @@ async fn process_file(
     let path_str = path.to_string_lossy();
 
     // Fast path: if mtime and size match the cache, skip hashing entirely.
-    if !force {
-        if let Some(cached) = cache.get(&path_str)
-            && cached.mtime_secs == mtime_secs
-            && cached.size_bytes == size_bytes as i64
-        {
-            return Ok(ProcessResult::Skipped);
-        }
+    if !force
+        && let Some(cached) = cache.get(&path_str)
+        && cached.mtime_secs == mtime_secs
+        && cached.size_bytes == size_bytes as i64
+    {
+        return Ok(ProcessResult::Skipped);
     }
 
     let content = std::fs::read(path)?;
     let hash = blake3::hash(&content).to_hex().to_string();
 
     // If the hash is unchanged (mtime drift, etc.), update cache metadata and skip.
-    if !force {
-        if let Some(cached) = cache.get(&path_str)
-            && cached.hash == hash
-        {
-            cache.upsert(&path_str, mtime_secs, size_bytes as i64, &hash);
-            return Ok(ProcessResult::Skipped);
-        }
+    if !force
+        && let Some(cached) = cache.get(&path_str)
+        && cached.hash == hash
+    {
+        cache.upsert(&path_str, mtime_secs, size_bytes as i64, &hash);
+        return Ok(ProcessResult::Skipped);
     }
 
     let mime = MimeGuess::from_path(path)

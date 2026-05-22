@@ -33,7 +33,7 @@
 
 	const agentCount = $derived(statusQuery.data?.active_agent_count ?? null);
 	const latestScan = $derived(
-		statusQuery.data?.agents
+		(statusQuery.data?.agents ?? [])
 			.map((a) => a.last_scan_at)
 			.filter((s): s is string => s !== null)
 			.sort()

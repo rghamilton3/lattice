@@ -15,6 +15,7 @@ export function useCompleteTask() {
 		wb.showToast('Task done');
 		try {
 			await completeTask(task.id);
+			queryClient.invalidateQueries({ queryKey: taskKeys.done() });
 		} catch (err) {
 			logError('completeTask', err);
 			queryClient.invalidateQueries({ queryKey: taskKeys.list() });

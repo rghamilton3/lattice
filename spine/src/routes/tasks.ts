@@ -6,27 +6,38 @@ import { writeCaptureFile, refreshIndex } from '../search';
 const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
 const TASK_SELECT =
-	'SELECT id, text, source, captured_at, ingested_at, triaged_at, triage_action, task_due_date, task_priority, task_notes FROM captures';
+	'SELECT id, text, source, captured_at, ingested_at, triaged_at, triage_action, task_due_date, task_priority, task_notes, task_completed_at FROM captures';
+
+function sortActive(rows: CaptureRow[]): CaptureRow[] {
+	return rows.sort((a, b) => {
+		if (a.task_due_date !== b.task_due_date) {
+			if (!a.task_due_date) return 1;
+			if (!b.task_due_date) return -1;
+			return a.task_due_date < b.task_due_date ? -1 : 1;
+		}
+		const pa = a.task_priority != null ? (PRIORITY_ORDER[a.task_priority] ?? 3) : 3;
+		const pb = b.task_priority != null ? (PRIORITY_ORDER[b.task_priority] ?? 3) : 3;
+		if (pa !== pb) return pa - pb;
+		return b.captured_at < a.captured_at ? -1 : 1;
+	});
+}
 
 export const tasksRoutes = (db: Database) =>
 	new Elysia()
 		.get('/api/tasks', () => {
 			const rows = db
-				.query(`${TASK_SELECT} WHERE triage_action = 'task' ORDER BY captured_at DESC`)
+				.query(
+					`${TASK_SELECT} WHERE triage_action = 'task' AND task_completed_at IS NULL ORDER BY captured_at DESC`,
+				)
 				.all() as CaptureRow[];
-
-			// Sort: due_date asc (nulls last), priority (high→medium→low→null), captured_at desc
-			return rows.sort((a, b) => {
-				if (a.task_due_date !== b.task_due_date) {
-					if (!a.task_due_date) return 1;
-					if (!b.task_due_date) return -1;
-					return a.task_due_date < b.task_due_date ? -1 : 1;
-				}
-				const pa = a.task_priority != null ? (PRIORITY_ORDER[a.task_priority] ?? 3) : 3;
-				const pb = b.task_priority != null ? (PRIORITY_ORDER[b.task_priority] ?? 3) : 3;
-				if (pa !== pb) return pa - pb;
-				return b.captured_at < a.captured_at ? -1 : 1;
-			});
+			return sortActive(rows);
+		})
+		.get('/api/tasks/done', () => {
+			return db
+				.query(
+					`${TASK_SELECT} WHERE triage_action = 'task' AND task_completed_at IS NOT NULL ORDER BY task_completed_at DESC`,
+				)
+				.all() as CaptureRow[];
 		})
 		.post(
 			'/api/tasks',
@@ -96,4 +107,46 @@ export const tasksRoutes = (db: Database) =>
 					notes: t.Optional(t.Nullable(t.String())),
 				}),
 			},
+		)
+		.patch(
+			'/api/tasks/:id/complete',
+			({ params, set }) => {
+				const id = parseInt(params.id, 10);
+				if (isNaN(id)) {
+					set.status = 400;
+					return { error: 'Invalid id' };
+				}
+				const result = db
+					.prepare(
+						`UPDATE captures SET task_completed_at = ? WHERE id = ? AND triage_action = 'task' RETURNING id`,
+					)
+					.get(new Date().toISOString(), id) as { id: number } | null;
+				if (!result) {
+					set.status = 404;
+					return { error: 'Not found' };
+				}
+				return {};
+			},
+			{ params: t.Object({ id: t.String() }) },
+		)
+		.patch(
+			'/api/tasks/:id/uncomplete',
+			({ params, set }) => {
+				const id = parseInt(params.id, 10);
+				if (isNaN(id)) {
+					set.status = 400;
+					return { error: 'Invalid id' };
+				}
+				const result = db
+					.prepare(
+						`UPDATE captures SET task_completed_at = NULL WHERE id = ? AND triage_action = 'task' RETURNING id`,
+					)
+					.get(id) as { id: number } | null;
+				if (!result) {
+					set.status = 404;
+					return { error: 'Not found' };
+				}
+				return {};
+			},
+			{ params: t.Object({ id: t.String() }) },
 		);

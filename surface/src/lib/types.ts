@@ -44,6 +44,7 @@ export interface Task {
 	task_due_date: string | null;
 	task_priority: TaskPriority | null;
 	task_notes: string | null;
+	task_completed_at: string | null;
 }
 
 export interface FileEntry {

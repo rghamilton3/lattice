@@ -2,7 +2,13 @@
 	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
 	import { browser } from '$app/environment';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
-	import { taskKeys, fetchTasks, updateTaskMeta } from '$lib/api/tasks';
+	import {
+		taskKeys,
+		fetchTasks,
+		fetchCompletedTasks,
+		updateTaskMeta,
+		uncompleteTask
+	} from '$lib/api/tasks';
 	import { useCompleteTask } from '$lib/state/useCompleteTask.svelte';
 	import type { Task, TaskPriority } from '$lib/types';
 	import Icon from '$components/icons/Icon.svelte';
@@ -27,9 +33,17 @@
 		enabled: browser
 	}));
 
+	const doneQuery = createQuery(() => ({
+		queryKey: taskKeys.done(),
+		queryFn: fetchCompletedTasks,
+		enabled: browser
+	}));
+
 	const tasks = $derived<Task[]>(query.data ?? []);
+	const completedTasks = $derived<Task[]>(doneQuery.data ?? []);
 
 	let expandedId = $state<number | null>(null);
+	let showCompleted = $state(false);
 
 	// Per-task edit state (only one expanded at a time)
 	let editDueDate = $state('');
@@ -64,6 +78,20 @@
 			wb.showToast('Save failed');
 		} finally {
 			saving = false;
+		}
+	}
+
+	async function undone(task: Task) {
+		queryClient.setQueryData(taskKeys.done(), (old: Task[] | undefined) =>
+			old ? old.filter((t) => t.id !== task.id) : []
+		);
+		try {
+			await uncompleteTask(task.id);
+			queryClient.invalidateQueries({ queryKey: taskKeys.list() });
+		} catch (err) {
+			logError('uncompleteTask', err);
+			queryClient.invalidateQueries({ queryKey: taskKeys.done() });
+			wb.showToast('Restore failed');
 		}
 	}
 
@@ -196,6 +224,62 @@
 				{/each}
 			</div>
 		{/if}
+
+		{#if !doneQuery.isLoading && completedTasks.length > 0}
+			<div class="completed-section">
+				<button
+					class="completed-toggle"
+					onclick={() => (showCompleted = !showCompleted)}
+					aria-expanded={showCompleted}
+				>
+					<Icon
+						name="chev-right"
+						size={13}
+						class="completed-chevron {showCompleted ? 'completed-chevron--open' : ''}"
+					/>
+					<span class="faint" style="font-size:13px">Completed ({completedTasks.length})</span>
+				</button>
+
+				{#if showCompleted}
+					<div class="task-list">
+						{#each completedTasks as task (task.id)}
+							<div class="task-row task-row--done">
+								<div class="task-row-main">
+									<button
+										class="task-check task-check--done"
+										title="Mark active"
+										aria-label="Mark active"
+										onclick={() => undone(task)}
+									>
+										<Icon name="task" size={16} class="task-check-filled" />
+										<Icon name="checkbox" size={16} class="task-check-restore" />
+									</button>
+
+									<div class="task-body">
+										<span class="task-text task-text--done">{task.text}</span>
+										<span class="task-chips">
+											{#if task.task_due_date}
+												<span class="chip chip-due">{task.task_due_date}</span>
+											{/if}
+											{#if task.task_priority}
+												<span class="chip chip-priority chip-priority--{task.task_priority}">
+													{PRIORITY_LABEL[task.task_priority]}
+												</span>
+											{/if}
+											{#if task.task_completed_at}
+												<span class="faint" style="font-size:11.5px"
+													>done {relTime(task.task_completed_at, now)}</span
+												>
+											{/if}
+										</span>
+									</div>
+								</div>
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</div>
+		{/if}
 	</div>
 </div>
 
@@ -274,6 +358,27 @@
 		display: block;
 	}
 
+	/* Completed task check button */
+	.task-check--done {
+		color: var(--c-ok);
+	}
+
+	.task-check--done :global(.task-check-restore) {
+		display: none;
+	}
+
+	.task-check--done:hover {
+		color: var(--text-faint);
+	}
+
+	.task-check--done:hover :global(.task-check-filled) {
+		display: none;
+	}
+
+	.task-check--done:hover :global(.task-check-restore) {
+		display: block;
+	}
+
 	.task-body {
 		flex: 1;
 		min-width: 0;
@@ -291,6 +396,11 @@
 		color: var(--text);
 	}
 
+	.task-text--done {
+		color: var(--text-mute);
+		text-decoration: line-through;
+	}
+
 	.task-chips {
 		display: flex;
 		align-items: center;
@@ -306,6 +416,35 @@
 		-webkit-line-clamp: 1;
 		line-clamp: 1;
 		-webkit-box-orient: vertical;
+	}
+
+	/* ── completed section ── */
+	.completed-section {
+		margin-top: 32px;
+	}
+
+	.completed-toggle {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 0;
+		background: none;
+		cursor: pointer;
+		width: 100%;
+		text-align: left;
+	}
+
+	.completed-toggle :global(.completed-chevron) {
+		color: var(--text-faint);
+		transition: transform var(--t-fast) var(--ease);
+	}
+
+	.completed-toggle :global(.completed-chevron--open) {
+		transform: rotate(90deg);
+	}
+
+	.completed-section .task-list {
+		margin-top: 8px;
 	}
 
 	/* ── chips ── */

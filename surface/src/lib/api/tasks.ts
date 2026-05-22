@@ -1,13 +1,17 @@
 import { apiFetch } from './client';
-import { triageCapture } from './captures';
 import type { Task, TaskPriority } from '$lib/types';
 
 export const taskKeys = {
-	list: () => ['tasks', 'list'] as const
+	list: () => ['tasks', 'list'] as const,
+	done: () => ['tasks', 'done'] as const
 };
 
 export function fetchTasks(): Promise<Task[]> {
 	return apiFetch('/api/tasks');
+}
+
+export function fetchCompletedTasks(): Promise<Task[]> {
+	return apiFetch('/api/tasks/done');
 }
 
 export interface CreateTaskParams {
@@ -32,5 +36,9 @@ export function updateTaskMeta(id: number, params: UpdateTaskMetaParams): Promis
 }
 
 export function completeTask(id: number): Promise<void> {
-	return triageCapture(id, 'archive');
+	return apiFetch(`/api/tasks/${id}/complete`, { method: 'PATCH' });
+}
+
+export function uncompleteTask(id: number): Promise<void> {
+	return apiFetch(`/api/tasks/${id}/uncomplete`, { method: 'PATCH' });
 }

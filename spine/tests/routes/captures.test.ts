@@ -70,7 +70,34 @@ describe("GET /api/captures", () => {
       "ingested_at",
       "source",
       "text",
+      "triage_action",
+      "triaged_at",
     ]);
+  });
+
+  it("excludes triaged captures by default", async () => {
+    const { id } = seedCapture(app, "to triage");
+    seedCapture(app, "untriaged");
+    app.db.prepare("UPDATE captures SET triaged_at = ?, triage_action = ? WHERE id = ?")
+      .run("2026-01-02T00:00:00Z", "archive", id);
+
+    const res = await app.app.handle(req("/api/captures"));
+    expect(res.status).toBe(200);
+    const body = await json(res);
+    expect(body.map((c: any) => c.text)).toEqual(["untriaged"]);
+  });
+
+  it("includes triaged captures when ?all=1", async () => {
+    const { id } = seedCapture(app, "archived");
+    seedCapture(app, "inbox");
+    app.db.prepare("UPDATE captures SET triaged_at = ?, triage_action = ? WHERE id = ?")
+      .run("2026-01-02T00:00:00Z", "archive", id);
+
+    const res = await app.app.handle(req("/api/captures?all=1"));
+    expect(res.status).toBe(200);
+    const body = await json(res);
+    expect(body.map((c: any) => c.text)).toContain("archived");
+    expect(body.map((c: any) => c.text)).toContain("inbox");
   });
 });
 
@@ -129,6 +156,61 @@ describe("POST /api/captures", () => {
       body: JSON.stringify({ text: "hello" }),
     }));
     expect(res.status).toBe(422);
+  });
+});
+
+describe("POST /api/captures/:id/triage", () => {
+  it("sets triaged_at and triage_action on the capture", async () => {
+    const { id } = seedCapture(app, "to triage");
+    const res = await app.app.handle(req(`/api/captures/${id}/triage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "archive" }),
+    }));
+    expect(res.status).toBe(200);
+    const row = app.db.query("SELECT triaged_at, triage_action FROM captures WHERE id = ?").get(id) as any;
+    expect(row.triage_action).toBe("archive");
+    expect(typeof row.triaged_at).toBe("string");
+  });
+
+  it("returns 404 for a non-existent capture", async () => {
+    const res = await app.app.handle(req("/api/captures/99999/triage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "keep" }),
+    }));
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 for an invalid action", async () => {
+    const { id } = seedCapture(app, "test");
+    const res = await app.app.handle(req(`/api/captures/${id}/triage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete" }),
+    }));
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 for a non-numeric id", async () => {
+    const res = await app.app.handle(req("/api/captures/abc/triage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "keep" }),
+    }));
+    expect(res.status).toBe(400);
+  });
+
+  it("removes the capture from the default (inbox) list after triage", async () => {
+    const { id } = seedCapture(app, "will be archived");
+    await app.app.handle(req(`/api/captures/${id}/triage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "archive" }),
+    }));
+    const res = await app.app.handle(req("/api/captures"));
+    const body = await json(res);
+    expect(body.find((c: any) => c.id === id)).toBeUndefined();
   });
 });
 

@@ -46,7 +46,6 @@
 		void workbench.posture;
 		void workbench.focusMode;
 		void workbench.vimMode;
-		void workbench.dismissedCaptureIds;
 		workbench.persist();
 	});
 </script>

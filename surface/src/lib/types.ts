@@ -27,6 +27,8 @@ export interface Capture {
 	source: string;
 	captured_at: string;
 	ingested_at: string;
+	triaged_at: string | null;
+	triage_action: string | null;
 }
 
 export interface FileEntry {
@@ -75,7 +77,8 @@ export type PaneContent =
 	| { kind: 'search'; query: string }
 	| { kind: 'results'; source: LateralSource }
 	| { kind: 'doc'; ref: DocRef }
-	| { kind: 'editor'; slug: string };
+	| { kind: 'editor'; slug: string }
+	| { kind: 'library' };
 
 // ── Workbench ─────────────────────────────────────────────────────────────────
 

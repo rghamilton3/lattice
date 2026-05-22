@@ -20,6 +20,8 @@
 				return `${c.ref.kind} #${c.ref.id}`;
 			case 'editor':
 				return `edit: ${c.slug}`;
+			case 'library':
+				return 'library';
 		}
 	}
 </script>

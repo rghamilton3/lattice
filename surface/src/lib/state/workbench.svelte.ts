@@ -1,6 +1,6 @@
 import { getContext, setContext } from 'svelte';
 import type { PaneContent, SearchResult } from '$lib/types';
-import { triageCapture, TRIAGE_ACTION_LABEL, type TriageAction } from '$lib/api/captures';
+import { triageCapture, type TriageAction } from '$lib/api/captures';
 import { fetchSearch } from '$lib/api/search';
 import { ApiError } from '$lib/api/client';
 import { logError } from '$lib/utils/logError';
@@ -18,7 +18,7 @@ const STORAGE_KEY = 'lattice.session';
 export type Theme = 'light' | 'dark' | 'sepia' | 'system';
 export type Density = 'compact' | 'comfortable' | 'spacious';
 export type Posture = 'quiet' | 'standard' | 'active';
-export type View = 'home' | 'search' | 'doc';
+export type View = 'home' | 'search' | 'doc' | 'library';
 export type ActiveOverlay = 'none' | 'capture' | 'palette' | 'settings' | 'newDoc' | 'triage';
 
 const THEMES: readonly Theme[] = ['light', 'dark', 'sepia', 'system'];
@@ -55,7 +55,6 @@ interface PersistedSession {
 	posture?: Posture;
 	focusMode?: boolean;
 	vimMode?: boolean;
-	dismissedCaptureIds?: number[];
 }
 
 export class WorkbenchStore {
@@ -75,7 +74,6 @@ export class WorkbenchStore {
 	// persist() from components.
 	activeOverlay = $state<ActiveOverlay>('none');
 
-	dismissedCaptureIds = $state<number[]>([]);
 	// TODO(spine): Resurfaced / clusters / triage need backing endpoints.
 	// Resurfaced renders hardcoded mock data when on — default off until
 	// /api/resurfaced ships. Env-overridable via PUBLIC_LATTICE_FEATURE_*.
@@ -91,11 +89,12 @@ export class WorkbenchStore {
 	isSplit = $derived(this.panes.length === 2);
 
 	// Nav highlight follows the focused pane's content. `doc`/`editor`/`results`
-	// fall through to `'doc'` — neither Home nor Search highlights.
+	// fall through to `'doc'` — neither Home nor Search nor Library highlights.
 	view = $derived.by<View>(() => {
 		const kind = this.panes[0].kind;
 		if (kind === 'home') return 'home';
 		if (kind === 'search') return 'search';
+		if (kind === 'library') return 'library';
 		return 'doc';
 	});
 
@@ -128,10 +127,6 @@ export class WorkbenchStore {
 				this.posture = s.posture;
 			if (typeof s.focusMode === 'boolean') this.focusMode = s.focusMode;
 			if (typeof s.vimMode === 'boolean') this.vimMode = s.vimMode;
-			if (Array.isArray(s.dismissedCaptureIds))
-				this.dismissedCaptureIds = s.dismissedCaptureIds.filter(
-					(n): n is number => typeof n === 'number'
-				);
 		} catch (err) {
 			// corrupted state — keep defaults
 			logError('workbench:rehydrate', err);
@@ -146,8 +141,7 @@ export class WorkbenchStore {
 			font: this.font,
 			posture: this.posture,
 			focusMode: this.focusMode,
-			vimMode: this.vimMode,
-			dismissedCaptureIds: this.dismissedCaptureIds
+			vimMode: this.vimMode
 		};
 		try {
 			localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -187,37 +181,20 @@ export class WorkbenchStore {
 	// is 'triage', so this gate is for the popover overlays only.
 	anyOverlayOpen = $derived(this.activeOverlay !== 'none' && this.activeOverlay !== 'triage');
 
-	dismissCapture(id: number, action: TriageAction) {
-		if (!this.dismissedCaptureIds.includes(id)) {
-			this.dismissedCaptureIds = [...this.dismissedCaptureIds, id];
-			this.persist();
-		}
-		this.showToast(`${TRIAGE_ACTION_LABEL[action]} · capture #${id}`);
-	}
-
 	startTriage() {
 		this.activeOverlay = 'triage';
 	}
 
-	exitTriage(decisions: TriageDecision[]) {
+	async exitTriage(decisions: TriageDecision[]): Promise<void> {
 		this.activeOverlay = 'none';
-		const fresh = decisions.map((d) => d.id).filter((id) => !this.dismissedCaptureIds.includes(id));
-		if (fresh.length > 0) {
-			this.dismissedCaptureIds = [...this.dismissedCaptureIds, ...fresh];
-			this.persist();
-		}
 		if (decisions.length === 0) return;
-
-		// Surface server-side failures so users don't get an optimistic "10 processed"
-		// while writes silently dropped. Local dismissedCaptureIds already updated.
-		void Promise.allSettled(decisions.map((d) => triageCapture(d.id, d.action))).then((settled) => {
-			const failed = settled.filter((s) => s.status === 'rejected').length;
-			if (failed > 0) {
-				this.showToast(`${decisions.length} processed, ${failed} failed`);
-			} else {
-				this.showToast(`${decisions.length} processed`);
-			}
-		});
+		const settled = await Promise.allSettled(decisions.map((d) => triageCapture(d.id, d.action)));
+		const failed = settled.filter((s) => s.status === 'rejected').length;
+		if (failed > 0) {
+			this.showToast(`${decisions.length} processed, ${failed} failed`);
+		} else {
+			this.showToast(`${decisions.length} processed`);
+		}
 	}
 
 	// `background` toasts are suppressed in quiet posture — see postureView.

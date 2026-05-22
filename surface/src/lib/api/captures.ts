@@ -4,11 +4,13 @@ import type { Capture } from '$lib/types';
 
 export const captureKeys = {
 	list: (limit: number) => ['captures', 'list', { limit }] as const,
+	listAll: (limit: number) => ['captures', 'list-all', { limit }] as const,
 	detail: (id: number) => ['captures', 'detail', id] as const
 };
 
-export function fetchCaptures(limit = 50): Promise<Capture[]> {
-	return apiFetch(`/api/captures?limit=${limit}`);
+export function fetchCaptures(limit = 50, all = false): Promise<Capture[]> {
+	const params = `limit=${limit}${all ? '&all=1' : ''}`;
+	return apiFetch(`/api/captures?${params}`);
 }
 
 export function fetchCapture(id: number): Promise<Capture> {
@@ -34,8 +36,6 @@ export const TRIAGE_ACTION_LABEL: Record<TriageAction, string> = {
 	skip: 'Skipped'
 };
 
-// TODO(spine): POST /api/captures/:id/triage not yet wired. Errors are logged
-// and rethrown so callers can count failures and surface them to the user.
 export async function triageCapture(id: number, action: TriageAction): Promise<void> {
 	try {
 		await apiFetch(`/api/captures/${id}/triage`, {

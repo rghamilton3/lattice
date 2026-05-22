@@ -91,5 +91,9 @@
 		<path d="M6 9l6 6 6-6" />
 	{:else if name === 'chev-right'}
 		<path d="M9 6l6 6-6 6" />
+	{:else if name === 'library'}
+		<rect x="4" y="4" width="4" height="16" rx="0.5" />
+		<rect x="10" y="7" width="4" height="13" rx="0.5" />
+		<rect x="16" y="5" width="4" height="15" rx="0.5" />
 	{/if}
 </svg>

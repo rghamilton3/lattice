@@ -4,6 +4,8 @@ import type { CaptureRow } from "../db/rows";
 import { writeCaptureFile, refreshIndex } from "../search";
 import { onCapture, emitCapture } from "../captureEvents";
 
+const VALID_TRIAGE_ACTIONS = new Set(["keep", "archive", "promote", "task", "skip"]);
+
 export const capturesRoutes = (db: Database) =>
   new Elysia()
     .get(
@@ -11,13 +13,13 @@ export const capturesRoutes = (db: Database) =>
       ({ query }) => {
         const raw = query.limit ? Number(query.limit) : 50;
         const limit = Math.min(Number.isFinite(raw) && raw > 0 ? raw : 50, 200);
-        return db
-          .query(
-            "SELECT id, text, source, captured_at, ingested_at FROM captures ORDER BY ingested_at DESC LIMIT ?"
-          )
-          .all(limit) as CaptureRow[];
+        const all = query.all === "1";
+        const sql = all
+          ? "SELECT id, text, source, captured_at, ingested_at, triaged_at, triage_action FROM captures ORDER BY ingested_at DESC LIMIT ?"
+          : "SELECT id, text, source, captured_at, ingested_at, triaged_at, triage_action FROM captures WHERE triaged_at IS NULL ORDER BY ingested_at DESC LIMIT ?";
+        return db.query(sql).all(limit) as CaptureRow[];
       },
-      { query: t.Object({ limit: t.Optional(t.String()) }) }
+      { query: t.Object({ limit: t.Optional(t.String()), all: t.Optional(t.String()) }) }
     )
     .get("/api/captures/stream", () => {
       const encoder = new TextEncoder();
@@ -74,7 +76,7 @@ export const capturesRoutes = (db: Database) =>
         }
         const row = db
           .query(
-            "SELECT id, text, source, captured_at, ingested_at FROM captures WHERE id = ?"
+            "SELECT id, text, source, captured_at, ingested_at, triaged_at, triage_action FROM captures WHERE id = ?"
           )
           .get(id) as CaptureRow | null;
         if (!row) {
@@ -84,6 +86,32 @@ export const capturesRoutes = (db: Database) =>
         return row;
       },
       { params: t.Object({ id: t.String() }) }
+    )
+    .post(
+      "/api/captures/:id/triage",
+      ({ params, body, set }) => {
+        const id = parseInt(params.id, 10);
+        if (isNaN(id)) {
+          set.status = 400;
+          return { error: "Invalid id" };
+        }
+        if (!VALID_TRIAGE_ACTIONS.has(body.action)) {
+          set.status = 400;
+          return { error: "Invalid action" };
+        }
+        const result = db
+          .prepare("UPDATE captures SET triaged_at = ?, triage_action = ? WHERE id = ? RETURNING id")
+          .get(new Date().toISOString(), body.action, id) as { id: number } | null;
+        if (!result) {
+          set.status = 404;
+          return { error: "Not found" };
+        }
+        return {};
+      },
+      {
+        params: t.Object({ id: t.String() }),
+        body: t.Object({ action: t.String() }),
+      }
     )
     .post(
       "/api/captures",

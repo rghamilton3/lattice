@@ -9,6 +9,7 @@ import { filesRoutes } from './routes/files';
 import { workingRoutes } from './routes/working';
 import { lateralRoutes } from './routes/lateral';
 import { agentRoutes } from './routes/agent';
+import { statusRoutes } from './routes/status';
 
 export interface AppDeps {
 	db: Database;
@@ -36,7 +37,8 @@ export function buildApp(deps: AppDeps) {
 				.use(searchRoutes())
 				.use(filesRoutes(db))
 				.use(workingRoutes(db))
-				.use(lateralRoutes(db)),
+				.use(lateralRoutes(db))
+				.use(statusRoutes(db)),
 		)
 		.group('/api/agent', (app) =>
 			app.guard({ beforeHandle: agentBeforeHandle({ allowHttp, agentToken }) }, (inner) =>

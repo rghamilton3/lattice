@@ -24,6 +24,18 @@ export interface FileIndexRow {
 	indexed_at: string;
 }
 
+export interface AgentStatusRow {
+	machine_id: string;
+	state: string;
+	last_scan_at: string | null;
+	last_indexed: number;
+	last_skipped: number;
+	last_errors: number;
+	spine_ok: number;
+	last_error_msg: string | null;
+	reported_at: string;
+}
+
 export interface CaptureAttachmentRow {
 	id: number;
 	capture_id: number;

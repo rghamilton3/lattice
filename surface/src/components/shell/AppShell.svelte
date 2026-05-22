@@ -1,8 +1,12 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { createQuery } from '@tanstack/svelte-query';
+	import { browser } from '$app/environment';
 	import { getWorkbenchContext, type View } from '$lib/state/workbench.svelte';
 	import Icon from '$components/icons/Icon.svelte';
 	import NavBtn from './NavBtn.svelte';
+	import { fetchStatus, statusKeys } from '$lib/api/status';
+	import { relTime } from '$lib/utils/relTime';
 
 	type Props = {
 		oncapture: () => void;
@@ -13,6 +17,28 @@
 	let { oncapture, oncommand, onnav, children }: Props = $props();
 
 	const wb = getWorkbenchContext();
+
+	const statusQuery = createQuery(() => ({
+		queryKey: statusKeys.all(),
+		queryFn: fetchStatus,
+		enabled: browser,
+		refetchInterval: 30_000
+	}));
+
+	let now = $state(Date.now());
+	$effect(() => {
+		const t = setInterval(() => (now = Date.now()), 60_000);
+		return () => clearInterval(t);
+	});
+
+	const agentCount = $derived(statusQuery.data?.active_agent_count ?? null);
+	const latestScan = $derived(
+		statusQuery.data?.agents
+			.map((a) => a.last_scan_at)
+			.filter((s): s is string => s !== null)
+			.sort()
+			.at(-1) ?? null
+	);
 </script>
 
 <div class="shell" data-focus={wb.focusMode ? 'on' : 'off'}>
@@ -94,14 +120,17 @@
 
 	<!-- BOTTOM STATUS BAR -->
 	<footer class="statusbar">
-		<!-- TODO(spine): /api/agents and sync-status endpoints not yet implemented. -->
 		<div class="row" style="gap:14px">
 			<span class="status-dot" data-state="ok"></span>
 			<span class="faint" style="font-size:12px">
 				spine&nbsp;·&nbsp;<span class="mono">lattice.rghsoftware.com</span>
 			</span>
-			<span class="faint" style="font-size:12px">agents&nbsp;·&nbsp;—</span>
-			<span class="faint" style="font-size:12px">sync&nbsp;·&nbsp;pending</span>
+			<span class="faint" style="font-size:12px">
+				agents&nbsp;·&nbsp;{agentCount !== null ? agentCount : '—'}
+			</span>
+			<span class="faint" style="font-size:12px">
+				sync&nbsp;·&nbsp;{latestScan ? relTime(latestScan, now) : 'never'}
+			</span>
 		</div>
 		<div class="row" style="gap:12px; font-size:12px">
 			<span class="faint">posture · {wb.posture}</span>

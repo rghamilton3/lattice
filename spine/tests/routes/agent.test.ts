@@ -326,3 +326,93 @@ describe('POST /api/agent/capture/:id/attachments', () => {
 		expect(res.status).toBe(422);
 	});
 });
+
+describe('POST /api/agent/status', () => {
+	function statusBody(overrides: Record<string, unknown> = {}) {
+		return {
+			machine_id: 'host1',
+			state: 'idle',
+			last_scan_at: '2026-01-01T00:00:00.000Z',
+			last_indexed: 5,
+			last_skipped: 2,
+			last_errors: 0,
+			spine_ok: true,
+			last_error_msg: null,
+			...overrides,
+		};
+	}
+
+	it('inserts a new row and returns ok', async () => {
+		const res = await app.app.handle(agentPost('/api/agent/status', statusBody()));
+		expect(res.status).toBe(200);
+		expect(await json(res)).toEqual({ ok: true });
+
+		const row = app.db.query('SELECT * FROM agent_status WHERE machine_id = ?').get('host1') as any;
+		expect(row).toMatchObject({
+			machine_id: 'host1',
+			state: 'idle',
+			last_scan_at: '2026-01-01T00:00:00.000Z',
+			last_indexed: 5,
+			last_skipped: 2,
+			last_errors: 0,
+			spine_ok: 1,
+			last_error_msg: null,
+		});
+		expect(typeof row.reported_at).toBe('string');
+	});
+
+	it('upserts on repeated calls — updates all fields', async () => {
+		await app.app.handle(agentPost('/api/agent/status', statusBody()));
+		await app.app.handle(
+			agentPost(
+				'/api/agent/status',
+				statusBody({ state: 'scanning', last_indexed: 99, spine_ok: false }),
+			),
+		);
+
+		const rows = app.db.query('SELECT * FROM agent_status WHERE machine_id = ?').all('host1');
+		expect(rows.length).toBe(1);
+		const row = rows[0] as any;
+		expect(row.state).toBe('scanning');
+		expect(row.last_indexed).toBe(99);
+		expect(row.spine_ok).toBe(0);
+	});
+
+	it('keeps distinct rows per machine_id', async () => {
+		await app.app.handle(agentPost('/api/agent/status', statusBody({ machine_id: 'host1' })));
+		await app.app.handle(agentPost('/api/agent/status', statusBody({ machine_id: 'host2' })));
+
+		const rows = app.db.query('SELECT machine_id FROM agent_status').all() as any[];
+		expect(rows.length).toBe(2);
+	});
+
+	it('accepts null last_scan_at', async () => {
+		const res = await app.app.handle(
+			agentPost('/api/agent/status', statusBody({ last_scan_at: null })),
+		);
+		expect(res.status).toBe(200);
+		const row = app.db
+			.query('SELECT last_scan_at FROM agent_status WHERE machine_id = ?')
+			.get('host1') as any;
+		expect(row.last_scan_at).toBeNull();
+	});
+
+	it('rejects invalid state value (422)', async () => {
+		const res = await app.app.handle(
+			agentPost('/api/agent/status', statusBody({ state: 'unknown' })),
+		);
+		expect(res.status).toBe(422);
+	});
+
+	it('rejects empty machine_id (422)', async () => {
+		const res = await app.app.handle(
+			agentPost('/api/agent/status', statusBody({ machine_id: '' })),
+		);
+		expect(res.status).toBe(422);
+	});
+
+	it('rejects without bearer token (401)', async () => {
+		const res = await app.app.handle(agentPost('/api/agent/status', statusBody(), ''));
+		expect(res.status).toBe(401);
+	});
+});

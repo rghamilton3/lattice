@@ -31,6 +31,7 @@ describe('db.initDb', () => {
 			'002_file_index.sql',
 			'003_capture_attachments.sql',
 			'004_capture_triage.sql',
+			'005_agent_status.sql',
 		]);
 		db.close();
 	});

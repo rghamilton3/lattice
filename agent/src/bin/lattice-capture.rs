@@ -297,7 +297,11 @@ async fn post(
     let resp = client
         .post(&url)
         .bearer_auth(&cfg.agent_token)
-        .json(&Payload { text, source, captured_at })
+        .json(&Payload {
+            text,
+            source,
+            captured_at,
+        })
         .send()
         .await?
         .error_for_status()?
@@ -322,7 +326,9 @@ fn classify_post_error(err: &anyhow::Error) -> String {
     if let Some(status) = re.status() {
         return match status.as_u16() {
             401 | 403 => format!("spine rejected token ({status})"),
-            300..=399 => format!("spine redirected to {status} (auth proxy intercepting /api/agent?)"),
+            300..=399 => {
+                format!("spine redirected to {status} (auth proxy intercepting /api/agent?)")
+            }
             other => format!("spine HTTP {other}"),
         };
     }
@@ -347,4 +353,3 @@ fn notify(body: &str, urgency: &str) {
         .stderr(Stdio::null())
         .spawn();
 }
-

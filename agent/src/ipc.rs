@@ -89,7 +89,9 @@ async fn handle(
             // A full channel means a reindex is already queued - treat as success.
             let response = match cmd_tx.try_send(AgentCommand::ForceReindex) {
                 Ok(_) | Err(mpsc::error::TrySendError::Full(_)) => b"{\"ok\":true}\n" as &[u8],
-                Err(mpsc::error::TrySendError::Closed(_)) => b"{\"error\":\"agent shutting down\"}\n",
+                Err(mpsc::error::TrySendError::Closed(_)) => {
+                    b"{\"error\":\"agent shutting down\"}\n"
+                }
             };
             let _ = writer.write_all(response).await;
             debug!("IPC: queued reindex");

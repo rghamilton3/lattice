@@ -2,11 +2,11 @@ use crate::cache::Cache;
 use crate::config::{Config, WatchEntry};
 use crate::extract;
 use crate::status::{ScanState, SharedStatus};
+use crate::time::{chrono_iso, now_iso};
 use anyhow::Result;
 use mime_guess::MimeGuess;
 use serde::Serialize;
 use std::path::Path;
-use crate::time::{chrono_iso, now_iso};
 use std::time::UNIX_EPOCH;
 use tracing::{debug, error, info, warn};
 use walkdir::WalkDir;
@@ -28,7 +28,12 @@ enum ProcessResult {
     SpineFail(String),
 }
 
-pub async fn run_pass(cfg: &Config, cache: &Cache, client: &reqwest::Client, status: &SharedStatus) {
+pub async fn run_pass(
+    cfg: &Config,
+    cache: &Cache,
+    client: &reqwest::Client,
+    status: &SharedStatus,
+) {
     {
         let mut s = status.write().unwrap_or_else(|e| {
             error!(error = %e, "status lock poisoned — exiting");
@@ -279,7 +284,13 @@ mod tests {
     #[test]
     fn glob_matches_root_depth() {
         let pat = glob::Pattern::new("**/*.md").unwrap();
-        assert!(pat.matches("file.md"), "**/*.md should match file.md at root depth");
-        assert!(pat.matches("sub/file.md"), "**/*.md should match sub/file.md");
+        assert!(
+            pat.matches("file.md"),
+            "**/*.md should match file.md at root depth"
+        );
+        assert!(
+            pat.matches("sub/file.md"),
+            "**/*.md should match sub/file.md"
+        );
     }
 }

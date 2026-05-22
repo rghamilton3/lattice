@@ -6,9 +6,8 @@
 //! May invoke `systemctl --user restart lattice-agent`.
 
 use gtk4::{
-    prelude::*, Adjustment, Application, ApplicationWindow, Box as GBox,
-    Button, Entry, Frame, Grid, Label, Orientation, PolicyType, ScrolledWindow,
-    SpinButton, TextView,
+    Adjustment, Application, ApplicationWindow, Box as GBox, Button, Entry, Frame, Grid, Label,
+    Orientation, PolicyType, ScrolledWindow, SpinButton, TextView, prelude::*,
 };
 use lattice_agent::config::config_path;
 use std::cell::{Cell, RefCell};
@@ -27,7 +26,11 @@ fn socket_path() -> PathBuf {
         return PathBuf::from(dir).join("lattice-agent.sock");
     }
     let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_owned());
-    PathBuf::from(home).join(".local").join("share").join("lattice").join("agent.sock")
+    PathBuf::from(home)
+        .join(".local")
+        .join("share")
+        .join("lattice")
+        .join("agent.sock")
 }
 
 /// Sends "reindex" over the agent IPC socket. Returns Ok(()) on success or an
@@ -41,12 +44,20 @@ fn send_reindex() -> Result<(), String> {
             format!("Could not connect to agent: {e}")
         }
     })?;
-    stream.set_write_timeout(Some(Duration::from_secs(3))).map_err(|e| e.to_string())?;
-    stream.set_read_timeout(Some(Duration::from_secs(3))).map_err(|e| e.to_string())?;
-    stream.write_all(b"reindex\n").map_err(|e| format!("Write failed: {e}"))?;
+    stream
+        .set_write_timeout(Some(Duration::from_secs(3)))
+        .map_err(|e| e.to_string())?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(3)))
+        .map_err(|e| e.to_string())?;
+    stream
+        .write_all(b"reindex\n")
+        .map_err(|e| format!("Write failed: {e}"))?;
     let mut reader = BufReader::new(&stream);
     let mut line = String::new();
-    reader.read_line(&mut line).map_err(|e| format!("Read failed: {e}"))?;
+    reader
+        .read_line(&mut line)
+        .map_err(|e| format!("Read failed: {e}"))?;
     if line.contains("\"ok\"") {
         Ok(())
     } else {
@@ -64,7 +75,10 @@ fn systemctl_restart(parent: &ApplicationWindow) -> bool {
             false
         }
         Ok(s) if !s.success() => {
-            show_error(parent, &format!("systemctl restart returned exit code {:?}", s.code()));
+            show_error(
+                parent,
+                &format!("systemctl restart returned exit code {:?}", s.code()),
+            );
             false
         }
         Ok(_) => true,
@@ -138,7 +152,11 @@ fn make_watch_row(entries_box: &GBox, path: &str, patterns: &[String]) -> WatchR
         });
     }
 
-    WatchRow { container, path_entry, patterns_buffer }
+    WatchRow {
+        container,
+        path_entry,
+        patterns_buffer,
+    }
 }
 
 // ── Post-save dialog ──────────────────────────────────────────────────────────
@@ -222,9 +240,14 @@ fn show_dialog(parent: &ApplicationWindow, title: &str, msg: &str) {
         .margin_end(16)
         .build();
     vbox.append(&Label::builder().label(msg).wrap(true).xalign(0.0).build());
-    let btn = Button::builder().label("Close").halign(gtk4::Align::End).build();
+    let btn = Button::builder()
+        .label("Close")
+        .halign(gtk4::Align::End)
+        .build();
     let d = dialog.downgrade();
-    btn.connect_clicked(move |_| { d.upgrade().map(|w| w.close()); });
+    btn.connect_clicked(move |_| {
+        d.upgrade().map(|w| w.close());
+    });
     vbox.append(&btn);
     dialog.set_child(Some(&vbox));
     dialog.present();
@@ -266,9 +289,14 @@ fn build_ui(app: &Application) {
                     .xalign(0.0)
                     .build(),
             );
-            let btn = Button::builder().label("Close").halign(gtk4::Align::End).build();
+            let btn = Button::builder()
+                .label("Close")
+                .halign(gtk4::Align::End)
+                .build();
             let w = win.downgrade();
-            btn.connect_clicked(move |_| { w.upgrade().map(|x| x.close()); });
+            btn.connect_clicked(move |_| {
+                w.upgrade().map(|x| x.close());
+            });
             vbox.append(&btn);
             win.set_child(Some(&vbox));
             win.present();
@@ -299,9 +327,14 @@ fn build_ui(app: &Application) {
                     .xalign(0.0)
                     .build(),
             );
-            let btn = Button::builder().label("Close").halign(gtk4::Align::End).build();
+            let btn = Button::builder()
+                .label("Close")
+                .halign(gtk4::Align::End)
+                .build();
             let w = win.downgrade();
-            btn.connect_clicked(move |_| { w.upgrade().map(|x| x.close()); });
+            btn.connect_clicked(move |_| {
+                w.upgrade().map(|x| x.close());
+            });
             vbox.append(&btn);
             win.set_child(Some(&vbox));
             win.present();
@@ -343,8 +376,16 @@ fn build_ui(app: &Application) {
         let d = doc.borrow();
         let spine = d.get("spine").and_then(|i| i.as_table());
         (
-            spine.and_then(|t| t.get("url")).and_then(|v| v.as_str()).unwrap_or("").to_owned(),
-            spine.and_then(|t| t.get("agent_token")).and_then(|v| v.as_str()).unwrap_or("").to_owned(),
+            spine
+                .and_then(|t| t.get("url"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_owned(),
+            spine
+                .and_then(|t| t.get("agent_token"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_owned(),
         )
     };
 
@@ -358,7 +399,10 @@ fn build_ui(app: &Application) {
         .margin_end(8)
         .build();
 
-    let url_entry = Entry::builder().hexpand(true).text(spine_url_init.as_str()).build();
+    let url_entry = Entry::builder()
+        .hexpand(true)
+        .text(spine_url_init.as_str())
+        .build();
 
     let tok_entry = Entry::builder()
         .hexpand(true)
@@ -387,13 +431,25 @@ fn build_ui(app: &Application) {
     tok_box.append(&tok_toggle);
 
     spine_grid.attach(
-        &Label::builder().label("URL:").halign(gtk4::Align::Start).build(),
-        0, 0, 1, 1,
+        &Label::builder()
+            .label("URL:")
+            .halign(gtk4::Align::Start)
+            .build(),
+        0,
+        0,
+        1,
+        1,
     );
     spine_grid.attach(&url_entry, 1, 0, 1, 1);
     spine_grid.attach(
-        &Label::builder().label("Token:").halign(gtk4::Align::Start).build(),
-        0, 1, 1, 1,
+        &Label::builder()
+            .label("Token:")
+            .halign(gtk4::Align::Start)
+            .build(),
+        0,
+        1,
+        1,
+        1,
     );
     spine_grid.attach(&tok_box, 1, 1, 1, 1);
     spine_frame.set_child(Some(&spine_grid));
@@ -405,9 +461,19 @@ fn build_ui(app: &Application) {
         let d = doc.borrow();
         let agent = d.get("agent").and_then(|i| i.as_table());
         (
-            agent.and_then(|t| t.get("machine_id")).and_then(|v| v.as_str()).unwrap_or("").to_owned(),
-            agent.and_then(|t| t.get("poll_interval_minutes")).and_then(|v| v.as_integer()).unwrap_or(15) as f64,
-            agent.and_then(|t| t.get("max_file_bytes")).and_then(|v| v.as_integer()).unwrap_or(10 * 1024 * 1024) as f64,
+            agent
+                .and_then(|t| t.get("machine_id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_owned(),
+            agent
+                .and_then(|t| t.get("poll_interval_minutes"))
+                .and_then(|v| v.as_integer())
+                .unwrap_or(15) as f64,
+            agent
+                .and_then(|t| t.get("max_file_bytes"))
+                .and_then(|v| v.as_integer())
+                .unwrap_or(10 * 1024 * 1024) as f64,
         )
     };
 
@@ -433,24 +499,46 @@ fn build_ui(app: &Application) {
     let max_spin = SpinButton::builder()
         .adjustment(&Adjustment::new(
             max_bytes_init / (1024.0 * 1024.0),
-            0.1, 2048.0, 1.0, 10.0, 0.0,
+            0.1,
+            2048.0,
+            1.0,
+            10.0,
+            0.0,
         ))
         .digits(1)
         .build();
 
     agent_grid.attach(
-        &Label::builder().label("Machine ID:").halign(gtk4::Align::Start).build(),
-        0, 0, 1, 1,
+        &Label::builder()
+            .label("Machine ID:")
+            .halign(gtk4::Align::Start)
+            .build(),
+        0,
+        0,
+        1,
+        1,
     );
     agent_grid.attach(&mid_entry, 1, 0, 1, 1);
     agent_grid.attach(
-        &Label::builder().label("Poll (min):").halign(gtk4::Align::Start).build(),
-        0, 1, 1, 1,
+        &Label::builder()
+            .label("Poll (min):")
+            .halign(gtk4::Align::Start)
+            .build(),
+        0,
+        1,
+        1,
+        1,
     );
     agent_grid.attach(&poll_spin, 1, 1, 1, 1);
     agent_grid.attach(
-        &Label::builder().label("Max file (MB):").halign(gtk4::Align::Start).build(),
-        0, 2, 1, 1,
+        &Label::builder()
+            .label("Max file (MB):")
+            .halign(gtk4::Align::Start)
+            .build(),
+        0,
+        2,
+        1,
+        1,
     );
     agent_grid.attach(&max_spin, 1, 2, 1, 1);
     agent_frame.set_child(Some(&agent_grid));
@@ -476,7 +564,8 @@ fn build_ui(app: &Application) {
 
     {
         let d = doc.borrow();
-        let watch_opt = d.get("agent")
+        let watch_opt = d
+            .get("agent")
             .and_then(|i| i.as_table())
             .and_then(|t| t.get("watch"))
             .and_then(|w| w.as_array_of_tables());
@@ -554,7 +643,11 @@ fn build_ui(app: &Application) {
     // ── Button row ────────────────────────────────────────────────────────────
 
     root.append(&scroll);
-    root.append(&gtk4::Separator::builder().orientation(Orientation::Horizontal).build());
+    root.append(
+        &gtk4::Separator::builder()
+            .orientation(Orientation::Horizontal)
+            .build(),
+    );
 
     let btn_row = GBox::builder()
         .orientation(Orientation::Horizontal)
@@ -568,7 +661,9 @@ fn build_ui(app: &Application) {
     let cancel_btn = Button::builder().label("Cancel").build();
     {
         let w = window.downgrade();
-        cancel_btn.connect_clicked(move |_| { w.upgrade().map(|x| x.close()); });
+        cancel_btn.connect_clicked(move |_| {
+            w.upgrade().map(|x| x.close());
+        });
     }
 
     let save_btn = Button::builder().label("Save").build();
@@ -654,8 +749,8 @@ fn build_ui(app: &Application) {
             drop(d);
 
             let tmp = path_c.with_extension("toml.tmp");
-            let write_result = std::fs::write(&tmp, &output)
-                .and_then(|_| std::fs::rename(&tmp, &path_c));
+            let write_result =
+                std::fs::write(&tmp, &output).and_then(|_| std::fs::rename(&tmp, &path_c));
             match write_result {
                 Ok(_) => prompt_restart(&win_c),
                 Err(e) => show_error(&win_c, &format!("Failed to save config:\n{e}")),
@@ -672,9 +767,7 @@ fn build_ui(app: &Application) {
 }
 
 fn main() {
-    let app = Application::builder()
-        .application_id(APP_ID)
-        .build();
+    let app = Application::builder().application_id(APP_ID).build();
     app.connect_activate(build_ui);
     app.run();
 }
@@ -725,12 +818,30 @@ patterns = ["**/*.pdf"]
 "#;
 
         let output = round_trip(input);
-        assert!(output.contains("# production server"), "spine comment preserved");
-        assert!(output.contains("# poll interval comment"), "agent comment preserved");
-        assert!(output.contains("https://updated.example.com"), "url updated");
-        assert!(output.contains("poll_interval_minutes = 15"), "poll updated");
-        assert!(!output.contains("/home/user/books"), "removed watch entry gone");
-        assert!(output.contains("/home/user/notes"), "kept watch entry present");
+        assert!(
+            output.contains("# production server"),
+            "spine comment preserved"
+        );
+        assert!(
+            output.contains("# poll interval comment"),
+            "agent comment preserved"
+        );
+        assert!(
+            output.contains("https://updated.example.com"),
+            "url updated"
+        );
+        assert!(
+            output.contains("poll_interval_minutes = 15"),
+            "poll updated"
+        );
+        assert!(
+            !output.contains("/home/user/books"),
+            "removed watch entry gone"
+        );
+        assert!(
+            output.contains("/home/user/notes"),
+            "kept watch entry present"
+        );
     }
 
     #[test]
@@ -770,8 +881,14 @@ patterns = ["**/*.md"]
         doc["agent"]["max_file_bytes"] = toml_edit::value(10485760i64);
 
         let output = doc.to_string();
-        assert!(!output.contains("spine = {"), "spine must not be an inline table");
-        assert!(!output.contains("agent = {"), "agent must not be an inline table");
+        assert!(
+            !output.contains("spine = {"),
+            "spine must not be an inline table"
+        );
+        assert!(
+            !output.contains("agent = {"),
+            "agent must not be an inline table"
+        );
         assert!(output.contains("[spine]"), "spine must be a section header");
         assert!(output.contains("[agent]"), "agent must be a section header");
     }
@@ -793,7 +910,10 @@ max_file_bytes = 10485760
             t.remove("machine_id");
         }
         let output = doc.to_string();
-        assert!(!output.contains("machine_id"), "machine_id must be removed when cleared");
+        assert!(
+            !output.contains("machine_id"),
+            "machine_id must be removed when cleared"
+        );
     }
 
     #[test]

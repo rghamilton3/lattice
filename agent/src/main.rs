@@ -69,7 +69,9 @@ async fn main() -> Result<()> {
 
         if force_reindex {
             cache.clear_known_paths();
-            info!("reindex command: cleared known-path records, all watch paths will be fully re-indexed");
+            info!(
+                "reindex command: cleared known-path records, all watch paths will be fully re-indexed"
+            );
         }
     }
 }

@@ -11,6 +11,7 @@
 
 use anyhow::{Context, Result, bail};
 use lattice_agent::config;
+use lattice_agent::time::now_iso;
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 use std::io::{self, IsTerminal, Read};
@@ -68,44 +69,55 @@ async fn run() -> Result<()> {
     };
 
     let captured_at = now_iso();
-    let queue = open_queue().context("opening offline queue")?;
+
+    // Open the queue non-fatally: its failure must not preempt the primary POST path.
+    let maybe_queue = open_queue().ok();
 
     let client = reqwest::Client::builder()
         .timeout(POST_TIMEOUT)
         .build()
         .context("building HTTP client")?;
 
-    drain_queue(&queue, &client, &cfg).await;
+    if let Some(ref q) = maybe_queue {
+        drain_queue(q, &client, &cfg).await;
+    }
 
     match post(&client, &cfg, &text, CAPTURE_SOURCE, &captured_at).await {
         Ok(id) => notify(&format!("Captured #{id}"), "low"),
-        Err(post_err) => match enqueue(&queue, &text, CAPTURE_SOURCE, &captured_at) {
-            Ok(()) => {
-                let reason = classify_post_error(&post_err);
-                tracing::warn!(error = %post_err, reason = %reason, "spine post failed; capture queued");
-                notify(&format!("Capture queued ({reason})"), "normal");
+        Err(post_err) => {
+            let queue = match maybe_queue {
+                Some(q) => q,
+                None => open_queue().context("opening offline queue")?,
+            };
+            match enqueue(&queue, &text, CAPTURE_SOURCE, &captured_at) {
+                Ok(()) => {
+                    let reason = classify_post_error(&post_err);
+                    tracing::warn!(error = %post_err, reason = %reason, "spine post failed; capture queued");
+                    notify(&format!("Capture queued ({reason})"), "normal");
+                }
+                Err(queue_err) => {
+                    // Both spine AND the local queue failed — the capture is about
+                    // to be lost. Echo the text to stderr so the user can recover
+                    // it from journalctl / the invoking shell, and raise a loud
+                    // critical notification.
+                    let spine_reason = classify_post_error(&post_err);
+                    tracing::error!(
+                        spine_error = %post_err,
+                        queue_error = %queue_err,
+                        "spine post AND queue write both failed; capture text follows"
+                    );
+                    eprintln!("--- LOST CAPTURE (copy from here) ---");
+                    eprintln!("{text}");
+                    eprintln!("--- END LOST CAPTURE ---");
+                    notify(
+                        &format!("CAPTURE LOST — spine: {spine_reason}; queue: {queue_err}"),
+                        "critical",
+                    );
+                    // Exit non-zero without returning Err so main() doesn't double-notify.
+                    std::process::exit(1);
+                }
             }
-            Err(queue_err) => {
-                // Both spine AND the local queue failed — the capture is about
-                // to be lost. Echo the text to stderr so the user can recover
-                // it from journalctl / the invoking shell, and raise a loud
-                // critical notification.
-                let spine_reason = classify_post_error(&post_err);
-                tracing::error!(
-                    spine_error = %post_err,
-                    queue_error = %queue_err,
-                    "spine post AND queue write both failed; capture text follows"
-                );
-                eprintln!("--- LOST CAPTURE (copy from here) ---");
-                eprintln!("{text}");
-                eprintln!("--- END LOST CAPTURE ---");
-                notify(
-                    &format!("CAPTURE LOST — spine: {spine_reason}; queue: {queue_err}"),
-                    "critical",
-                );
-                return Err(queue_err.context("enqueueing capture after spine failure"));
-            }
-        },
+        }
     }
 
     Ok(())
@@ -115,6 +127,9 @@ async fn run() -> Result<()> {
 
 fn read_text() -> Result<Option<String>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.iter().any(|a| a == "--prompt") {
+        return prompt_dmenu();
+    }
     if !args.is_empty() {
         return Ok(Some(args.join(" ")));
     }
@@ -199,29 +214,45 @@ fn enqueue(conn: &Connection, text: &str, source: &str, captured_at: &str) -> Re
 }
 
 async fn drain_queue(conn: &Connection, client: &reqwest::Client, cfg: &config::Config) {
-    let rows: Vec<(i64, String, String, String)> = match conn
+    let (rows, corrupt_ids): (Vec<(i64, String, String, String)>, Vec<i64>) = match conn
         .prepare("SELECT id, text, source, captured_at FROM queue ORDER BY id")
         .and_then(|mut stmt| {
             stmt.query_map([], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+                let id: i64 = row.get(0)?;
+                // Read payload fields softly so a corrupt row still yields its ID.
+                let payload: rusqlite::Result<(String, String, String)> =
+                    (|| Ok((row.get(1)?, row.get(2)?, row.get(3)?)))();
+                Ok((id, payload))
             })
             .map(|iter| {
-                iter.filter_map(|r| match r {
-                    Ok(row) => Some(row),
-                    Err(e) => {
-                        tracing::warn!(error = %e, "skipping corrupt queue row");
-                        None
+                let (mut good, mut corrupt) = (vec![], vec![]);
+                for r in iter {
+                    match r {
+                        Ok((id, Ok((text, source, captured_at)))) => {
+                            good.push((id, text, source, captured_at));
+                        }
+                        Ok((id, Err(e))) => {
+                            tracing::warn!(error = %e, id, "corrupt queue row; removing");
+                            corrupt.push(id);
+                        }
+                        Err(e) => tracing::warn!(error = %e, "unreadable queue row; skipping"),
                     }
-                })
-                .collect()
+                }
+                (good, corrupt)
             })
         }) {
-        Ok(rows) => rows,
+        Ok(result) => result,
         Err(e) => {
             tracing::warn!(error = %e, "queue read failed; skipping drain");
             return;
         }
     };
+
+    for id in corrupt_ids {
+        if let Err(e) = conn.execute("DELETE FROM queue WHERE id = ?1", params![id]) {
+            tracing::warn!(error = %e, id, "failed to delete corrupt queue row");
+        }
+    }
 
     let mut flushed = 0u32;
     for (id, text, source, captured_at) in rows {
@@ -233,8 +264,18 @@ async fn drain_queue(conn: &Connection, client: &reqwest::Client, cfg: &config::
                 flushed += 1;
             }
             Err(e) => {
-                tracing::debug!(error = %e, "drain post failed; will retry next run");
-                break;
+                let is_client_err = e
+                    .downcast_ref::<reqwest::Error>()
+                    .and_then(|re| re.status())
+                    .map(|s| s.is_client_error())
+                    .unwrap_or(false);
+                if is_client_err {
+                    tracing::warn!(error = %e, id, "permanent drain rejection (4xx); removing row");
+                    let _ = conn.execute("DELETE FROM queue WHERE id = ?1", params![id]);
+                } else {
+                    tracing::debug!(error = %e, "transient drain failure; will retry next run");
+                    break;
+                }
             }
         }
     }
@@ -307,14 +348,3 @@ fn notify(body: &str, urgency: &str) {
         .spawn();
 }
 
-// Shell out to `date` — same pragmatic choice the bash script made. Avoids
-// pulling in `chrono` or hand-rolling the civil-date conversion just for this.
-fn now_iso() -> String {
-    Command::new("date")
-        .args(["-u", "+%Y-%m-%dT%H:%M:%SZ"])
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
-        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_owned())
-}

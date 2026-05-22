@@ -4,6 +4,7 @@ mod extract;
 mod ipc;
 mod scan;
 mod status;
+mod time;
 
 use anyhow::Result;
 use std::time::Duration;

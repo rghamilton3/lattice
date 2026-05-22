@@ -374,22 +374,22 @@ fn parse_iso_secs(s: &str) -> Option<u64> {
 }
 
 fn spawn_config_ui() {
-    spawn_sibling("lattice-config", "Could not open config editor");
+    spawn_sibling("lattice-config", &[], "Could not open config editor");
 }
 
 fn spawn_capture_ui() {
-    spawn_sibling("lattice-capture", "Could not launch capture");
+    spawn_sibling("lattice-capture", &["--prompt"], "Could not launch capture");
 }
 
 /// Spawns a sibling binary (resolved relative to the running tray executable,
 /// falling back to $PATH) and notifies the user if the spawn itself fails.
-fn spawn_sibling(name: &str, failure_summary: &str) {
+fn spawn_sibling(name: &str, args: &[&str], failure_summary: &str) {
     let bin = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.join(name)))
         .unwrap_or_else(|| name.into());
 
-    if let Err(e) = std::process::Command::new(&bin).spawn() {
+    if let Err(e) = std::process::Command::new(&bin).args(args).spawn() {
         tracing::warn!(bin = %bin.display(), error = %e, "failed to launch {name}");
         let _ = std::process::Command::new("notify-send")
             .args(["Lattice", &format!("{failure_summary}: {e}")])
@@ -398,14 +398,18 @@ fn spawn_sibling(name: &str, failure_summary: &str) {
 }
 
 fn systemctl(op: &str) {
-    match std::process::Command::new("systemctl")
+    let msg = match std::process::Command::new("systemctl")
         .args(["--user", op, "lattice-agent"])
         .status()
     {
-        Err(e) => tracing::warn!(op, error = %e, "systemctl failed to run"),
-        Ok(s) if !s.success() => tracing::warn!(op, code = ?s.code(), "systemctl returned non-zero"),
-        Ok(_) => {}
-    }
+        Err(e) => format!("systemctl failed to run: {e}"),
+        Ok(s) if !s.success() => format!("systemctl {op} returned {:?}", s.code()),
+        Ok(_) => return,
+    };
+    tracing::warn!(op, "{msg}");
+    let _ = std::process::Command::new("notify-send")
+        .args(["Lattice", &msg, "--urgency", "critical"])
+        .spawn();
 }
 
 /// Returns the RGB color for the tray icon based on fetch result.

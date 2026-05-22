@@ -220,6 +220,17 @@ impl ksni::Tray for LatticeTray {
 
         items.push(
             StandardItem {
+                label: "Capture…".into(),
+                activate: Box::new(|_| {
+                    spawn_capture_ui();
+                }),
+                ..Default::default()
+            }
+            .into(),
+        );
+
+        items.push(
+            StandardItem {
                 label: "Configure…".into(),
                 activate: Box::new(|_| {
                     spawn_config_ui();
@@ -363,20 +374,26 @@ fn parse_iso_secs(s: &str) -> Option<u64> {
 }
 
 fn spawn_config_ui() {
-    // Resolve lattice-config as a sibling of this binary.
-    let config_bin = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.join("lattice-config")))
-        .unwrap_or_else(|| "lattice-config".into());
+    spawn_sibling("lattice-config", "Could not open config editor");
+}
 
-    match std::process::Command::new(&config_bin).spawn() {
-        Ok(_) => {}
-        Err(e) => {
-            tracing::warn!(bin = %config_bin.display(), error = %e, "failed to launch lattice-config");
-            let _ = std::process::Command::new("notify-send")
-                .args(["Lattice", &format!("Could not open config editor: {e}")])
-                .spawn();
-        }
+fn spawn_capture_ui() {
+    spawn_sibling("lattice-capture", "Could not launch capture");
+}
+
+/// Spawns a sibling binary (resolved relative to the running tray executable,
+/// falling back to $PATH) and notifies the user if the spawn itself fails.
+fn spawn_sibling(name: &str, failure_summary: &str) {
+    let bin = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join(name)))
+        .unwrap_or_else(|| name.into());
+
+    if let Err(e) = std::process::Command::new(&bin).spawn() {
+        tracing::warn!(bin = %bin.display(), error = %e, "failed to launch {name}");
+        let _ = std::process::Command::new("notify-send")
+            .args(["Lattice", &format!("{failure_summary}: {e}")])
+            .spawn();
     }
 }
 

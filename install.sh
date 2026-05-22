@@ -94,15 +94,18 @@ check_deps pdftotext
 echo ""
 read -rp "Install lattice-capture? [y/N] " _ans </dev/tty
 if [[ "$_ans" =~ ^[Yy]$ ]]; then
-  check_deps curl jq sqlite3 python3
+  CAPTURE_BINARY_ASSET="lattice-capture-${TARGET}"
+  cap_url=$(release_url "$CAPTURE_BINARY_ASSET")
+  [[ -z "$cap_url" ]] && die "'${CAPTURE_BINARY_ASSET}' asset not found in the latest release"
 
-  cap_url=$(release_url "lattice-capture")
-  [[ -z "$cap_url" ]] && die "'lattice-capture' asset not found in the latest release"
-
-  info "Downloading lattice-capture…"
+  info "Downloading ${CAPTURE_BINARY_ASSET}…"
   curl -fSL --progress-bar "$cap_url" -o "${INSTALL_DIR}/lattice-capture"
   chmod +x "${INSTALL_DIR}/lattice-capture"
   info "lattice-capture installed to ${INSTALL_DIR}/lattice-capture"
+
+  # notify-send is used for capture feedback; a dmenu is only needed when the
+  # tray's "Capture…" menu item is invoked (hotkeys pass text directly).
+  check_deps notify-send
 fi
 
 # ── lattice-tray (optional) ───────────────────────────────────────────────────

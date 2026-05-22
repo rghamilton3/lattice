@@ -254,6 +254,7 @@ impl eframe::App for ConfigApp {
                             );
                             ui.end_row();
                             ui.label("Token:");
+                            // right_to_left: button first (rightmost), then text field fills left.
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
@@ -307,24 +308,18 @@ impl eframe::App for ConfigApp {
                     let mut to_remove: Option<usize> = None;
                     for (i, row) in form.watch_rows.iter_mut().enumerate() {
                         egui::Frame::group(ui.style()).show(ui, |ui| {
-                            ui.with_layout(
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    if ui.button("Remove").clicked() {
-                                        to_remove = Some(i);
-                                    }
-                                    ui.with_layout(
-                                        egui::Layout::left_to_right(egui::Align::Center),
-                                        |ui| {
-                                            ui.label("Path:");
-                                            ui.add(
-                                                egui::TextEdit::singleline(&mut row.path)
-                                                    .desired_width(ui.available_width()),
-                                            );
-                                        },
-                                    );
-                                },
-                            );
+                            ui.horizontal(|ui| {
+                                ui.label("Path:");
+                                // Reserve ~70 px for the Remove button; field gets the rest.
+                                let field_w = (ui.available_width() - 70.0).max(60.0);
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut row.path)
+                                        .desired_width(field_w),
+                                );
+                                if ui.button("Remove").clicked() {
+                                    to_remove = Some(i);
+                                }
+                            });
                             ui.label("Patterns (one per line):");
                             ui.add(egui::TextEdit::multiline(&mut row.patterns).desired_rows(3));
                         });

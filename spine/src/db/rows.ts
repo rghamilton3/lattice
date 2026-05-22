@@ -10,6 +10,10 @@ export interface CaptureRow {
 	ingested_at: string;
 	triaged_at: string | null;
 	triage_action: string | null;
+	task_due_date: string | null;
+	task_priority: string | null;
+	task_notes: string | null;
+	task_completed_at: string | null;
 }
 
 export interface FileIndexRow {

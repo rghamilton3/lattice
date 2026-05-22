@@ -193,7 +193,15 @@ export async function search(q: string): Promise<SearchResult[]> {
 }
 
 export async function searchDeep(q: string): Promise<SearchResult[]> {
-  if (!_store) return [];
-  const results = await _store.search({ query: q, limit: 20 });
-  return mapResults(results, capturesDir(), workingDir(), localFilesDir());
+  if (!_store) {
+    if (_initFailed) console.warn("[qmd] searchDeep called but initSearch failed — returning empty results");
+    return [];
+  }
+  try {
+    const results = await _store.search({ query: q, limit: 20 });
+    return mapResults(results, capturesDir(), workingDir(), localFilesDir());
+  } catch (e) {
+    console.error("[qmd] searchDeep error:", e);
+    throw e;
+  }
 }

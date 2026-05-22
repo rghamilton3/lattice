@@ -134,6 +134,7 @@ describe("POST /api/captures", () => {
 
 describe("SSE listener lifecycle", () => {
   beforeEach(() => __resetListeners());
+  afterEach(() => __resetListeners());
 
   it("registers a listener when a stream is opened", async () => {
     expect(__listenerCount()).toBe(0);
@@ -146,5 +147,25 @@ describe("SSE listener lifecycle", () => {
     const res = await app.app.handle(req("/api/captures/stream"));
     await res.body!.cancel();
     expect(__listenerCount()).toBe(0);
+  });
+
+  it("emits a capture event when POST /api/captures succeeds", async () => {
+    const streamRes = await app.app.handle(req("/api/captures/stream"));
+    const reader = streamRes.body!.getReader();
+
+    // Drain the initial ": connected\n\n" comment sent by start()
+    await reader.read();
+
+    await app.app.handle(req("/api/captures", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "sse-e2e", source: "test" }),
+    }));
+
+    const { value } = await reader.read();
+    const text = new TextDecoder().decode(value);
+    expect(text).toContain("event: capture");
+    expect(text).toContain("sse-e2e");
+    await reader.cancel();
   });
 });

@@ -126,4 +126,23 @@ describe("GET /api/search", () => {
     const res = await app.app.handle(req("/api/search?q=hello"));
     expect((await json(res)).results).toEqual([]);
   });
+
+  it("fast search passes lex+vec queries and rerank:false to the store", async () => {
+    await app.app.handle(req("/api/search?q=hello"));
+    const args = app.qmd.getLastSearchArgs() as any;
+    expect(args).toMatchObject({ queries: expect.any(Array), rerank: false });
+  });
+
+  it("deep search passes a single query string to the store", async () => {
+    await app.app.handle(req("/api/search?q=hello&deep=true"));
+    const args = app.qmd.getLastSearchArgs() as any;
+    expect(args).toHaveProperty("query", "hello");
+    expect(args).not.toHaveProperty("queries");
+  });
+
+  it("?deep=false routes to fast search — only 'true' enables deep", async () => {
+    await app.app.handle(req("/api/search?q=hello&deep=false"));
+    const args = app.qmd.getLastSearchArgs() as any;
+    expect(args).toMatchObject({ rerank: false });
+  });
 });

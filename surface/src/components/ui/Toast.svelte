@@ -8,7 +8,7 @@
 	{#if wb.toast.onclick}
 		<button
 			class="toast toast-action"
-			onclick={() => { wb.toast?.onclick?.(); wb.toast = null; }}
+			onclick={() => { wb.toast?.onclick?.(); wb.dismissToast(); }}
 		>{wb.toast.msg}</button>
 	{:else}
 		<div class="toast" role="status" aria-live="polite">{wb.toast.msg}</div>

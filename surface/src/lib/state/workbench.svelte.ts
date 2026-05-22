@@ -2,6 +2,7 @@ import { getContext, setContext } from 'svelte';
 import type { PaneContent, SearchResult } from '$lib/types';
 import { triageCapture, TRIAGE_ACTION_LABEL, type TriageAction } from '$lib/api/captures';
 import { fetchSearch } from '$lib/api/search';
+import { ApiError } from '$lib/api/client';
 import { logError } from '$lib/utils/logError';
 import { env } from '$env/dynamic/public';
 
@@ -42,12 +43,10 @@ export interface Toast {
 	onclick?: () => void;
 }
 
-export type DeepSearchStatus = 'running' | 'done' | 'error';
-export interface DeepSearchState {
-	q: string;
-	status: DeepSearchStatus;
-	results: SearchResult[];
-}
+export type DeepSearchState =
+	| { q: string; status: 'running' }
+	| { q: string; status: 'done'; results: SearchResult[] }
+	| { q: string; status: 'error'; error: string };
 
 interface PersistedSession {
 	theme?: Theme;
@@ -236,7 +235,7 @@ export class WorkbenchStore {
 
 	async runDeepSearch(q: string) {
 		if (this.deepSearch?.status === 'running') return;
-		this.deepSearch = { q, status: 'running', results: [] };
+		this.deepSearch = { q, status: 'running' };
 		try {
 			const data = await fetchSearch(q, true);
 			this.deepSearch = { q, status: 'done', results: data.results };
@@ -246,10 +245,16 @@ export class WorkbenchStore {
 				onclick: () => this.openInPane(0, { kind: 'search', query: q })
 			});
 		} catch (e) {
-			this.deepSearch = { q, status: 'error', results: [] };
+			const httpStatus = e instanceof ApiError ? e.status : 0;
+			const detail = httpStatus >= 500 ? 'search index may be unavailable' : 'please try again';
+			this.deepSearch = { q, status: 'error', error: String(e) };
 			logError('deepSearch', e);
-			this.showToast(`Deep search failed for "${q}"`);
+			this.showToast(`Deep search failed for "${q}" — ${detail}`);
 		}
+	}
+
+	dismissToast() {
+		this.toast = null;
 	}
 }
 

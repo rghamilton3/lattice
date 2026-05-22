@@ -74,9 +74,8 @@
 	});
 
 	// Show deep results when available for this query, fast results otherwise.
-	const rawResults = $derived<SearchResult[]>(
-		deepDone ? (deepState?.results ?? []) : (searchQuery.data?.results ?? [])
-	);
+	const deepResults = $derived(deepState?.status === 'done' ? deepState.results : []);
+	const rawResults = $derived<SearchResult[]>(deepDone ? deepResults : (searchQuery.data?.results ?? []));
 
 	const filtered = $derived<SearchResult[]>(
 		rawResults.filter((r) => kindFilter.has(r.kind as Kind))

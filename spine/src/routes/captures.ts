@@ -30,7 +30,8 @@ export const capturesRoutes = (db: Database) =>
           heartbeat = setInterval(() => {
             try {
               controller.enqueue(encoder.encode(": ping\n\n"));
-            } catch {
+            } catch (e) {
+              console.error("[sse] heartbeat enqueue failed:", e);
               clearInterval(heartbeat!);
               heartbeat = null;
               off?.();
@@ -42,8 +43,9 @@ export const capturesRoutes = (db: Database) =>
               controller.enqueue(
                 encoder.encode(`event: capture\ndata: ${JSON.stringify(capture)}\n\n`)
               );
-            } catch {
+            } catch (e) {
               // Controller closed if an emit races with stream teardown — cancel() hasn't removed the listener yet.
+              if (heartbeat !== null) console.error("[sse] capture enqueue failed:", e);
               if (heartbeat !== null) { clearInterval(heartbeat); heartbeat = null; }
               off?.();
               off = null;

@@ -6,7 +6,6 @@
 	import AppShell from '$components/shell/AppShell.svelte';
 	import PaneContainer from './PaneContainer.svelte';
 	import QuickCapture from '$components/overlays/QuickCapture.svelte';
-	import CommandPalette from '$components/overlays/CommandPalette.svelte';
 	import Settings from '$components/overlays/Settings.svelte';
 	import NewTask from '$components/overlays/NewTask.svelte';
 	import ProcessMode from '$components/process/ProcessMode.svelte';
@@ -134,11 +133,7 @@
 {#if wb.activeOverlay === 'triage'}
 	<ProcessMode />
 {:else}
-	<AppShell
-		oncapture={() => (wb.activeOverlay = 'capture')}
-		oncommand={() => (wb.activeOverlay = 'palette')}
-		onnav={handleNav}
-	>
+	<AppShell oncapture={() => (wb.activeOverlay = 'capture')} onnav={handleNav}>
 		<div class="flex h-full w-full">
 			<div class={wb.isSplit ? 'w-1/2 border-r border-border' : 'w-full'}>
 				<PaneContainer paneIndex={0} content={wb.panes[0]} />
@@ -153,10 +148,6 @@
 
 	{#if wb.activeOverlay === 'capture'}
 		<QuickCapture />
-	{/if}
-
-	{#if wb.activeOverlay === 'palette'}
-		<CommandPalette />
 	{/if}
 
 	{#if wb.activeOverlay === 'settings'}

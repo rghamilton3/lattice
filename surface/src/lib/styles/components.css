@@ -181,6 +181,9 @@
 	flex: 1;
 	display: flex;
 	justify-content: center;
+	align-items: center;
+	align-self: stretch;
+	position: relative;
 }
 .palette-button {
 	display: inline-flex;
@@ -200,6 +203,9 @@
 .palette-button:hover {
 	border-color: var(--line-strong);
 	background: var(--bg-high);
+}
+.palette-button[aria-expanded='true'] {
+	visibility: hidden;
 }
 .palette-button-label {
 	flex: 1;
@@ -423,18 +429,24 @@
 
 /* Command palette */
 .palette {
-	width: min(620px, calc(100vw - 32px));
+	position: absolute;
+	top: 0;
+	left: 50%;
+	transform: translateX(-50%);
+	width: min(440px, 100%);
 	background: var(--bg-raised);
 	border: 1px solid var(--line);
 	border-radius: var(--radius-lg);
 	box-shadow: var(--shadow-pop);
 	overflow: hidden;
+	z-index: 10;
 }
 .palette-input-row {
 	display: flex;
 	align-items: center;
 	gap: 10px;
-	padding: 12px 14px;
+	height: 48px;
+	padding: 0 14px;
 	border-bottom: 1px solid var(--line);
 	color: var(--text-mute);
 }

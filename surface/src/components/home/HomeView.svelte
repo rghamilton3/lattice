@@ -46,7 +46,10 @@
 				wb.showToast('Live updates disconnected — refresh to reconnect');
 			}
 		});
-		return () => { sse.close(); connected = false; };
+		return () => {
+			sse.close();
+			connected = false;
+		};
 	});
 
 	const capturesQuery = createQuery(() => ({

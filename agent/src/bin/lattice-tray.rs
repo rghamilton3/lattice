@@ -64,7 +64,11 @@ fn circle_icon(rgb: [u8; 3]) -> Vec<ksni::Icon> {
             data.extend_from_slice(&[alpha, r, g, b]);
         }
     }
-    vec![ksni::Icon { width: SIZE, height: SIZE, data }]
+    vec![ksni::Icon {
+        width: SIZE,
+        height: SIZE,
+        data,
+    }]
 }
 
 // ── Fetch result ──────────────────────────────────────────────────────────────
@@ -480,7 +484,9 @@ mod tests {
 
 fn main() {
     tracing_subscriber::fmt::init();
-    let handle = LatticeTray::default().spawn().expect("failed to register tray icon");
+    let handle = LatticeTray::default()
+        .spawn()
+        .expect("failed to register tray icon");
 
     loop {
         let result = fetch_status();

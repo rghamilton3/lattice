@@ -26,14 +26,14 @@ SQLite via Bun's built-in `bun:sqlite`. Migrations live in `migrations/` and are
 
 ## Routes
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `GET` | `/ping` | none | Health check — returns `{ ok: true }` |
-| `GET` | `/` | Authelia | UI: recent captures or search results |
-| `GET` | `/api/captures?limit=N` | Authelia | Returns up to 200 recent captures |
-| `GET` | `/api/search?q=<query>` | Authelia | QMD hybrid search (BM25 + vector + rerank) |
-| `POST` | `/api/agent/capture` | Bearer | Accepts `{ text, source, captured_at }` — returns `{ id }` |
-| `POST` | `/api/agent/index` | Bearer | Upserts file index entry; idempotent on `(machine_id, path, hash)` |
+| Method | Path                    | Auth     | Description                                                        |
+| ------ | ----------------------- | -------- | ------------------------------------------------------------------ |
+| `GET`  | `/ping`                 | none     | Health check — returns `{ ok: true }`                              |
+| `GET`  | `/`                     | Authelia | UI: recent captures or search results                              |
+| `GET`  | `/api/captures?limit=N` | Authelia | Returns up to 200 recent captures                                  |
+| `GET`  | `/api/search?q=<query>` | Authelia | QMD hybrid search (BM25 + vector + rerank)                         |
+| `POST` | `/api/agent/capture`    | Bearer   | Accepts `{ text, source, captured_at }` — returns `{ id }`         |
+| `POST` | `/api/agent/index`      | Bearer   | Upserts file index entry; idempotent on `(machine_id, path, hash)` |
 
 ## Development
 
@@ -52,15 +52,15 @@ bun test src/foo.test.ts   # run a single file
 
 ## Environment variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LATTICE_AGENT_TOKEN` | — | Bearer token for `/api/agent/*`. Generate with `openssl rand -base64 32`. |
-| `DATABASE_PATH` | `./lattice.dev.db` | SQLite database path. Production: `/var/lib/lattice/lattice.db`. |
-| `ALLOW_HTTP` | `false` | Set `true` for local dev only. Spine fails closed on non-HTTPS by default. |
-| `DEV_USER` | — | Bypasses Authelia and injects this value as `Remote-User`. Local dev only. |
-| `HOST` | `127.0.0.1` | Listen address. The Docker image overrides this to `0.0.0.0`. |
-| `SIGNAL_PHONE_NUMBER` | — | Your E.164 number for the Signal relay (e.g. `+15551234567`). |
-| `SIGNAL_RPC_HOST` | `127.0.0.1:7583` | TCP address of the signal-cli JSON-RPC daemon. |
+| Variable              | Default            | Description                                                                |
+| --------------------- | ------------------ | -------------------------------------------------------------------------- |
+| `LATTICE_AGENT_TOKEN` | —                  | Bearer token for `/api/agent/*`. Generate with `openssl rand -base64 32`.  |
+| `DATABASE_PATH`       | `./lattice.dev.db` | SQLite database path. Production: `/var/lib/lattice/lattice.db`.           |
+| `ALLOW_HTTP`          | `false`            | Set `true` for local dev only. Spine fails closed on non-HTTPS by default. |
+| `DEV_USER`            | —                  | Bypasses Authelia and injects this value as `Remote-User`. Local dev only. |
+| `HOST`                | `127.0.0.1`        | Listen address. The Docker image overrides this to `0.0.0.0`.              |
+| `SIGNAL_PHONE_NUMBER` | —                  | Your E.164 number for the Signal relay (e.g. `+15551234567`).              |
+| `SIGNAL_RPC_HOST`     | `127.0.0.1:7583`   | TCP address of the signal-cli JSON-RPC daemon.                             |
 
 ## Docker
 

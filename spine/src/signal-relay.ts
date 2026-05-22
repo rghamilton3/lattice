@@ -30,8 +30,16 @@ const colonIdx = RPC_HOST.lastIndexOf(":");
 const hostname = RPC_HOST.slice(0, colonIdx);
 const port = parseInt(RPC_HOST.slice(colonIdx + 1), 10);
 
+// State machine invariant: at most one of {activeSocket, connecting,
+// reconnectTimer} is set. The trio together prevents the runaway socket
+// leak that took out the VPS: previously connectError + the outer
+// Promise .catch each scheduled a retry, doubling parallel connects per
+// failure until ephemeral ports were exhausted.
+type RelaySocket = { write(data: string): number | void; end(): void };
 let backoff = 1_000;
-let activeSocket: { write(data: string): number | void } | null = null;
+let activeSocket: RelaySocket | null = null;
+let connecting = false;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 function sendReply(message: string): void {
   if (!activeSocket) return;
@@ -52,7 +60,50 @@ function sendReply(message: string): void {
   }
 }
 
+// React to the original message so the user sees state directly in Signal:
+// 👀 = relay parsed it, ✅ = spine saved it. Reactions are diagnostic — if
+// the write fails we log and move on.
+function sendReaction(emoji: string, targetAuthor: string, targetTimestamp: number): void {
+  if (!activeSocket) return;
+  const payload =
+    JSON.stringify({
+      jsonrpc: "2.0",
+      method: "sendReaction",
+      id: Date.now(),
+      params: {
+        recipient: [SIGNAL_PHONE],
+        emoji,
+        targetAuthor,
+        targetTimestamp,
+      },
+    }) + "\n";
+  try {
+    const wrote = activeSocket.write(payload);
+    if (!wrote) {
+      console.error("[signal-relay] reaction write rejected (backpressure/closed), reaction dropped");
+    }
+  } catch (err) {
+    console.error("[signal-relay] failed to send reaction:", (err as Error).message);
+  }
+}
+
+// De-duped reconnect scheduler. If a timer is already pending, callers
+// from different failure paths (connectError + outer .catch, or close +
+// error) collapse into one retry. Backoff doubles per failure, capped.
+function scheduleReconnect(reason: string): void {
+  if (reconnectTimer !== null) return;
+  console.log(`[signal-relay] reconnect in ${backoff / 1000}s (${reason})`);
+  const delay = backoff;
+  backoff = Math.min(backoff * 2, 60_000);
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    connect();
+  }, delay);
+}
+
 function connect(): void {
+  if (connecting || activeSocket) return;
+  connecting = true;
   let buffer = "";
 
   Bun.connect({
@@ -62,6 +113,12 @@ function connect(): void {
       open(socket) {
         console.log(`[signal-relay] connected to ${RPC_HOST}`);
         backoff = 1_000;
+        connecting = false;
+        // Defensive: if somehow a stale socket survived, end it before
+        // overwriting the reference so the kernel can release it.
+        if (activeSocket) {
+          try { activeSocket.end(); } catch { /* ignore */ }
+        }
         activeSocket = socket;
         socket.write(
           JSON.stringify({ jsonrpc: "2.0", method: "subscribeReceive", id: 1 }) + "\n"
@@ -89,26 +146,31 @@ function connect(): void {
 
       close() {
         activeSocket = null;
-        console.log(`[signal-relay] disconnected — retrying in ${backoff / 1000}s`);
-        setTimeout(connect, backoff);
-        backoff = Math.min(backoff * 2, 60_000);
+        connecting = false;
+        console.log(`[signal-relay] disconnected`);
+        scheduleReconnect("close");
       },
 
-      error(_socket, err: Error) {
-        activeSocket = null;
+      error(socket, err: Error) {
         console.error("[signal-relay] socket error:", err.message);
+        try { socket.end(); } catch { /* ignore */ }
+        activeSocket = null;
+        // close() will follow and schedule the reconnect.
       },
 
       connectError(_socket, err: Error) {
-        console.error(`[signal-relay] connect failed — retrying in ${backoff / 1000}s:`, err.message);
-        setTimeout(connect, backoff);
-        backoff = Math.min(backoff * 2, 60_000);
+        console.error("[signal-relay] connect failed:", err.message);
+        connecting = false;
+        scheduleReconnect("connectError");
       },
     },
   }).catch((err: Error) => {
-    console.error(`[signal-relay] connect error — retrying in ${backoff / 1000}s:`, err.message);
-    setTimeout(connect, backoff);
-    backoff = Math.min(backoff * 2, 60_000);
+    // The TCP callbacks above usually handle failure, but Bun.connect's
+    // returned promise can also reject (e.g. DNS error before a socket
+    // exists). scheduleReconnect is idempotent so double-fire is safe.
+    console.error("[signal-relay] connect error:", err.message);
+    connecting = false;
+    scheduleReconnect("promise-reject");
   });
 }
 
@@ -126,8 +188,11 @@ function handleMessage(msg: unknown): void {
     return;
   }
 
+  sendReaction("👀", parsed.sourceNumber, parsed.sourceTimestamp);
+
   postCapture(parsed.captureText, parsed.capturedAt)
     .then((captureId) => {
+      sendReaction("✅", parsed.sourceNumber, parsed.sourceTimestamp);
       if (parsed.attachments.length === 0 || !SIGNAL_ATTACHMENTS_DIR) return;
       for (const att of parsed.attachments) {
         postAttachment(captureId, att).catch((err: Error) =>

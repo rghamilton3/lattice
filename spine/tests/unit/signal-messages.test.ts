@@ -90,7 +90,23 @@ describe("parseSignalMessage", () => {
       captureText: "hello world",
       capturedAt: new Date(1_700_000_000_000).toISOString(),
       attachments: [],
+      sourceNumber: SELF,
+      sourceTimestamp: 1_700_000_000_000,
     });
+  });
+
+  it("exposes sourceNumber and sourceTimestamp for reaction targeting", () => {
+    const msg = envelope({ timestamp: 1_800_000_000_000 }, { message: "hi" });
+    const parsed = parseSignalMessage(msg, SELF);
+    expect(parsed?.sourceNumber).toBe(SELF);
+    expect(parsed?.sourceTimestamp).toBe(1_800_000_000_000);
+  });
+
+  it("uses now() for sourceTimestamp when envelope.timestamp is missing", () => {
+    const fixed = new Date("2026-05-21T12:00:00.000Z");
+    const msg = envelope({ timestamp: undefined }, { message: "hi" });
+    const parsed = parseSignalMessage(msg, SELF, () => fixed);
+    expect(parsed?.sourceTimestamp).toBe(fixed.getTime());
   });
 
   it("uses placeholder text when message is empty but attachments are present", () => {

@@ -9,6 +9,11 @@ export interface ParsedSignalMessage {
   captureText: string;
   capturedAt: string;
   attachments: SignalAttachment[];
+  // Fields needed to target this message with a reaction. `sourceTimestamp`
+  // is the raw Signal Unix-ms value — reactions need it verbatim, not the
+  // ISO string we expose via capturedAt.
+  sourceNumber: string;
+  sourceTimestamp: number;
 }
 
 export type ParseSkipReason =
@@ -83,12 +88,17 @@ export function parseSignalMessage(
   const captureText = text || placeholderText(attachments);
 
   // Signal timestamps are Unix ms; fall back to now if absent.
-  const capturedAt =
-    typeof envelope.timestamp === "number"
-      ? new Date(envelope.timestamp).toISOString()
-      : now().toISOString();
+  const sourceTimestamp =
+    typeof envelope.timestamp === "number" ? envelope.timestamp : now().getTime();
+  const capturedAt = new Date(sourceTimestamp).toISOString();
 
-  return { captureText, capturedAt, attachments };
+  return {
+    captureText,
+    capturedAt,
+    attachments,
+    sourceNumber: envelope.sourceNumber as string,
+    sourceTimestamp,
+  };
 }
 
 // True when the frame appears to be a JSON-RPC error response (`error` key

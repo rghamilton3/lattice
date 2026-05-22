@@ -1,5 +1,9 @@
 # surface
 
+<img src="./static/favicon.svg" width="48" alt="Lattice icon">
+
+[![CI surface](https://github.com/rghamilton3/lattice/actions/workflows/surface-ci.yml/badge.svg)](https://github.com/rghamilton3/lattice/actions/workflows/surface-ci.yml)
+
 SPA workbench for [Lattice](https://github.com/rghamilton3/lattice) — a personal knowledge management system. Built with [Svelte 5](https://svelte.dev) (runes mode) and [SvelteKit](https://kit.svelte.dev), using [`adapter-static`](https://github.com/sveltejs/kit/tree/main/packages/adapter-static) to emit static files served by [spine](../spine).
 
 Provides search, reading panes, and working-doc editing over the spine REST API.

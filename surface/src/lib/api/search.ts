@@ -19,7 +19,7 @@ export const searchKeys = {
 };
 
 export function fetchSearch(q: string, deep = false): Promise<{ results: SearchResult[] }> {
-	const url = `/api/search?q=${encodeURIComponent(q)}${deep ? '&deep=1' : ''}`;
+	const url = `/api/search?q=${encodeURIComponent(q)}${deep ? '&deep=true' : ''}`;
 	return apiFetch(url);
 }
 

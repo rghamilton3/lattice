@@ -18,8 +18,9 @@ export const searchKeys = {
 		['nearby', { timestamp, window_hours }] as const
 };
 
-export function fetchSearch(q: string): Promise<{ results: SearchResult[] }> {
-	return apiFetch(`/api/search?q=${encodeURIComponent(q)}`);
+export function fetchSearch(q: string, deep = false): Promise<{ results: SearchResult[] }> {
+	const url = `/api/search?q=${encodeURIComponent(q)}${deep ? '&deep=1' : ''}`;
+	return apiFetch(url);
 }
 
 export function fetchSimilar(

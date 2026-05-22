@@ -44,6 +44,11 @@
 		enabled: browser && debouncedQ.length > 0
 	}));
 
+	// Deep search lives in the workbench so it survives pane navigation.
+	const deepState = $derived(wb.deepSearch?.q === debouncedQ ? wb.deepSearch : null);
+	const deepRunning = $derived(deepState?.status === 'running');
+	const deepDone = $derived(deepState?.status === 'done');
+
 	const defaultKinds: Kind[] = ['capture', 'local-file', 'working'];
 	const kindFilter = new SvelteSet<Kind>(defaultKinds);
 	let sort = $state<Sort>('recency');
@@ -68,7 +73,10 @@
 		}
 	});
 
-	const rawResults = $derived<SearchResult[]>(searchQuery.data?.results ?? []);
+	// Show deep results when available for this query, fast results otherwise.
+	const rawResults = $derived<SearchResult[]>(
+		deepDone ? (deepState?.results ?? []) : (searchQuery.data?.results ?? [])
+	);
 
 	const filtered = $derived<SearchResult[]>(
 		rawResults.filter((r) => kindFilter.has(r.kind as Kind))
@@ -123,7 +131,22 @@
 					error: {searchQuery.error?.message}
 				</div>
 			{:else if rawResults.length === 0}
-				<div class="results-empty soft">No results for "{debouncedQ}".</div>
+				<div class="results-empty soft">
+					No results for "{debouncedQ}".
+					{#if !deepState}
+						<button
+							class="btn btn-ghost"
+							style="margin-left:8px"
+							onclick={() => wb.runDeepSearch(debouncedQ)}
+						>
+							Try deep search?
+						</button>
+					{:else if deepRunning}
+						<span class="faint" style="margin-left:8px; font-size:12px">
+							Thinking… (safe to navigate away)
+						</span>
+					{/if}
+				</div>
 			{:else if displayed.length === 0}
 				<div class="results-empty soft">
 					No matches in the kinds you have selected.
@@ -136,8 +159,19 @@
 					<ResultRow {paneIndex} {result} />
 				{/each}
 				<div class="results-foot faint" style="font-size:12px">
-					Most recent first. "similar / mentions / nearby" live inside each opened result.
+					{deepDone ? 'Deep search — LLM expanded and reranked.' : 'Most recent first. "similar / mentions / nearby" live inside each opened result.'}
 				</div>
+				{#if !deepState}
+					<div style="padding: 12px 0 4px">
+						<button class="btn btn-ghost" onclick={() => wb.runDeepSearch(debouncedQ)}>
+							Deep search (LLM expand + rerank — slow)
+						</button>
+					</div>
+				{:else if deepRunning}
+					<div class="faint" style="font-size:12px; padding: 12px 0 4px">
+						Thinking… (safe to navigate away)
+					</div>
+				{/if}
 			{/if}
 		</section>
 	</div>

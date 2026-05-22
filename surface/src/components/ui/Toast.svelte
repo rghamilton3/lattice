@@ -5,5 +5,12 @@
 </script>
 
 {#if wb.toast}
-	<div class="toast" role="status" aria-live="polite">{wb.toast.msg}</div>
+	{#if wb.toast.onclick}
+		<button
+			class="toast toast-action"
+			onclick={() => { wb.toast?.onclick?.(); wb.toast = null; }}
+		>{wb.toast.msg}</button>
+	{:else}
+		<div class="toast" role="status" aria-live="polite">{wb.toast.msg}</div>
+	{/if}
 {/if}

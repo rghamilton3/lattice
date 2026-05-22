@@ -364,6 +364,14 @@
 	pointer-events: none;
 	animation: toast-fade-in var(--t-base) var(--ease);
 }
+.toast-action {
+	pointer-events: auto;
+	cursor: pointer;
+	text-align: left;
+}
+.toast-action:hover {
+	background: var(--bg-high);
+}
 @media (prefers-reduced-motion: reduce) {
 	.toast {
 		animation: none;

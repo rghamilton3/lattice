@@ -152,14 +152,35 @@ export function refreshIndex(): void {
     });
 }
 
+function mapResults(
+  hits: Array<{ file: string; score: number; bestChunk: string; body: string; displayPath: string }>,
+  captures: string,
+  working: string,
+  localFiles: string,
+): SearchResult[] {
+  return hits.flatMap((r): SearchResult[] => {
+    if (r.file.startsWith(captures + "/")) {
+      const id = parseInt(basename(r.file, ".md"), 10);
+      if (isNaN(id)) return [];
+      return [{ id, score: r.score, snippet: r.bestChunk, body: r.body, path: r.displayPath, kind: "capture" as const }];
+    }
+    if (r.file.startsWith(working + "/")) {
+      const slug = basename(r.file, ".md");
+      return [{ id: 0, score: r.score, snippet: r.bestChunk, body: r.body, path: r.displayPath, kind: "working" as const, slug }];
+    }
+    if (r.file.startsWith(localFiles + "/")) {
+      const machine_id = r.file.slice(localFiles.length + 1).split("/")[0];
+      return [{ id: 0, score: r.score, snippet: r.bestChunk, body: r.body, path: r.displayPath, kind: "local-file" as const, machine_id }];
+    }
+    return [];
+  });
+}
+
 export async function search(q: string): Promise<SearchResult[]> {
   if (!_store) {
     if (_initFailed) console.warn("[qmd] search called but initSearch failed — returning empty results");
     return [];
   }
-  const captures = capturesDir();
-  const working = workingDir();
-  const localFiles = localFilesDir();
   const results = await _store.search({
     queries: [
       { type: "lex", query: q },
@@ -168,51 +189,11 @@ export async function search(q: string): Promise<SearchResult[]> {
     rerank: false,
     limit: 20,
   });
-  return results.flatMap((r): SearchResult[] => {
-    if (r.file.startsWith(captures + "/")) {
-      const id = parseInt(basename(r.file, ".md"), 10);
-      if (isNaN(id)) return [];
-      return [
-        {
-          id,
-          score: r.score,
-          snippet: r.bestChunk,
-          body: r.body,
-          path: r.displayPath,
-          kind: "capture" as const,
-        },
-      ];
-    }
-    if (r.file.startsWith(working + "/")) {
-      const slug = basename(r.file, ".md");
-      return [
-        {
-          id: 0,
-          score: r.score,
-          snippet: r.bestChunk,
-          body: r.body,
-          path: r.displayPath,
-          kind: "working" as const,
-          slug,
-        },
-      ];
-    }
-    if (r.file.startsWith(localFiles + "/")) {
-      // Path: localFiles/<machine_id>/<hash>.md
-      const parts = r.file.slice(localFiles.length + 1).split("/");
-      const machine_id = parts[0];
-      return [
-        {
-          id: 0,
-          score: r.score,
-          snippet: r.bestChunk,
-          body: r.body,
-          path: r.displayPath,
-          kind: "local-file" as const,
-          machine_id,
-        },
-      ];
-    }
-    return [];
-  });
+  return mapResults(results, capturesDir(), workingDir(), localFilesDir());
+}
+
+export async function searchDeep(q: string): Promise<SearchResult[]> {
+  if (!_store) return [];
+  const results = await _store.search({ query: q, limit: 20 });
+  return mapResults(results, capturesDir(), workingDir(), localFilesDir());
 }

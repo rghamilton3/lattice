@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { search } from "../search";
+import { search, searchDeep } from "../search";
 
 export const searchRoutes = () =>
   new Elysia().get(
@@ -10,8 +10,8 @@ export const searchRoutes = () =>
         set.status = 400;
         return { error: "q is required" };
       }
-      const results = await search(q);
+      const results = await (query.deep ? searchDeep(q) : search(q));
       return { results };
     },
-    { query: t.Object({ q: t.Optional(t.String()) }) }
+    { query: t.Object({ q: t.Optional(t.String()), deep: t.Optional(t.String()) }) }
   );

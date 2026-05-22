@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { createQuery } from '@tanstack/svelte-query';
+	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
 	import { browser } from '$app/environment';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { captureKeys, fetchCaptures, triageCapture } from '$lib/api/captures';
 	import { workingKeys, fetchWorkingList } from '$lib/api/working';
-	import type { DocRef } from '$lib/types';
+	import type { Capture, DocRef } from '$lib/types';
 	import Icon from '$components/icons/Icon.svelte';
 	import NowCard from './NowCard.svelte';
 	import InboxList from './InboxList.svelte';
@@ -15,6 +15,27 @@
 	const { paneIndex }: { paneIndex: 0 | 1 } = $props();
 
 	const wb = getWorkbenchContext();
+	const queryClient = useQueryClient();
+
+	$effect(() => {
+		if (!browser) return;
+		const sse = new EventSource('/api/captures/stream');
+		sse.addEventListener('capture', (e) => {
+			try {
+				const capture = JSON.parse(e.data) as Capture;
+				queryClient.setQueryData(captureKeys.list(20), (old: Capture[] | undefined) => {
+					if (!old) return [capture];
+					if (old.some((c) => c.id === capture.id)) return old;
+					return [capture, ...old].slice(0, 20);
+				});
+			} catch (err) {
+				console.error('[sse] malformed capture event:', err);
+			}
+		});
+		sse.addEventListener('open', () => queryClient.invalidateQueries({ queryKey: captureKeys.list(20) }));
+		sse.addEventListener('error', () => console.error('[sse] connection lost'));
+		return () => sse.close();
+	});
 
 	const capturesQuery = createQuery(() => ({
 		queryKey: captureKeys.list(20),

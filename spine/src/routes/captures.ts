@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import type { Database } from "bun:sqlite";
 import type { CaptureRow } from "../db/rows";
 import { writeCaptureFile, refreshIndex } from "../search";
+import { onCapture, emitCapture } from "../captureEvents";
 
 export const capturesRoutes = (db: Database) =>
   new Elysia()
@@ -18,6 +19,49 @@ export const capturesRoutes = (db: Database) =>
       },
       { query: t.Object({ limit: t.Optional(t.String()) }) }
     )
+    .get("/api/captures/stream", () => {
+      const encoder = new TextEncoder();
+      let off: (() => void) | null = null;
+      let heartbeat: ReturnType<typeof setInterval> | null = null;
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode(": connected\n\n"));
+          // Keep-alive so Caddy's idle_timeout (default 5 min) doesn't silently drop the connection.
+          heartbeat = setInterval(() => {
+            try {
+              controller.enqueue(encoder.encode(": ping\n\n"));
+            } catch {
+              clearInterval(heartbeat!);
+              heartbeat = null;
+              off?.();
+              off = null;
+            }
+          }, 25_000);
+          off = onCapture((capture) => {
+            try {
+              controller.enqueue(
+                encoder.encode(`event: capture\ndata: ${JSON.stringify(capture)}\n\n`)
+              );
+            } catch {
+              // Controller closed if an emit races with stream teardown — cancel() hasn't removed the listener yet.
+              if (heartbeat !== null) { clearInterval(heartbeat); heartbeat = null; }
+              off?.();
+              off = null;
+            }
+          });
+        },
+        cancel() {
+          if (heartbeat !== null) clearInterval(heartbeat);
+          off?.();
+        },
+      });
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+        },
+      });
+    })
     .get(
       "/api/captures/:id",
       ({ params, set }) => {
@@ -56,6 +100,7 @@ export const capturesRoutes = (db: Database) =>
           return inserted;
         })();
         refreshIndex();
+        emitCapture({ id: row.id, text: body.text, source: body.source, captured_at: now, ingested_at: now });
         return { id: row.id };
       },
       {

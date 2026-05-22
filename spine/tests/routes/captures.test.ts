@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 import { buildTestApp, json, req, type TestApp } from "../helpers/app";
+import { __listenerCount, __resetListeners } from "../../src/captureEvents";
 
 let app: TestApp;
 
@@ -91,5 +92,59 @@ describe("GET /api/captures/:id", () => {
     const res = await app.app.handle(req("/api/captures/99999"));
     expect(res.status).toBe(404);
     expect((await json(res)).error).toBe("Not found");
+  });
+});
+
+describe("GET /api/captures/stream", () => {
+  it("is not caught by /:id route", async () => {
+    const res = await app.app.handle(req("/api/captures/stream"));
+    expect(res.headers.get("content-type")).toContain("text/event-stream");
+  });
+});
+
+describe("POST /api/captures", () => {
+  it("creates a capture and returns its id", async () => {
+    const res = await app.app.handle(req("/api/captures", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "hello", source: "browser" }),
+    }));
+    expect(res.status).toBe(200);
+    expect(typeof (await json(res)).id).toBe("number");
+  });
+
+  it("returns 422 when text is empty", async () => {
+    const res = await app.app.handle(req("/api/captures", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "", source: "browser" }),
+    }));
+    expect(res.status).toBe(422);
+  });
+
+  it("returns 422 when source is missing", async () => {
+    const res = await app.app.handle(req("/api/captures", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "hello" }),
+    }));
+    expect(res.status).toBe(422);
+  });
+});
+
+describe("SSE listener lifecycle", () => {
+  beforeEach(() => __resetListeners());
+
+  it("registers a listener when a stream is opened", async () => {
+    expect(__listenerCount()).toBe(0);
+    const res = await app.app.handle(req("/api/captures/stream"));
+    expect(__listenerCount()).toBe(1);
+    await res.body?.cancel();
+  });
+
+  it("removes the listener when the stream is cancelled", async () => {
+    const res = await app.app.handle(req("/api/captures/stream"));
+    await res.body!.cancel();
+    expect(__listenerCount()).toBe(0);
   });
 });

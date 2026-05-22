@@ -15,6 +15,7 @@ interface FakeStoreState {
   searchHits: FakeSearchHit[];
   searchThrows: Error | null;
   updateThrows: Error | null;
+  lastSearchArgs: unknown;
   // Live count of update() invocations currently in flight, and the
   // high-water mark observed. Used to assert refreshIndex serialization.
   inflightUpdates: number;
@@ -31,6 +32,7 @@ export interface FakeStoreHandle {
   setUpdateError(err: Error | null): void;
   setSearchError(err: Error | null): void;
   setUpdateDelay(ms: number): void;
+  getLastSearchArgs(): unknown;
 }
 
 let handle: FakeStoreHandle | null = null;
@@ -47,6 +49,7 @@ export function installQmdMock(): FakeStoreHandle {
     searchHits: [],
     searchThrows: null,
     updateThrows: null,
+    lastSearchArgs: undefined,
     inflightUpdates: 0,
     maxConcurrentUpdates: 0,
     updateDelayMs: 0,
@@ -72,7 +75,8 @@ export function installQmdMock(): FakeStoreHandle {
     async embed() {
       state.embedCalls++;
     },
-    async search() {
+    async search(args: unknown) {
+      state.lastSearchArgs = args;
       if (state.searchThrows) throw state.searchThrows;
       return state.searchHits;
     },
@@ -98,6 +102,9 @@ export function installQmdMock(): FakeStoreHandle {
     },
     setUpdateDelay(ms) {
       state.updateDelayMs = ms;
+    },
+    getLastSearchArgs() {
+      return state.lastSearchArgs;
     },
   };
 

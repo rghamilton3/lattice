@@ -1,8 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { join } from 'node:path';
 import { buildTestApp, json, req, type TestApp } from '../helpers/app';
-import { capturesDir } from '../../src/search';
-import { workingDir } from '../../src/working';
 
 let app: TestApp;
 
@@ -74,14 +71,14 @@ describe('GET /api/similar', () => {
 		// Mock the search to return the source itself + a different capture.
 		app.qmd.setHits([
 			{
-				file: join(capturesDir(), `${id}.md`),
+				file: `qmd://captures/${id}.md`,
 				score: 0.99,
 				bestChunk: 'alpha',
 				body: 'alpha',
 				displayPath: `captures/${id}.md`,
 			},
 			{
-				file: join(capturesDir(), `999.md`),
+				file: `qmd://captures/999.md`,
 				score: 0.5,
 				bestChunk: 'beta',
 				body: 'beta',
@@ -106,14 +103,14 @@ describe('GET /api/similar', () => {
 		);
 		app.qmd.setHits([
 			{
-				file: join(workingDir(), 'source.md'),
+				file: 'qmd://working/source.md',
 				score: 0.9,
 				bestChunk: 'x',
 				body: 'x',
 				displayPath: 'working/source.md',
 			},
 			{
-				file: join(workingDir(), 'other.md'),
+				file: 'qmd://working/other.md',
 				score: 0.5,
 				bestChunk: 'y',
 				body: 'y',
@@ -128,7 +125,7 @@ describe('GET /api/similar', () => {
 	it('caps results at 10', async () => {
 		const { id } = seedCapture(app, 'src');
 		const hits = Array.from({ length: 20 }, (_, i) => ({
-			file: join(capturesDir(), `${1000 + i}.md`),
+			file: `qmd://captures/${1000 + i}.md`,
 			score: 1 - i * 0.01,
 			bestChunk: `s${i}`,
 			body: `b${i}`,

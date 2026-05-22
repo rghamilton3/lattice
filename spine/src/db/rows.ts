@@ -8,6 +8,8 @@ export interface CaptureRow {
 	source: string;
 	captured_at: string;
 	ingested_at: string;
+	triaged_at: string | null;
+	triage_action: string | null;
 }
 
 export interface FileIndexRow {

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PaneContent } from '$lib/types';
 	import HomeView from '$components/home/HomeView.svelte';
+	import LibraryView from '$components/home/LibraryView.svelte';
 	import SearchPane from '$components/search/SearchPane.svelte';
 	import ResultList from '$components/search/ResultList.svelte';
 	import ReadingPane from '$components/reading/ReadingPane.svelte';
@@ -11,6 +12,8 @@
 
 {#if content.kind === 'home'}
 	<HomeView {paneIndex} />
+{:else if content.kind === 'library'}
+	<LibraryView {paneIndex} />
 {:else if content.kind === 'search'}
 	<SearchPane {paneIndex} query={content.query} />
 {:else if content.kind === 'results'}

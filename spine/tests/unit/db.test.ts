@@ -30,6 +30,7 @@ describe('db.initDb', () => {
 			'001_captures.sql',
 			'002_file_index.sql',
 			'003_capture_attachments.sql',
+			'004_capture_triage.sql',
 		]);
 		db.close();
 	});
@@ -80,7 +81,15 @@ describe('db migration table schemas', () => {
 			notnull: number;
 		}[];
 		const names = cols.map((c) => c.name).sort();
-		expect(names).toEqual(['captured_at', 'id', 'ingested_at', 'source', 'text']);
+		expect(names).toEqual([
+			'captured_at',
+			'id',
+			'ingested_at',
+			'source',
+			'text',
+			'triage_action',
+			'triaged_at',
+		]);
 		db.close();
 	});
 

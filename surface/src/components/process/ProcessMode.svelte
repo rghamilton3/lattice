@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { createQuery } from '@tanstack/svelte-query';
+	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
 	import { browser } from '$app/environment';
 	import { getWorkbenchContext, type TriageDecision } from '$lib/state/workbench.svelte';
 	import {
@@ -12,6 +12,7 @@
 	import Icon from '$components/icons/Icon.svelte';
 
 	const wb = getWorkbenchContext();
+	const queryClient = useQueryClient();
 	let now = $state(Date.now());
 	$effect(() => {
 		const t = setInterval(() => (now = Date.now()), 60_000);
@@ -24,9 +25,7 @@
 		enabled: browser
 	}));
 
-	const queue = $derived(
-		(capturesQuery.data ?? []).filter((c) => !wb.dismissedCaptureIds.includes(c.id)).slice(0, 10)
-	);
+	const queue = $derived((capturesQuery.data ?? []).slice(0, 10));
 
 	interface TriageSession {
 		index: number;
@@ -85,7 +84,9 @@
 	}
 
 	function exit() {
-		wb.exitTriage(session.decisions);
+		wb.exitTriage(session.decisions).then(() => {
+			queryClient.invalidateQueries({ queryKey: captureKeys.list(20) });
+		});
 	}
 
 	function handleKeydown(e: KeyboardEvent) {

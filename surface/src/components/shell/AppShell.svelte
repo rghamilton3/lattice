@@ -37,6 +37,12 @@
 					active={wb.view === 'search'}
 					onclick={() => onnav('search')}
 				/>
+				<NavBtn
+					label="Library"
+					icon="library"
+					active={wb.view === 'library'}
+					onclick={() => onnav('library')}
+				/>
 			</nav>
 		</div>
 

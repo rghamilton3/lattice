@@ -2,7 +2,13 @@
 	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
 	import { browser } from '$app/environment';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
-	import { captureKeys, fetchCaptures, triageCapture } from '$lib/api/captures';
+	import {
+		captureKeys,
+		fetchCaptures,
+		triageCapture,
+		TRIAGE_ACTION_LABEL
+	} from '$lib/api/captures';
+	import type { TriageAction } from '$lib/api/captures';
 	import { workingKeys, fetchWorkingList } from '$lib/api/working';
 	import type { Capture, DocRef } from '$lib/types';
 	import Icon from '$components/icons/Icon.svelte';
@@ -71,9 +77,7 @@
 	});
 
 	const captureCount = $derived(capturesQuery.data?.length ?? 0);
-	const visibleCaptures = $derived(
-		(capturesQuery.data ?? []).filter((c) => !wb.dismissedCaptureIds.includes(c.id))
-	);
+	const visibleCaptures = $derived(capturesQuery.data ?? []);
 	const workingDocs = $derived(workingQuery.data ?? []);
 	const last = $derived(workingDocs[0] ?? null);
 
@@ -89,18 +93,29 @@
 		wb.startTriage();
 	}
 
-	async function archiveAll() {
-		const ids = visibleCaptures.map((c) => c.id);
-		if (ids.length === 0) return;
-
-		const fresh = ids.filter((id) => !wb.dismissedCaptureIds.includes(id));
-		if (fresh.length > 0) {
-			wb.dismissedCaptureIds = [...wb.dismissedCaptureIds, ...fresh];
+	async function onTriage(id: number, action: TriageAction) {
+		queryClient.setQueryData(captureKeys.list(20), (old: Capture[] | undefined) =>
+			old ? old.filter((c) => c.id !== id) : []
+		);
+		wb.showToast(`${TRIAGE_ACTION_LABEL[action]} · capture #${id}`);
+		try {
+			await triageCapture(id, action);
+		} catch {
+			queryClient.invalidateQueries({ queryKey: captureKeys.list(20) });
+			wb.showToast(`Triage failed for capture #${id}`);
 		}
+	}
 
+	async function archiveAll() {
+		const ids = (capturesQuery.data ?? []).map((c) => c.id);
+		if (ids.length === 0) return;
+		queryClient.setQueryData(captureKeys.list(20), []);
 		const settled = await Promise.allSettled(ids.map((id) => triageCapture(id, 'archive')));
 		const failed = settled.filter((s) => s.status === 'rejected').length;
 		const ok = ids.length - failed;
+		if (failed > 0) {
+			queryClient.invalidateQueries({ queryKey: captureKeys.list(20) });
+		}
 		wb.showToast(failed > 0 ? `Archived ${ok}, ${failed} failed` : `Archived ${ok}`);
 	}
 </script>
@@ -166,12 +181,7 @@
 				{:else if capturesQuery.isError}
 					<div class="inbox-empty soft" style="color:var(--c-alarm)">couldn't load captures</div>
 				{:else}
-					<InboxList
-						captures={visibleCaptures}
-						{now}
-						onOpen={openCapture}
-						onTriage={(id, action) => wb.dismissCapture(id, action)}
-					/>
+					<InboxList captures={visibleCaptures} {now} onOpen={openCapture} {onTriage} />
 				{/if}
 				<div class="home-section-foot">
 					<button class="btn btn-ghost" onclick={archiveAll}>

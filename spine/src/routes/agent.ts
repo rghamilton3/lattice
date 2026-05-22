@@ -34,6 +34,8 @@ export const agentRoutes = (db: Database, { attachmentsDir }: AgentRoutesOptions
 					source: body.source,
 					captured_at: body.captured_at,
 					ingested_at: ingestedAt,
+					triaged_at: null,
+					triage_action: null,
 				});
 				return { id: row.id };
 			},

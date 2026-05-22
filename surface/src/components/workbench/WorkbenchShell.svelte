@@ -117,6 +117,7 @@
 	function handleNav(view: View) {
 		if (view === 'home') wb.openInPane(0, { kind: 'home' });
 		else if (view === 'search') wb.openInPane(0, { kind: 'search', query: '' });
+		else if (view === 'library') wb.openInPane(0, { kind: 'library' });
 	}
 </script>
 

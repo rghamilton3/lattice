@@ -45,7 +45,6 @@ describe('WorkbenchStore', () => {
 		a.posture = 'active';
 		a.focusMode = true;
 		a.vimMode = false;
-		a.dismissedCaptureIds = [1, 2, 3];
 		a.persist();
 
 		const b = new WorkbenchStore();
@@ -55,7 +54,6 @@ describe('WorkbenchStore', () => {
 		expect(b.posture).toBe('active');
 		expect(b.focusMode).toBe(true);
 		expect(b.vimMode).toBe(false);
-		expect(b.dismissedCaptureIds).toEqual([1, 2, 3]);
 	});
 
 	it('view is derived from panes[0].kind, not persisted', () => {
@@ -63,6 +61,8 @@ describe('WorkbenchStore', () => {
 		expect(a.view).toBe('home');
 		a.openInPane(0, { kind: 'search', query: '' });
 		expect(a.view).toBe('search');
+		a.openInPane(0, { kind: 'library' });
+		expect(a.view).toBe('library');
 		a.openInPane(0, { kind: 'doc', ref: { kind: 'working', slug: 'x' } });
 		expect(a.view).toBe('doc');
 		a.persist();
@@ -124,22 +124,19 @@ describe('WorkbenchStore', () => {
 		expect(wb.focusedPane).toBe(0);
 	});
 
-	it('startTriage takes over the overlay; exitTriage records dismissed ids', () => {
+	it('startTriage takes over the overlay; exitTriage fires API calls', async () => {
 		const wb = new WorkbenchStore();
 		wb.activeOverlay = 'capture';
 		wb.startTriage();
 		expect(wb.activeOverlay).toBe('triage');
 
-		wb.exitTriage([
+		await wb.exitTriage([
 			{ id: 10, action: 'keep' },
 			{ id: 11, action: 'archive' }
 		]);
 		expect(wb.activeOverlay).toBe('none');
-		expect(wb.dismissedCaptureIds).toEqual([10, 11]);
-
-		// exiting with already-dismissed ids should not duplicate
-		wb.exitTriage([{ id: 11, action: 'keep' }]);
-		expect(wb.dismissedCaptureIds).toEqual([10, 11]);
+		expect(triageMock).toHaveBeenCalledWith(10, 'keep');
+		expect(triageMock).toHaveBeenCalledWith(11, 'archive');
 	});
 
 	it('postureView reflects current posture', () => {
@@ -170,32 +167,27 @@ describe('WorkbenchStore', () => {
 	});
 
 	it('exitTriage surfaces a failure count when triageCapture rejects', async () => {
-		// Reject 2 of 5 calls — specifically ids 11 and 14.
 		triageMock.mockImplementation(async (id: number) => {
 			if (id === 11 || id === 14) throw new Error('boom');
 		});
 
 		const wb = new WorkbenchStore();
-		wb.exitTriage([
+		await wb.exitTriage([
 			{ id: 10, action: 'keep' },
 			{ id: 11, action: 'keep' },
 			{ id: 12, action: 'keep' },
 			{ id: 13, action: 'keep' },
 			{ id: 14, action: 'keep' }
 		]);
-
-		// allSettled resolves after a microtask; flush.
-		await vi.waitFor(() => expect(wb.toast?.msg).toMatch(/2 failed/));
 		expect(wb.toast?.msg).toBe('5 processed, 2 failed');
 	});
 
 	it('exitTriage shows plain success toast when all calls succeed', async () => {
 		const wb = new WorkbenchStore();
-		wb.exitTriage([
+		await wb.exitTriage([
 			{ id: 20, action: 'archive' },
 			{ id: 21, action: 'archive' }
 		]);
-
-		await vi.waitFor(() => expect(wb.toast?.msg).toBe('2 processed'));
+		expect(wb.toast?.msg).toBe('2 processed');
 	});
 });

@@ -60,6 +60,45 @@ jobs:
             lattice-tray-${{ matrix.target }}
             lattice-capture-${{ matrix.target }}
 
+  build-windows:
+    name: Build Windows (x86_64-pc-windows-msvc)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: agent
+          key: x86_64-pc-windows-msvc
+
+      - name: Build
+        run: cargo build --release --bin lattice-agent --bin lattice-tray-windows --bin lattice-capture
+
+      - name: Rename binaries
+        shell: pwsh
+        run: |
+          cp target/release/lattice-agent.exe         ../lattice-agent-x86_64-pc-windows-msvc.exe
+          cp target/release/lattice-tray-windows.exe  ../lattice-tray-x86_64-pc-windows-msvc.exe
+          cp target/release/lattice-capture.exe       ../lattice-capture-x86_64-pc-windows-msvc.exe
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lattice-agent-windows
+          path: |
+            lattice-agent-x86_64-pc-windows-msvc.exe
+            lattice-tray-x86_64-pc-windows-msvc.exe
+            lattice-capture-x86_64-pc-windows-msvc.exe
+
   build-config:
     name: Build lattice-config (x86_64 linux-gnu)
     runs-on: ubuntu-latest
@@ -68,9 +107,6 @@ jobs:
         working-directory: agent
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install GTK4 dev headers
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -95,7 +131,7 @@ jobs:
 
   release:
     name: Publish GitHub Release
-    needs: [build, build-config]
+    needs: [build, build-windows, build-config]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -110,7 +146,8 @@ jobs:
       - name: Stage extra release assets
         run: |
           cp agent/lattice-agent.service lattice-agent.service
-          cp agent/lattice-tray.service lattice-tray.service
+          cp agent/lattice-tray.service  lattice-tray.service
+          cp install.ps1                  install.ps1
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -123,6 +160,10 @@ jobs:
             lattice-tray-aarch64-unknown-linux-musl
             lattice-capture-x86_64-unknown-linux-musl
             lattice-capture-aarch64-unknown-linux-musl
+            lattice-agent-x86_64-pc-windows-msvc.exe
+            lattice-tray-x86_64-pc-windows-msvc.exe
+            lattice-capture-x86_64-pc-windows-msvc.exe
             lattice-config-x86_64-unknown-linux-gnu
             lattice-agent.service
             lattice-tray.service
+            install.ps1

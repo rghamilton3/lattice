@@ -86,7 +86,7 @@ pub fn load() -> Result<Config> {
         root.agent.machine_id
     };
 
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_owned());
+    let home = home_dir();
     let watch = root
         .agent
         .watch
@@ -112,9 +112,15 @@ pub fn load() -> Result<Config> {
 }
 
 pub fn config_path() -> PathBuf {
-    xdg_config_home().join("lattice").join("config.toml")
+    #[cfg(unix)]
+    return xdg_config_home().join("lattice").join("config.toml");
+    #[cfg(windows)]
+    return appdata_roaming().join("lattice").join("config.toml");
+    #[cfg(not(any(unix, windows)))]
+    PathBuf::from("config.toml")
 }
 
+#[cfg(unix)]
 fn xdg_config_home() -> PathBuf {
     if let Ok(v) = std::env::var("XDG_CONFIG_HOME") {
         return PathBuf::from(v);
@@ -123,8 +129,29 @@ fn xdg_config_home() -> PathBuf {
     PathBuf::from(home).join(".config")
 }
 
+#[cfg(windows)]
+fn appdata_roaming() -> PathBuf {
+    std::env::var("APPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(r"C:\Users\Default\AppData\Roaming"))
+}
+
+fn home_dir() -> String {
+    #[cfg(unix)]
+    return std::env::var("HOME").unwrap_or_else(|_| "/root".to_owned());
+    #[cfg(windows)]
+    return std::env::var("USERPROFILE").unwrap_or_else(|_| r"C:\Users\Default".to_owned());
+    #[cfg(not(any(unix, windows)))]
+    String::new()
+}
+
 fn hostname() -> String {
-    fs::read_to_string("/etc/hostname")
+    #[cfg(unix)]
+    return fs::read_to_string("/etc/hostname")
         .map(|s| s.trim().to_owned())
-        .unwrap_or_else(|_| "unknown-host".to_owned())
+        .unwrap_or_else(|_| "unknown-host".to_owned());
+    #[cfg(windows)]
+    return std::env::var("COMPUTERNAME").unwrap_or_else(|_| "unknown-host".to_owned());
+    #[cfg(not(any(unix, windows)))]
+    "unknown-host".to_owned()
 }

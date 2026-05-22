@@ -7,6 +7,10 @@ pub enum ScanState {
     Idle,
     Scanning,
     Error,
+    // Catch-all for forward-compatible deserialization in IPC clients.
+    // The agent never produces this variant; serializing it would yield "unknown".
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

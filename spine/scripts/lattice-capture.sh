@@ -47,8 +47,17 @@ fi
 
 if [[ $# -gt 0 ]]; then
   TEXT="$*"
-else
+elif [[ ! -t 0 ]]; then
   TEXT="$(cat)"
+elif command -v walker &>/dev/null; then
+  TEXT=$(walker --dmenu --inputonly --placeholder "Capture thought..." 2>/dev/null) || exit 0
+elif command -v zenity &>/dev/null; then
+  TEXT=$(zenity --entry --title="Lattice" --text="Capture:" 2>/dev/null) || exit 0
+elif command -v rofi &>/dev/null; then
+  TEXT=$(rofi -dmenu -p "Capture:" 2>/dev/null) || exit 0
+else
+  printf "Capture: " >&2
+  IFS= read -r TEXT || exit 0
 fi
 
 [[ -z "$TEXT" ]] && exit 0

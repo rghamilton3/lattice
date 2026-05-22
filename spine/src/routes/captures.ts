@@ -26,11 +26,12 @@ export const capturesRoutes = (db: Database) =>
       const stream = new ReadableStream({
         start(controller) {
           controller.enqueue(encoder.encode(": connected\n\n"));
-          // Keep-alive so Caddy's idle timeout doesn't silently drop the connection.
+          // Keep-alive so Caddy's idle_timeout (default 5 min) doesn't silently drop the connection.
           heartbeat = setInterval(() => {
             try {
               controller.enqueue(encoder.encode(": ping\n\n"));
-            } catch {
+            } catch (e) {
+              console.error("[sse] heartbeat enqueue failed:", e);
               clearInterval(heartbeat!);
               heartbeat = null;
               off?.();
@@ -42,8 +43,10 @@ export const capturesRoutes = (db: Database) =>
               controller.enqueue(
                 encoder.encode(`event: capture\ndata: ${JSON.stringify(capture)}\n\n`)
               );
-            } catch {
-              // Stream closed (ungraceful disconnect before cancel() fires).
+            } catch (e) {
+              // Controller closed if an emit races with stream teardown — cancel() hasn't removed the listener yet.
+              if (heartbeat !== null) console.error("[sse] capture enqueue failed:", e);
+              if (heartbeat !== null) { clearInterval(heartbeat); heartbeat = null; }
               off?.();
               off = null;
             }

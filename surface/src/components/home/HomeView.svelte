@@ -11,24 +11,42 @@
 	import Resurfaced from './Resurfaced.svelte';
 	import PostureToggle from './PostureToggle.svelte';
 	import { relTime } from '$lib/utils/relTime';
+	import { logError } from '$lib/utils/logError';
 
 	const { paneIndex }: { paneIndex: 0 | 1 } = $props();
 
 	const wb = getWorkbenchContext();
 	const queryClient = useQueryClient();
 
+	let connected = false;
 	$effect(() => {
 		if (!browser) return;
 		const sse = new EventSource('/api/captures/stream');
 		sse.addEventListener('capture', (e) => {
-			const capture = JSON.parse(e.data) as Capture;
-			queryClient.setQueryData(captureKeys.list(20), (old: Capture[] | undefined) => {
-				if (!old) return [capture];
-				if (old.some((c) => c.id === capture.id)) return old;
-				return [capture, ...old].slice(0, 20);
-			});
+			try {
+				const capture = JSON.parse(e.data) as Capture;
+				queryClient.setQueryData(captureKeys.list(20), (old: Capture[] | undefined) => {
+					if (!old) return [capture];
+					if (old.some((c) => c.id === capture.id)) return old;
+					return [capture, ...old].slice(0, 20);
+				});
+			} catch (err) {
+				console.error('[sse] malformed capture event:', err);
+			}
 		});
-		return () => sse.close();
+		sse.addEventListener('open', () => {
+			if (!connected) {
+				connected = true;
+				queryClient.invalidateQueries({ queryKey: captureKeys.list(20) });
+			}
+		});
+		sse.addEventListener('error', (e) => {
+			if (sse.readyState === EventSource.CLOSED) {
+				logError('sse:captures', e);
+				wb.showToast('Live updates disconnected — refresh to reconnect');
+			}
+		});
+		return () => { sse.close(); connected = false; };
 	});
 
 	const capturesQuery = createQuery(() => ({

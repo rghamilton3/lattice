@@ -1,6 +1,8 @@
 import { getContext, setContext } from 'svelte';
-import type { PaneContent } from '$lib/types';
+import type { PaneContent, SearchResult } from '$lib/types';
 import { triageCapture, TRIAGE_ACTION_LABEL, type TriageAction } from '$lib/api/captures';
+import { fetchSearch } from '$lib/api/search';
+import { ApiError } from '$lib/api/client';
 import { logError } from '$lib/utils/logError';
 import { env } from '$env/dynamic/public';
 
@@ -38,7 +40,13 @@ export interface TriageDecision {
 export interface Toast {
 	id: number;
 	msg: string;
+	onclick?: () => void;
 }
+
+export type DeepSearchState =
+	| { q: string; status: 'running' }
+	| { q: string; status: 'done'; results: SearchResult[] }
+	| { q: string; status: 'error'; error: string };
 
 interface PersistedSession {
 	theme?: Theme;
@@ -78,6 +86,7 @@ export class WorkbenchStore {
 		triage: flagFromEnv('PUBLIC_LATTICE_FEATURE_TRIAGE', true)
 	});
 	toast = $state<Toast | null>(null);
+	deepSearch = $state<DeepSearchState | null>(null);
 
 	isSplit = $derived(this.panes.length === 2);
 
@@ -213,14 +222,39 @@ export class WorkbenchStore {
 
 	// `background` toasts are suppressed in quiet posture — see postureView.
 	// User-initiated actions (capture, triage) leave it unset so they always fire.
-	showToast(msg: string, opts: { background?: boolean } = {}) {
+	showToast(msg: string, opts: { background?: boolean; onclick?: () => void } = {}) {
 		if (opts.background && !this.postureView.allowBackgroundToasts) return;
 		const id = ++this.toastSeq;
-		this.toast = { id, msg };
+		this.toast = { id, msg, onclick: opts.onclick };
 		if (this.toastTimer) clearTimeout(this.toastTimer);
+		// Clickable toasts stay longer so the user has time to act on them.
 		this.toastTimer = setTimeout(() => {
 			if (this.toast?.id === id) this.toast = null;
-		}, 2600);
+		}, opts.onclick ? 5000 : 2600);
+	}
+
+	async runDeepSearch(q: string) {
+		if (this.deepSearch?.status === 'running') return;
+		this.deepSearch = { q, status: 'running' };
+		try {
+			const data = await fetchSearch(q, true);
+			this.deepSearch = { q, status: 'done', results: data.results };
+			const count = data.results.length;
+			const label = count === 1 ? '1 result' : `${count} results`;
+			this.showToast(`Deep search: ${label} for "${q}"`, {
+				onclick: () => this.openInPane(0, { kind: 'search', query: q })
+			});
+		} catch (e) {
+			const httpStatus = e instanceof ApiError ? e.status : 0;
+			const detail = httpStatus >= 500 ? 'search index may be unavailable' : 'please try again';
+			this.deepSearch = { q, status: 'error', error: String(e) };
+			logError('deepSearch', e);
+			this.showToast(`Deep search failed for "${q}" — ${detail}`);
+		}
+	}
+
+	dismissToast() {
+		this.toast = null;
 	}
 }
 

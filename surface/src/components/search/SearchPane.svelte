@@ -83,12 +83,19 @@
 		rawResults.filter((r) => kindFilter.has(r.kind as Kind))
 	);
 
-	// "Recency-broken" should tie-break ties (|Δscore| < 0.02) by modified_at desc;
-	// but SearchResult has no modified_at yet — so we keep spine's order in that mode
-	// and only re-sort when the user explicitly asks for score-only.
-	// TODO(spine): switch to true tie-broken sort once SearchResult.modified_at exists.
+	// Scores within one bucket (0.02 wide) are treated as a tie; recency breaks it.
+	// Bucket comparison uses integer equality, keeping the comparator transitive.
+	const SCORE_TIE_BUCKET = 0.02;
+
 	const displayed = $derived<SearchResult[]>(
-		sort === 'score' ? [...filtered].sort((a, b) => b.score - a.score) : filtered
+		sort === 'score'
+			? [...filtered].sort((a, b) => b.score - a.score)
+			: [...filtered].sort((a, b) => {
+					const bucketA = Math.round(a.score / SCORE_TIE_BUCKET);
+					const bucketB = Math.round(b.score / SCORE_TIE_BUCKET);
+					if (bucketA !== bucketB) return bucketB - bucketA;
+					return b.modified_at.localeCompare(a.modified_at);
+				})
 	);
 </script>
 

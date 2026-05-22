@@ -2,7 +2,7 @@ import { createStore } from '@tobilu/qmd';
 import type { QMDStore } from '@tobilu/qmd';
 import type { Database } from 'bun:sqlite';
 import { join, dirname, basename, resolve } from 'path';
-import { mkdirSync, writeFileSync, existsSync, unlinkSync } from 'fs';
+import { existsSync, mkdirSync, statSync, unlinkSync, writeFileSync } from 'fs';
 import { workingDir } from './working';
 
 interface CaptureData {
@@ -21,6 +21,7 @@ export interface SearchResult {
 	kind: 'capture' | 'local-file' | 'working';
 	machine_id?: string;
 	slug?: string;
+	modified_at: string;
 }
 
 function dbDir(): string {
@@ -51,6 +52,7 @@ export function localFileToMarkdown(machineId: string, path: string, text: strin
 	return `---\nmachine_id: ${sanitize(machineId)}\npath: ${sanitize(path)}\n---\n\n${text}\n`;
 }
 
+let _db: Database | null = null;
 let _store: QMDStore | null = null;
 let _initFailed = false;
 let _indexFailures = 0;
@@ -59,6 +61,7 @@ let _indexLock: Promise<void> = Promise.resolve();
 
 /** @internal test-only — do not use from production code. */
 export function __resetSearchForTests(): void {
+	_db = null;
 	_store = null;
 	_initFailed = false;
 	_indexFailures = 0;
@@ -71,6 +74,7 @@ export function __getIndexFailuresForTests(): number {
 }
 
 export async function initSearch(db: Database): Promise<void> {
+	_db = db;
 	const captures = capturesDir();
 	const localFiles = localFilesDir();
 	const working = workingDir();
@@ -170,6 +174,10 @@ function mapResults(
 		displayPath: string;
 	}>,
 ): SearchResult[] {
+	const captureStmt = _db?.query('SELECT captured_at FROM captures WHERE id = ?');
+	const fileStmt = _db?.query(
+		'SELECT modified_at FROM file_index WHERE machine_id = ? AND hash = ?',
+	);
 	return hits.flatMap((r): SearchResult[] => {
 		const m = VIRTUAL_PATH.exec(r.file);
 		if (!m) return [];
@@ -177,6 +185,7 @@ function mapResults(
 		if (collection === 'captures') {
 			const id = parseInt(basename(relPath, '.md'), 10);
 			if (isNaN(id)) return [];
+			const captureRow = captureStmt?.get(id) as { captured_at: string } | null;
 			return [
 				{
 					id,
@@ -185,11 +194,18 @@ function mapResults(
 					body: r.body,
 					path: r.displayPath,
 					kind: 'capture' as const,
+					modified_at: captureRow?.captured_at ?? '',
 				},
 			];
 		}
 		if (collection === 'working') {
 			const slug = basename(relPath, '.md');
+			let modified_at = '';
+			try {
+				modified_at = statSync(join(workingDir(), `${slug}.md`)).mtime.toISOString();
+			} catch {
+				// file missing between index and search
+			}
 			return [
 				{
 					id: 0,
@@ -199,11 +215,15 @@ function mapResults(
 					path: r.displayPath,
 					kind: 'working' as const,
 					slug,
+					modified_at,
 				},
 			];
 		}
 		if (collection === 'local-files') {
-			const machine_id = relPath.split('/')[0];
+			const parts = relPath.split('/');
+			const machine_id = parts[0];
+			const hash = basename(parts[1] ?? '', '.md');
+			const fileRow = fileStmt?.get(machine_id, hash) as { modified_at: string } | null;
 			return [
 				{
 					id: 0,
@@ -213,6 +233,7 @@ function mapResults(
 					path: r.displayPath,
 					kind: 'local-file' as const,
 					machine_id,
+					modified_at: fileRow?.modified_at ?? '',
 				},
 			];
 		}

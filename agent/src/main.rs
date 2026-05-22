@@ -7,7 +7,9 @@ mod status;
 mod time;
 
 use anyhow::Result;
+use ipc::AgentCommand;
 use std::time::Duration;
+use tokio::sync::mpsc;
 use tracing::info;
 
 #[tokio::main]
@@ -42,12 +44,32 @@ async fn main() -> Result<()> {
 
     let status = status::new_shared();
 
-    // Serve status queries over the Unix socket in the background.
+    let (cmd_tx, mut cmd_rx) = mpsc::channel::<AgentCommand>(8);
     let ipc_status = status.clone();
-    tokio::spawn(async move { ipc::serve(ipc_status).await });
+    tokio::spawn(async move { ipc::serve(ipc_status, cmd_tx).await });
 
     loop {
         scan::run_pass(&cfg, &cache, &client, &status).await;
-        tokio::time::sleep(Duration::from_secs(cfg.poll_interval_minutes * 60)).await;
+
+        // Wait for either the poll interval to elapse or a reindex command to arrive.
+        // Multiple ForceReindex commands coalesce: we drain the channel before acting.
+        let sleep = tokio::time::sleep(Duration::from_secs(cfg.poll_interval_minutes * 60));
+        tokio::pin!(sleep);
+        let force_reindex = loop {
+            tokio::select! {
+                _ = &mut sleep => break false,
+                Some(cmd) = cmd_rx.recv() => match cmd {
+                    AgentCommand::ForceReindex => {
+                        while cmd_rx.try_recv().is_ok() {}
+                        break true;
+                    }
+                },
+            }
+        };
+
+        if force_reindex {
+            cache.clear_known_paths();
+            info!("reindex command: cleared known-path records, all watch paths will be fully re-indexed");
+        }
     }
 }

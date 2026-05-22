@@ -39,6 +39,22 @@ export interface Capture {
 	ingested_at: string;
 	triaged_at: string | null;
 	triage_action: string | null;
+	task_due_date: string | null;
+	task_priority: 'high' | 'medium' | 'low' | null;
+	task_notes: string | null;
+}
+
+export type TaskPriority = 'high' | 'medium' | 'low';
+
+export interface Task {
+	id: number;
+	text: string;
+	source: string;
+	captured_at: string;
+	task_due_date: string | null;
+	task_priority: TaskPriority | null;
+	task_notes: string | null;
+	task_completed_at: string | null;
 }
 
 export interface FileEntry {
@@ -88,7 +104,8 @@ export type PaneContent =
 	| { kind: 'results'; source: LateralSource }
 	| { kind: 'doc'; ref: DocRef }
 	| { kind: 'editor'; slug: string }
-	| { kind: 'library' };
+	| { kind: 'library' }
+	| { kind: 'tasks' };
 
 // ── Workbench ─────────────────────────────────────────────────────────────────
 

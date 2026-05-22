@@ -79,6 +79,8 @@
 		<path
 			d="M12 3v3M12 18v3M21 12h-3M6 12H3M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1M18.4 18.4l-2.1-2.1M7.7 7.7L5.6 5.6"
 		/>
+	{:else if name === 'checkbox'}
+		<rect x="3.5" y="3.5" width="17" height="17" rx="3" />
 	{:else if name === 'circle'}
 		<circle cx="12" cy="12" r="4" />
 	{:else if name === 'mic'}

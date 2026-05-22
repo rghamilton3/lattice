@@ -31,6 +31,9 @@ describe('db.initDb', () => {
 			'002_file_index.sql',
 			'003_capture_attachments.sql',
 			'004_capture_triage.sql',
+			'005_tasks.sql',
+			'006_task_completed_at.sql',
+			'007_agent_status.sql',
 		]);
 		db.close();
 	});
@@ -86,6 +89,10 @@ describe('db migration table schemas', () => {
 			'id',
 			'ingested_at',
 			'source',
+			'task_completed_at',
+			'task_due_date',
+			'task_notes',
+			'task_priority',
 			'text',
 			'triage_action',
 			'triaged_at',

@@ -18,8 +18,15 @@ const STORAGE_KEY = 'lattice.session';
 export type Theme = 'light' | 'dark' | 'sepia' | 'system';
 export type Density = 'compact' | 'comfortable' | 'spacious';
 export type Posture = 'quiet' | 'standard' | 'active';
-export type View = 'home' | 'search' | 'doc' | 'library';
-export type ActiveOverlay = 'none' | 'capture' | 'palette' | 'settings' | 'newDoc' | 'triage';
+export type View = 'home' | 'search' | 'doc' | 'library' | 'tasks';
+export type ActiveOverlay =
+	| 'none'
+	| 'capture'
+	| 'palette'
+	| 'settings'
+	| 'newDoc'
+	| 'triage'
+	| 'newTask';
 
 const THEMES: readonly Theme[] = ['light', 'dark', 'sepia', 'system'];
 const DENSITIES: readonly Density[] = ['compact', 'comfortable', 'spacious'];
@@ -95,6 +102,7 @@ export class WorkbenchStore {
 		if (kind === 'home') return 'home';
 		if (kind === 'search') return 'search';
 		if (kind === 'library') return 'library';
+		if (kind === 'tasks') return 'tasks';
 		return 'doc';
 	});
 

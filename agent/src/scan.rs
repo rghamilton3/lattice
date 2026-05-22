@@ -82,6 +82,47 @@ pub async fn run_pass(
     s.last_error_msg = last_err;
 }
 
+#[derive(Serialize)]
+struct StatusPushPayload<'a> {
+    machine_id: &'a str,
+    #[serde(flatten)]
+    status: crate::status::AgentStatus,
+}
+
+pub async fn push_status(cfg: &Config, client: &reqwest::Client, status: &SharedStatus) {
+    let snapshot = status
+        .read()
+        .unwrap_or_else(|e| {
+            error!(error = %e, "status lock poisoned — exiting");
+            std::process::exit(1)
+        })
+        .clone();
+
+    let payload = StatusPushPayload {
+        machine_id: &cfg.machine_id,
+        status: snapshot,
+    };
+
+    let url = format!("{}/api/agent/status", cfg.spine_url);
+    match client
+        .post(&url)
+        .bearer_auth(&cfg.agent_token)
+        .json(&payload)
+        .send()
+        .await
+    {
+        Ok(r) if r.status().is_success() => {
+            debug!("pushed agent status to spine");
+        }
+        Ok(r) => {
+            warn!(status = %r.status(), "spine rejected agent status push");
+        }
+        Err(e) => {
+            warn!(error = %e, "failed to push agent status to spine");
+        }
+    }
+}
+
 async fn scan_watch(
     cfg: &Config,
     cache: &Cache,

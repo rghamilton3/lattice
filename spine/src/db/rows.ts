@@ -10,6 +10,10 @@ export interface CaptureRow {
 	ingested_at: string;
 	triaged_at: string | null;
 	triage_action: string | null;
+	task_due_date: string | null;
+	task_priority: string | null;
+	task_notes: string | null;
+	task_completed_at: string | null;
 }
 
 export interface FileIndexRow {
@@ -22,6 +26,18 @@ export interface FileIndexRow {
 	modified_at: string;
 	size_bytes: number;
 	indexed_at: string;
+}
+
+export interface AgentStatusRow {
+	machine_id: string;
+	state: string;
+	last_scan_at: string | null;
+	last_indexed: number;
+	last_skipped: number;
+	last_errors: number;
+	spine_ok: number;
+	last_error_msg: string | null;
+	reported_at: string;
 }
 
 export interface CaptureAttachmentRow {

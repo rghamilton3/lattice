@@ -221,6 +221,23 @@ impl eframe::App for ConfigApp {
         let mut save_clicked = false;
         let mut cancel_clicked = false;
 
+        // Button row must be reserved before CentralPanel so ScrollArea doesn't
+        // consume all vertical space and push the buttons off screen.
+        egui::TopBottomPanel::bottom("button_row").show(ctx, |ui| {
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Save").clicked() {
+                        save_clicked = true;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        cancel_clicked = true;
+                    }
+                });
+            });
+            ui.add_space(4.0);
+        });
+
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 // Spine
@@ -330,18 +347,6 @@ impl eframe::App for ConfigApp {
                         }
                         ui.label("Clear the file cache and re-upload all indexed files to Spine.");
                     });
-                });
-            });
-
-            ui.separator();
-            ui.horizontal(|ui| {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("Save").clicked() {
-                        save_clicked = true;
-                    }
-                    if ui.button("Cancel").clicked() {
-                        cancel_clicked = true;
-                    }
                 });
             });
         });

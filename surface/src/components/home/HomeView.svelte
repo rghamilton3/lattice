@@ -2,7 +2,12 @@
 	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
 	import { browser } from '$app/environment';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
-	import { captureKeys, fetchCaptures, triageCapture, TRIAGE_ACTION_LABEL } from '$lib/api/captures';
+	import {
+		captureKeys,
+		fetchCaptures,
+		triageCapture,
+		TRIAGE_ACTION_LABEL
+	} from '$lib/api/captures';
 	import type { TriageAction } from '$lib/api/captures';
 	import { workingKeys, fetchWorkingList } from '$lib/api/working';
 	import type { Capture, DocRef } from '$lib/types';
@@ -176,12 +181,7 @@
 				{:else if capturesQuery.isError}
 					<div class="inbox-empty soft" style="color:var(--c-alarm)">couldn't load captures</div>
 				{:else}
-					<InboxList
-						captures={visibleCaptures}
-						{now}
-						onOpen={openCapture}
-						{onTriage}
-					/>
+					<InboxList captures={visibleCaptures} {now} onOpen={openCapture} {onTriage} />
 				{/if}
 				<div class="home-section-foot">
 					<button class="btn btn-ghost" onclick={archiveAll}>

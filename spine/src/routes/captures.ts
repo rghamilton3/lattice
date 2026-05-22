@@ -141,6 +141,8 @@ export const capturesRoutes = (db: Database) =>
 					source: body.source,
 					captured_at: now,
 					ingested_at: now,
+					triaged_at: null,
+					triage_action: null,
 				});
 				return { id: row.id };
 			},

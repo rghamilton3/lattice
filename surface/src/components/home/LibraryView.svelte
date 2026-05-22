@@ -80,7 +80,9 @@
 								<span>{relTime(c.captured_at, now)}</span>
 								{#if c.triage_action}
 									<span>·</span>
-									<span class="chip chip-triage">{ACTION_LABEL[c.triage_action] ?? c.triage_action}</span>
+									<span class="chip chip-triage"
+										>{ACTION_LABEL[c.triage_action] ?? c.triage_action}</span
+									>
 								{/if}
 							</div>
 						</div>

@@ -7,14 +7,14 @@
 	import NavBtn from './NavBtn.svelte';
 	import { fetchStatus, statusKeys } from '$lib/api/status';
 	import { relTime } from '$lib/utils/relTime';
+	import CommandPalette from '$components/overlays/CommandPalette.svelte';
 
 	type Props = {
 		oncapture: () => void;
-		oncommand: () => void;
 		onnav: (view: View) => void;
 		children: Snippet;
 	};
-	let { oncapture, oncommand, onnav, children }: Props = $props();
+	let { oncapture, onnav, children }: Props = $props();
 
 	const wb = getWorkbenchContext();
 
@@ -148,7 +148,15 @@
 		</div>
 
 		<div class="toolbar-center">
-			<button class="palette-button" title="Command palette" onclick={oncommand}>
+			<button
+				class="palette-button"
+				title="Command palette"
+				aria-expanded={wb.activeOverlay === 'palette'}
+				onclick={(e) => {
+					e.stopPropagation();
+					wb.activeOverlay = wb.activeOverlay === 'palette' ? 'none' : 'palette';
+				}}
+			>
 				<Icon name="search" size={14} />
 				<span class="palette-button-label">Find anything</span>
 				<span class="palette-kbd">
@@ -156,6 +164,9 @@
 					<span class="kbd">K</span>
 				</span>
 			</button>
+			{#if wb.activeOverlay === 'palette'}
+				<CommandPalette />
+			{/if}
 		</div>
 
 		<div class="row" style="gap:6px">

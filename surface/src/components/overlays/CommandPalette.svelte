@@ -152,6 +152,10 @@
 		}
 	}
 
+	function handleDocumentClick(e: MouseEvent) {
+		if (modal && !modal.contains(e.target as Node)) close();
+	}
+
 	function trapTab(e: KeyboardEvent) {
 		if (e.key !== 'Tab' || !modal) return;
 		const focusables = modal.querySelectorAll<HTMLElement>(
@@ -176,76 +180,75 @@
 	}
 </script>
 
-<div class="overlay" onclick={close} role="presentation">
-	<div
-		bind:this={modal}
-		class="palette soft-in"
-		role="dialog"
-		aria-modal="true"
-		aria-label="Command palette"
-		tabindex="-1"
-		onclick={(e) => e.stopPropagation()}
-		onkeydown={trapTab}
-	>
-		<div class="palette-input-row">
-			<Icon name="search" size={14} />
-			<input
-				bind:this={input}
-				bind:value={q}
-				class="palette-input"
-				placeholder="Type an action or a phrase from a note…"
-				oninput={() => (active = 0)}
-				onkeydown={onInputKey}
-			/>
-			<button class="btn btn-ghost" onclick={close} aria-label="Close">
-				<Icon name="x" size={14} />
-			</button>
-		</div>
-		<div class="palette-list">
-			{#if items.length === 0}
-				<div class="palette-empty soft">
-					No matches — but you can still
-					<button
-						class="link"
-						onclick={() => {
-							wb.activeOverlay = 'capture';
-						}}
-					>
-						capture this thought
-					</button>
-					.
-				</div>
-			{:else}
-				{#each items as it, i (it.id)}
-					<button
-						class="palette-row"
-						class:is-active={i === active}
-						onmouseenter={() => (active = i)}
-						onclick={() => {
-							it.run();
-							close();
-						}}
-					>
-						<span class={chipClass(it.kind)}>{it.kind}</span>
-						<span class="palette-label">{it.label}</span>
-						<span class="palette-hint faint">{it.hint}</span>
-						{#if it.kbd.length > 0}
-							<span class="palette-kbd-row mono">
-								{#each it.kbd as k, ki (ki)}
-									<span class="kbd">{k}</span>
-								{/each}
-							</span>
-						{:else}
-							<span></span>
-						{/if}
-					</button>
-				{/each}
-			{/if}
-		</div>
-		<div class="palette-foot faint">
-			<span><span class="kbd">↑</span> <span class="kbd">↓</span> navigate</span>
-			<span><span class="kbd">↵</span> open</span>
-			<span><span class="kbd">esc</span> close</span>
-		</div>
+<svelte:document onclick={handleDocumentClick} />
+<div
+	bind:this={modal}
+	class="palette soft-in"
+	role="dialog"
+	aria-modal="true"
+	aria-label="Command palette"
+	tabindex="-1"
+	onclick={(e) => e.stopPropagation()}
+	onkeydown={trapTab}
+>
+	<div class="palette-input-row">
+		<Icon name="search" size={14} />
+		<input
+			bind:this={input}
+			bind:value={q}
+			class="palette-input"
+			placeholder="Type an action or a phrase from a note…"
+			oninput={() => (active = 0)}
+			onkeydown={onInputKey}
+		/>
+		<button class="btn btn-ghost" onclick={close} aria-label="Close">
+			<Icon name="x" size={14} />
+		</button>
+	</div>
+	<div class="palette-list">
+		{#if items.length === 0}
+			<div class="palette-empty soft">
+				No matches — but you can still
+				<button
+					class="link"
+					onclick={() => {
+						wb.activeOverlay = 'capture';
+					}}
+				>
+					capture this thought
+				</button>
+				.
+			</div>
+		{:else}
+			{#each items as it, i (it.id)}
+				<button
+					class="palette-row"
+					class:is-active={i === active}
+					onmouseenter={() => (active = i)}
+					onclick={() => {
+						it.run();
+						close();
+					}}
+				>
+					<span class={chipClass(it.kind)}>{it.kind}</span>
+					<span class="palette-label">{it.label}</span>
+					<span class="palette-hint faint">{it.hint}</span>
+					{#if it.kbd.length > 0}
+						<span class="palette-kbd-row mono">
+							{#each it.kbd as k, ki (ki)}
+								<span class="kbd">{k}</span>
+							{/each}
+						</span>
+					{:else}
+						<span></span>
+					{/if}
+				</button>
+			{/each}
+		{/if}
+	</div>
+	<div class="palette-foot faint">
+		<span><span class="kbd">↑</span> <span class="kbd">↓</span> navigate</span>
+		<span><span class="kbd">↵</span> open</span>
+		<span><span class="kbd">esc</span> close</span>
 	</div>
 </div>

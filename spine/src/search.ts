@@ -158,6 +158,9 @@ export function refreshIndex(): void {
 		});
 }
 
+// QMD returns `file` as a virtual path: qmd://<collection>/<relative-path>.
+const VIRTUAL_PATH = /^qmd:\/\/([^/]+)\/(.+)$/;
+
 function mapResults(
 	hits: Array<{
 		file: string;
@@ -166,13 +169,13 @@ function mapResults(
 		body: string;
 		displayPath: string;
 	}>,
-	captures: string,
-	working: string,
-	localFiles: string,
 ): SearchResult[] {
 	return hits.flatMap((r): SearchResult[] => {
-		if (r.file.startsWith(captures + '/')) {
-			const id = parseInt(basename(r.file, '.md'), 10);
+		const m = VIRTUAL_PATH.exec(r.file);
+		if (!m) return [];
+		const [, collection, relPath] = m;
+		if (collection === 'captures') {
+			const id = parseInt(basename(relPath, '.md'), 10);
 			if (isNaN(id)) return [];
 			return [
 				{
@@ -185,8 +188,8 @@ function mapResults(
 				},
 			];
 		}
-		if (r.file.startsWith(working + '/')) {
-			const slug = basename(r.file, '.md');
+		if (collection === 'working') {
+			const slug = basename(relPath, '.md');
 			return [
 				{
 					id: 0,
@@ -199,8 +202,8 @@ function mapResults(
 				},
 			];
 		}
-		if (r.file.startsWith(localFiles + '/')) {
-			const machine_id = r.file.slice(localFiles.length + 1).split('/')[0];
+		if (collection === 'local-files') {
+			const machine_id = relPath.split('/')[0];
 			return [
 				{
 					id: 0,
@@ -231,7 +234,7 @@ export async function search(q: string): Promise<SearchResult[]> {
 		rerank: false,
 		limit: 20,
 	});
-	return mapResults(results, capturesDir(), workingDir(), localFilesDir());
+	return mapResults(results);
 }
 
 export async function searchDeep(q: string): Promise<SearchResult[]> {
@@ -242,7 +245,7 @@ export async function searchDeep(q: string): Promise<SearchResult[]> {
 	}
 	try {
 		const results = await _store.search({ query: q, limit: 20 });
-		return mapResults(results, capturesDir(), workingDir(), localFilesDir());
+		return mapResults(results);
 	} catch (e) {
 		console.error('[qmd] searchDeep error:', e);
 		throw e;

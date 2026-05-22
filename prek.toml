@@ -44,9 +44,8 @@ pass_filenames = false
 [[repos.hooks]]
 id = "cargo-clippy"
 name = "cargo clippy"
-entry = "cargo clippy --manifest-path agent/Cargo.toml"
+entry = "cargo clippy --manifest-path agent/Cargo.toml -- -D warnings"
 language = "system"
-env = { RUSTFLAGS = "-D warnings" }
 files = "^agent/"
 pass_filenames = false
 

@@ -2,11 +2,11 @@ use crate::cache::Cache;
 use crate::config::{Config, WatchEntry};
 use crate::extract;
 use crate::status::{ScanState, SharedStatus};
+use crate::time::{chrono_iso, now_iso};
 use anyhow::Result;
 use mime_guess::MimeGuess;
 use serde::Serialize;
 use std::path::Path;
-use crate::time::{chrono_iso, now_iso};
 use std::time::UNIX_EPOCH;
 use tracing::{debug, error, info, warn};
 use walkdir::WalkDir;
@@ -28,7 +28,12 @@ enum ProcessResult {
     SpineFail(String),
 }
 
-pub async fn run_pass(cfg: &Config, cache: &Cache, client: &reqwest::Client, status: &SharedStatus) {
+pub async fn run_pass(
+    cfg: &Config,
+    cache: &Cache,
+    client: &reqwest::Client,
+    status: &SharedStatus,
+) {
     {
         let mut s = status.write().unwrap_or_else(|e| {
             error!(error = %e, "status lock poisoned — exiting");
@@ -188,26 +193,24 @@ async fn process_file(
     let path_str = path.to_string_lossy();
 
     // Fast path: if mtime and size match the cache, skip hashing entirely.
-    if !force {
-        if let Some(cached) = cache.get(&path_str)
-            && cached.mtime_secs == mtime_secs
-            && cached.size_bytes == size_bytes as i64
-        {
-            return Ok(ProcessResult::Skipped);
-        }
+    if !force
+        && let Some(cached) = cache.get(&path_str)
+        && cached.mtime_secs == mtime_secs
+        && cached.size_bytes == size_bytes as i64
+    {
+        return Ok(ProcessResult::Skipped);
     }
 
     let content = std::fs::read(path)?;
     let hash = blake3::hash(&content).to_hex().to_string();
 
     // If the hash is unchanged (mtime drift, etc.), update cache metadata and skip.
-    if !force {
-        if let Some(cached) = cache.get(&path_str)
-            && cached.hash == hash
-        {
-            cache.upsert(&path_str, mtime_secs, size_bytes as i64, &hash);
-            return Ok(ProcessResult::Skipped);
-        }
+    if !force
+        && let Some(cached) = cache.get(&path_str)
+        && cached.hash == hash
+    {
+        cache.upsert(&path_str, mtime_secs, size_bytes as i64, &hash);
+        return Ok(ProcessResult::Skipped);
     }
 
     let mime = MimeGuess::from_path(path)
@@ -279,7 +282,13 @@ mod tests {
     #[test]
     fn glob_matches_root_depth() {
         let pat = glob::Pattern::new("**/*.md").unwrap();
-        assert!(pat.matches("file.md"), "**/*.md should match file.md at root depth");
-        assert!(pat.matches("sub/file.md"), "**/*.md should match sub/file.md");
+        assert!(
+            pat.matches("file.md"),
+            "**/*.md should match file.md at root depth"
+        );
+        assert!(
+            pat.matches("sub/file.md"),
+            "**/*.md should match sub/file.md"
+        );
     }
 }

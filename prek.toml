@@ -1,0 +1,82 @@
+# Exclude third-party bundled agent docs and build artefacts from all hooks.
+[exclude]
+glob = "spine/.agents/**"
+
+
+[[repos]]
+repo = "builtin"
+
+[[repos.hooks]]
+id = "trailing-whitespace"
+
+[[repos.hooks]]
+id = "end-of-file-fixer"
+
+[[repos.hooks]]
+id = "check-yaml"
+
+[[repos.hooks]]
+id = "check-toml"
+
+[[repos.hooks]]
+id = "check-json"
+# tsconfig.json files use JSONC (comments allowed), not strict JSON.
+exclude = "tsconfig"
+
+[[repos.hooks]]
+id = "check-merge-conflict"
+
+[[repos.hooks]]
+id = "detect-private-key"
+
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "cargo-fmt"
+name = "cargo fmt"
+entry = "cargo fmt --manifest-path agent/Cargo.toml --check"
+language = "system"
+files = "^agent/"
+pass_filenames = false
+
+[[repos.hooks]]
+id = "cargo-clippy"
+name = "cargo clippy"
+entry = "cargo clippy --manifest-path agent/Cargo.toml -- -D warnings"
+language = "system"
+files = "^agent/"
+pass_filenames = false
+
+[[repos.hooks]]
+id = "prettier-spine"
+name = "prettier (spine)"
+entry = "bun run --cwd spine format:check"
+language = "system"
+files = "^spine/"
+pass_filenames = false
+
+[[repos.hooks]]
+id = "oxlint-spine"
+name = "oxlint (spine)"
+entry = "bun run --cwd spine lint"
+language = "system"
+files = "^spine/.*\\.ts$"
+pass_filenames = false
+
+[[repos.hooks]]
+id = "prettier-surface"
+name = "prettier (surface)"
+entry = "bun run --cwd surface format:check"
+language = "system"
+files = "^surface/"
+pass_filenames = false
+
+[[repos.hooks]]
+id = "eslint-surface"
+name = "eslint (surface)"
+entry = "bun run --cwd surface eslint ."
+language = "system"
+files = "^surface/.*\\.(ts|svelte)$"
+pass_filenames = false

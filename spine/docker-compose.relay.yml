@@ -12,7 +12,7 @@ services:
     container_name: lattice-relay
     restart: unless-stopped
     network_mode: host
-    command: ["bun", "run", "src/signal-relay.ts"]
+    command: ['bun', 'run', 'src/signal-relay.ts']
     environment:
       LATTICE_AGENT_TOKEN: ${LATTICE_AGENT_TOKEN:?LATTICE_AGENT_TOKEN is required}
       SIGNAL_PHONE_NUMBER: ${SIGNAL_PHONE_NUMBER:?SIGNAL_PHONE_NUMBER is required}

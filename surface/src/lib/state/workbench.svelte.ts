@@ -228,9 +228,12 @@ export class WorkbenchStore {
 		this.toast = { id, msg, onclick: opts.onclick };
 		if (this.toastTimer) clearTimeout(this.toastTimer);
 		// Clickable toasts stay longer so the user has time to act on them.
-		this.toastTimer = setTimeout(() => {
-			if (this.toast?.id === id) this.toast = null;
-		}, opts.onclick ? 5000 : 2600);
+		this.toastTimer = setTimeout(
+			() => {
+				if (this.toast?.id === id) this.toast = null;
+			},
+			opts.onclick ? 5000 : 2600
+		);
 	}
 
 	async runDeepSearch(q: string) {

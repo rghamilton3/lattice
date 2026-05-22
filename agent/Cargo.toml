@@ -42,4 +42,3 @@ required-features = ["config-ui"]
 [features]
 default = []
 config-ui = ["dep:gtk4"]
-

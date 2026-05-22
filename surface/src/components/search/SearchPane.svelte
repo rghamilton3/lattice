@@ -75,7 +75,9 @@
 
 	// Show deep results when available for this query, fast results otherwise.
 	const deepResults = $derived(deepState?.status === 'done' ? deepState.results : []);
-	const rawResults = $derived<SearchResult[]>(deepDone ? deepResults : (searchQuery.data?.results ?? []));
+	const rawResults = $derived<SearchResult[]>(
+		deepDone ? deepResults : (searchQuery.data?.results ?? [])
+	);
 
 	const filtered = $derived<SearchResult[]>(
 		rawResults.filter((r) => kindFilter.has(r.kind as Kind))
@@ -158,7 +160,9 @@
 					<ResultRow {paneIndex} {result} />
 				{/each}
 				<div class="results-foot faint" style="font-size:12px">
-					{deepDone ? 'Deep search — LLM expanded and reranked.' : 'Most recent first. "similar / mentions / nearby" live inside each opened result.'}
+					{deepDone
+						? 'Deep search — LLM expanded and reranked.'
+						: 'Most recent first. "similar / mentions / nearby" live inside each opened result.'}
 				</div>
 				{#if !deepState}
 					<div style="padding: 12px 0 4px">

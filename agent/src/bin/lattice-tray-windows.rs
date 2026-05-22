@@ -103,27 +103,27 @@ struct TrayMenu {
 
 #[cfg(windows)]
 fn build_tray() -> (TrayIcon, TrayMenu) {
-    let status_item = MenuItem::new("Agent stopped", false, None::<&str>);
-    let spine_item = MenuItem::new("", false, None::<&str>);
-    let start_item = MenuItem::new("Start Agent", true, None::<&str>);
-    let stop_item = MenuItem::new("Stop Agent", false, None::<&str>);
-    let restart_item = MenuItem::new("Restart Agent", false, None::<&str>);
-    let capture_item = MenuItem::new("Capture…", true, None::<&str>);
-    let configure_item = MenuItem::new("Configure…", true, None::<&str>);
-    let exit_item = MenuItem::new("Stop Agent & Exit", true, None::<&str>);
+    let status_item = MenuItem::new("Agent stopped", false, None);
+    let spine_item = MenuItem::new("", false, None);
+    let start_item = MenuItem::new("Start Agent", true, None);
+    let stop_item = MenuItem::new("Stop Agent", false, None);
+    let restart_item = MenuItem::new("Restart Agent", false, None);
+    let capture_item = MenuItem::new("Capture…", true, None);
+    let configure_item = MenuItem::new("Configure…", true, None);
+    let exit_item = MenuItem::new("Stop Agent & Exit", true, None);
 
     let menu = Menu::new();
     let _ = menu.append_items(&[
         &status_item as &dyn IsMenuItem,
         &spine_item,
-        &PredefinedMenuItem::separator(None::<&str>),
+        &PredefinedMenuItem::separator(),
         &start_item,
         &stop_item,
         &restart_item,
-        &PredefinedMenuItem::separator(None::<&str>),
+        &PredefinedMenuItem::separator(),
         &capture_item,
         &configure_item,
-        &PredefinedMenuItem::separator(None::<&str>),
+        &PredefinedMenuItem::separator(),
         &exit_item,
     ]);
 

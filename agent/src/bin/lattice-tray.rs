@@ -2,8 +2,11 @@
 //!
 //! Controls the lattice-agent systemd user service and displays its status via
 //! a StatusNotifierItem tray icon (compatible with waybar's tray module).
+//! All ksni code is gated behind cfg(unix); a stub main is compiled on other platforms.
 
+#[cfg(unix)]
 use ksni::blocking::TrayMethods;
+#[cfg(unix)]
 use ksni::menu::*;
 use lattice_agent::format::format_status_line;
 use lattice_agent::icon::{color_for, lattice_icon_argb32};
@@ -12,6 +15,7 @@ use std::time::Duration;
 
 // ── Tray state ────────────────────────────────────────────────────────────────
 
+#[cfg(unix)]
 #[derive(Debug)]
 struct LatticeTray {
     running: bool,
@@ -22,6 +26,7 @@ struct LatticeTray {
     icon_rgb: [u8; 3],
 }
 
+#[cfg(unix)]
 impl Default for LatticeTray {
     fn default() -> Self {
         use lattice_agent::icon::COLOR_STOPPED;
@@ -36,6 +41,7 @@ impl Default for LatticeTray {
     }
 }
 
+#[cfg(unix)]
 impl ksni::Tray for LatticeTray {
     fn id(&self) -> String {
         "lattice-agent".into()
@@ -228,8 +234,9 @@ fn service_control(op: &str) {
         .spawn();
 }
 
-// ── Entry point ───────────────────────────────────────────────────────────────
+// ── Entry points ──────────────────────────────────────────────────────────────
 
+#[cfg(unix)]
 fn main() {
     tracing_subscriber::fmt::init();
     let handle = LatticeTray::default()
@@ -284,4 +291,10 @@ fn main() {
 
         std::thread::sleep(Duration::from_secs(30));
     }
+}
+
+#[cfg(not(unix))]
+fn main() {
+    eprintln!("lattice-tray only runs on Linux (requires D-Bus / ksni).");
+    std::process::exit(1);
 }

@@ -239,7 +239,8 @@
 									aria-label="Mark done"
 									onclick={() => doneTask(task)}
 								>
-									<Icon name="circle" size={13} />
+									<Icon name="checkbox" size={15} class="home-task-check-empty" />
+									<Icon name="task" size={15} class="home-task-check-done" />
 								</button>
 								<button
 									class="home-task-body"

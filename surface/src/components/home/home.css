@@ -373,6 +373,18 @@
 	color: var(--c-ok);
 }
 
+.home-task-check-done {
+	display: none;
+}
+
+.home-task-check:hover .home-task-check-empty {
+	display: none;
+}
+
+.home-task-check:hover .home-task-check-done {
+	display: block;
+}
+
 .home-task-body {
 	flex: 1;
 	min-width: 0;

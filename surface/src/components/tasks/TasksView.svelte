@@ -112,7 +112,8 @@
 								aria-label="Mark done"
 								onclick={() => done(task)}
 							>
-								<Icon name="circle" size={14} />
+								<Icon name="checkbox" size={16} class="task-check-empty" />
+								<Icon name="task" size={16} class="task-check-done" />
 							</button>
 
 							<button class="task-body" onclick={() => expand(task)}>
@@ -250,7 +251,7 @@
 
 	.task-check {
 		flex-shrink: 0;
-		padding: 3px;
+		padding: 2px;
 		margin-top: 1px;
 		color: var(--text-faint);
 		border-radius: var(--radius-sm);
@@ -259,6 +260,18 @@
 
 	.task-check:hover {
 		color: var(--c-ok);
+	}
+
+	.task-check :global(.task-check-done) {
+		display: none;
+	}
+
+	.task-check:hover :global(.task-check-empty) {
+		display: none;
+	}
+
+	.task-check:hover :global(.task-check-done) {
+		display: block;
 	}
 
 	.task-body {

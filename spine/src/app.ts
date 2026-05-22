@@ -29,6 +29,7 @@ export function buildApp(deps: AppDeps) {
 
 	return new Elysia()
 		.get('/ping', () => ({ ok: true }))
+		.get('/favicon.ico', ({ redirect }) => redirect('/favicon.svg', 302))
 		.use(surface)
 		.guard({ beforeHandle: authentikBeforeHandle({ allowHttp, devUser }) }, (app) =>
 			app

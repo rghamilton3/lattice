@@ -4,7 +4,6 @@
 	import '$components/home/home.css';
 	import '$components/search/search.css';
 	import '$components/process/process.css';
-	import favicon from '$lib/assets/favicon.svg';
 	import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
 	import { browser } from '$app/environment';
 	import { WorkbenchStore, setWorkbenchContext } from '$lib/state/workbench.svelte';
@@ -50,7 +49,7 @@
 	});
 </script>
 
-<svelte:head><link rel="icon" href={favicon} /></svelte:head>
+<svelte:head><link rel="icon" href="/favicon.svg" type="image/svg+xml" /></svelte:head>
 
 <QueryClientProvider client={queryClient}>
 	{@render children()}

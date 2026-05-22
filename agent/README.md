@@ -1,5 +1,10 @@
 # lattice-agent
 
+<img src="../surface/static/favicon.svg" width="48" alt="Lattice icon">
+
+[![CI lattice-agent](https://github.com/rghamilton3/lattice/actions/workflows/agent-ci.yml/badge.svg)](https://github.com/rghamilton3/lattice/actions/workflows/agent-ci.yml)
+[![Release lattice-agent](https://github.com/rghamilton3/lattice/actions/workflows/agent-release.yml/badge.svg)](https://github.com/rghamilton3/lattice/actions/workflows/agent-release.yml)
+
 Local file indexer for the Lattice knowledge system. Polls configured directories, extracts
 text, hashes files, and posts changed content to the spine for embedding and search.
 

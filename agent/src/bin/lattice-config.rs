@@ -11,11 +11,59 @@ use gtk4::{
 };
 use lattice_agent::config::config_path;
 use std::cell::{Cell, RefCell};
+use std::io::{BufRead, BufReader, Write};
+use std::os::unix::net::UnixStream;
+use std::path::PathBuf;
 use std::rc::Rc;
+use std::time::Duration;
 
 const APP_ID: &str = "com.rghsoftware.lattice.config";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+fn socket_path() -> PathBuf {
+    if let Ok(dir) = std::env::var("XDG_RUNTIME_DIR") {
+        return PathBuf::from(dir).join("lattice-agent.sock");
+    }
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_owned());
+    PathBuf::from(home)
+        .join(".local")
+        .join("share")
+        .join("lattice")
+        .join("agent.sock")
+}
+
+/// Sends "reindex" over the agent IPC socket. Returns Ok(()) on success or an
+/// error string describing what went wrong (agent not running, IPC error, etc.).
+fn send_reindex() -> Result<(), String> {
+    let path = socket_path();
+    let mut stream = UnixStream::connect(&path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            "The agent is not running. Start it first.".to_owned()
+        } else {
+            format!("Could not connect to agent: {e}")
+        }
+    })?;
+    stream
+        .set_write_timeout(Some(Duration::from_secs(3)))
+        .map_err(|e| e.to_string())?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(3)))
+        .map_err(|e| e.to_string())?;
+    stream
+        .write_all(b"reindex\n")
+        .map_err(|e| format!("Write failed: {e}"))?;
+    let mut reader = BufReader::new(&stream);
+    let mut line = String::new();
+    reader
+        .read_line(&mut line)
+        .map_err(|e| format!("Read failed: {e}"))?;
+    if line.contains("\"ok\"") {
+        Ok(())
+    } else {
+        Err(format!("Agent returned an error: {}", line.trim()))
+    }
+}
 
 fn systemctl_restart(parent: &ApplicationWindow) -> bool {
     match std::process::Command::new("systemctl")
@@ -175,11 +223,11 @@ fn prompt_restart(parent: &ApplicationWindow) {
     dialog.present();
 }
 
-fn show_error(parent: &ApplicationWindow, msg: &str) {
+fn show_dialog(parent: &ApplicationWindow, title: &str, msg: &str) {
     let dialog = gtk4::Window::builder()
         .transient_for(parent)
         .modal(true)
-        .title("Error")
+        .title(title)
         .default_width(380)
         .resizable(false)
         .build();
@@ -203,6 +251,14 @@ fn show_error(parent: &ApplicationWindow, msg: &str) {
     vbox.append(&btn);
     dialog.set_child(Some(&vbox));
     dialog.present();
+}
+
+fn show_error(parent: &ApplicationWindow, msg: &str) {
+    show_dialog(parent, "Error", msg);
+}
+
+fn show_info(parent: &ApplicationWindow, title: &str, msg: &str) {
+    show_dialog(parent, title, msg);
 }
 
 // ── UI builder ────────────────────────────────────────────────────────────────
@@ -546,6 +602,43 @@ fn build_ui(app: &Application) {
     watch_outer.append(&add_btn);
     watch_frame.set_child(Some(&watch_outer));
     form.append(&watch_frame);
+
+    // ── Actions section ───────────────────────────────────────────────────────
+
+    let actions_frame = Frame::builder().label("Actions").build();
+    let actions_box = GBox::builder()
+        .orientation(Orientation::Horizontal)
+        .spacing(12)
+        .margin_top(8)
+        .margin_bottom(8)
+        .margin_start(8)
+        .margin_end(8)
+        .build();
+
+    let reindex_btn = Button::builder().label("Update Index").build();
+    let reindex_lbl = Label::builder()
+        .label("Clear the file cache and re-upload all indexed files to Spine.")
+        .wrap(true)
+        .xalign(0.0)
+        .hexpand(true)
+        .build();
+    {
+        let win_c = window.clone();
+        reindex_btn.connect_clicked(move |_| {
+            match send_reindex() {
+                Ok(()) => show_info(
+                    &win_c,
+                    "Re-index started",
+                    "The agent will re-upload all files in the background.\nWatch the tray icon for progress.",
+                ),
+                Err(msg) => show_error(&win_c, &msg),
+            }
+        });
+    }
+    actions_box.append(&reindex_btn);
+    actions_box.append(&reindex_lbl);
+    actions_frame.set_child(Some(&actions_box));
+    form.append(&actions_frame);
 
     // ── Button row ────────────────────────────────────────────────────────────
 

@@ -73,9 +73,58 @@ describe("parseSignalMessage", () => {
     expect(parseSignalMessage(msg, SELF)).toBeNull();
   });
 
-  it("returns null when dataMessage is null", () => {
+  it("returns null when dataMessage is null and no syncMessage exists", () => {
     const msg = envelope({}, null);
     expect(parseSignalMessage(msg, SELF)).toBeNull();
+  });
+
+  it("parses a Note-to-Self sync sent message", () => {
+    const msg = {
+      method: "receive",
+      params: {
+        envelope: {
+          sourceNumber: SELF,
+          timestamp: 1_700_000_000_000,
+          syncMessage: {
+            sentMessage: {
+              destination: SELF,
+              timestamp: 1_700_000_000_500,
+              message: "  note to self  ",
+            },
+          },
+        },
+      },
+    };
+    const parsed = parseSignalMessage(msg, SELF);
+    expect(parsed).toEqual({
+      captureText: "note to self",
+      // sentMessage.timestamp takes precedence over envelope.timestamp.
+      capturedAt: new Date(1_700_000_000_500).toISOString(),
+      attachments: [],
+      sourceNumber: SELF,
+      sourceTimestamp: 1_700_000_000_500,
+    });
+  });
+
+  it("parses sync sent attachments", () => {
+    const msg = {
+      method: "receive",
+      params: {
+        envelope: {
+          sourceNumber: SELF,
+          timestamp: 1_700_000_000_000,
+          syncMessage: {
+            sentMessage: {
+              message: "",
+              attachments: [{ contentType: "audio/aac" }],
+            },
+          },
+        },
+      },
+    };
+    const parsed = parseSignalMessage(msg, SELF);
+    expect(parsed?.captureText).toBe("[voice note]");
+    expect(parsed?.attachments.length).toBe(1);
   });
 
   it("returns null when text is empty and no attachments", () => {
@@ -148,7 +197,7 @@ describe("parseSignalMessage debug hook", () => {
       ["wrong-method", { method: "send", params: {} }],
       ["no-envelope", { method: "receive", params: {} }],
       ["wrong-sender", envelope({ sourceNumber: "+19999999999" }, { message: "hi" })],
-      ["no-data-message", envelope({}, null)],
+      ["no-message-payload", envelope({}, null)],
       ["empty-payload", envelope({}, { message: "   " })],
     ];
     for (const [expected, msg] of cases) {

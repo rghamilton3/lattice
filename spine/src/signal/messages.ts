@@ -20,7 +20,7 @@ export type ParseSkipReason =
   | "wrong-method"
   | "no-envelope"
   | "wrong-sender"
-  | "no-data-message"
+  | "no-message-payload"
   | "empty-payload";
 
 export interface ParseDebugHook {
@@ -69,16 +69,27 @@ export function parseSignalMessage(
     return null;
   }
 
+  // Note-to-Self captures arrive as sync messages: when the user sends from
+  // their phone to themselves, signal-cli surfaces the body under
+  // envelope.syncMessage.sentMessage rather than envelope.dataMessage.
+  // Accept either shape. The sentMessage timestamp is the original send
+  // time and is the correct target for sendReaction.
   const dataMessage = envelope.dataMessage as Record<string, unknown> | null | undefined;
-  if (!dataMessage) {
-    debug?.skip("no-data-message");
+  const syncMessage = envelope.syncMessage as Record<string, unknown> | null | undefined;
+  const sentMessage = syncMessage?.sentMessage as
+    | Record<string, unknown>
+    | null
+    | undefined;
+  const payload = dataMessage ?? sentMessage;
+  if (!payload) {
+    debug?.skip("no-message-payload");
     return null;
   }
 
-  const rawText = dataMessage.message;
+  const rawText = payload.message;
   const text = typeof rawText === "string" ? rawText.trim() : "";
   const attachments =
-    (dataMessage.attachments as SignalAttachment[] | null | undefined) ?? [];
+    (payload.attachments as SignalAttachment[] | null | undefined) ?? [];
 
   if (!text && attachments.length === 0) {
     debug?.skip("empty-payload");
@@ -87,9 +98,14 @@ export function parseSignalMessage(
 
   const captureText = text || placeholderText(attachments);
 
-  // Signal timestamps are Unix ms; fall back to now if absent.
+  // Reactions must target the original send timestamp, which is the payload
+  // timestamp (sentMessage.timestamp on sync; equals envelope.timestamp on
+  // direct dataMessage). Fall back through both for safety.
+  const payloadTimestamp =
+    typeof payload.timestamp === "number" ? payload.timestamp : undefined;
   const sourceTimestamp =
-    typeof envelope.timestamp === "number" ? envelope.timestamp : now().getTime();
+    payloadTimestamp ??
+    (typeof envelope.timestamp === "number" ? envelope.timestamp : now().getTime());
   const capturedAt = new Date(sourceTimestamp).toISOString();
 
   return {

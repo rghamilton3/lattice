@@ -36,6 +36,10 @@ export const agentRoutes = (db: Database, { attachmentsDir }: AgentRoutesOptions
 					ingested_at: ingestedAt,
 					triaged_at: null,
 					triage_action: null,
+					task_due_date: null,
+					task_priority: null,
+					task_notes: null,
+					task_completed_at: null,
 				});
 				return { id: row.id };
 			},

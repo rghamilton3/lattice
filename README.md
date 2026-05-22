@@ -1,5 +1,13 @@
 # Lattice
 
+<img src="./surface/static/favicon.svg" width="48" alt="Lattice icon">
+
+[![CI lattice-agent](https://github.com/rghamilton3/lattice/actions/workflows/agent-ci.yml/badge.svg)](https://github.com/rghamilton3/lattice/actions/workflows/agent-ci.yml)
+[![CI spine](https://github.com/rghamilton3/lattice/actions/workflows/spine-ci.yml/badge.svg)](https://github.com/rghamilton3/lattice/actions/workflows/spine-ci.yml)
+[![CI surface](https://github.com/rghamilton3/lattice/actions/workflows/surface-ci.yml/badge.svg)](https://github.com/rghamilton3/lattice/actions/workflows/surface-ci.yml)
+[![CI quality](https://github.com/rghamilton3/lattice/actions/workflows/ci-quality.yml/badge.svg)](https://github.com/rghamilton3/lattice/actions/workflows/ci-quality.yml)
+[![Docker](https://github.com/rghamilton3/lattice/actions/workflows/spine-docker.yml/badge.svg)](https://github.com/rghamilton3/lattice/actions/workflows/spine-docker.yml)
+
 Personal knowledge management substrate, designed around ADHD-aware constraints: capture loosely, retrieve intelligently, no required rituals.
 
 ## Components

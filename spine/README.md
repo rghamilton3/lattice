@@ -1,5 +1,10 @@
 # spine
 
+<img src="../surface/static/favicon.svg" width="48" alt="Lattice icon">
+
+[![CI spine](https://github.com/rghamilton3/lattice/actions/workflows/spine-ci.yml/badge.svg)](https://github.com/rghamilton3/lattice/actions/workflows/spine-ci.yml)
+[![Docker](https://github.com/rghamilton3/lattice/actions/workflows/spine-docker.yml/badge.svg)](https://github.com/rghamilton3/lattice/actions/workflows/spine-docker.yml)
+
 Central server for [Lattice](https://github.com/rghamilton3/lattice) — a personal knowledge management system. Built with [Bun](https://bun.sh) and [Elysia](https://elysiajs.com).
 
 Spine owns the SQLite database, serves the REST API, and runs QMD hybrid search over all captured content. It binds to `localhost` only; Caddy handles TLS and Authelia handles authentication from the outside.

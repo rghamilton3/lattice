@@ -8,6 +8,7 @@
 	import QuickCapture from '$components/overlays/QuickCapture.svelte';
 	import CommandPalette from '$components/overlays/CommandPalette.svelte';
 	import Settings from '$components/overlays/Settings.svelte';
+	import NewTask from '$components/overlays/NewTask.svelte';
 	import ProcessMode from '$components/process/ProcessMode.svelte';
 	import Toast from '$components/ui/Toast.svelte';
 
@@ -80,6 +81,12 @@
 			e.preventDefault();
 			wb.activeOverlay = 'capture';
 		}
+
+		// bare `?` — open command palette when not in a field and no overlay open
+		if (!mod && !e.altKey && e.key === '?' && !wb.anyOverlayOpen && !isEditableTarget(e.target)) {
+			e.preventDefault();
+			wb.activeOverlay = 'palette';
+		}
 	}
 
 	async function confirmNewDoc() {
@@ -117,6 +124,7 @@
 	function handleNav(view: View) {
 		if (view === 'home') wb.openInPane(0, { kind: 'home' });
 		else if (view === 'search') wb.openInPane(0, { kind: 'search', query: '' });
+		else if (view === 'tasks') wb.openInPane(0, { kind: 'tasks' });
 		else if (view === 'library') wb.openInPane(0, { kind: 'library' });
 	}
 </script>
@@ -153,6 +161,10 @@
 
 	{#if wb.activeOverlay === 'settings'}
 		<Settings />
+	{/if}
+
+	{#if wb.activeOverlay === 'newTask'}
+		<NewTask />
 	{/if}
 
 	{#if wb.activeOverlay === 'newDoc'}

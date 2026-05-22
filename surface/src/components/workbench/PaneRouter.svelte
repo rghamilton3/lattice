@@ -6,12 +6,15 @@
 	import ResultList from '$components/search/ResultList.svelte';
 	import ReadingPane from '$components/reading/ReadingPane.svelte';
 	import EditorPane from '$components/editor/EditorPane.svelte';
+	import TasksView from '$components/tasks/TasksView.svelte';
 
 	const { paneIndex, content }: { paneIndex: 0 | 1; content: PaneContent } = $props();
 </script>
 
 {#if content.kind === 'home'}
 	<HomeView {paneIndex} />
+{:else if content.kind === 'tasks'}
+	<TasksView {paneIndex} />
 {:else if content.kind === 'library'}
 	<LibraryView {paneIndex} />
 {:else if content.kind === 'search'}

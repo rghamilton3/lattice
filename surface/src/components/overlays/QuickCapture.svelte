@@ -103,7 +103,7 @@
 			bind:this={textarea}
 			bind:value={text}
 			class="qcap-area"
-			placeholder="What's the thought? (⌘ + Enter to save, Esc to dismiss)"
+			placeholder="What's the thought? (Ctrl + Enter to save, Esc to dismiss)"
 			onkeydown={onTextareaKey}
 		></textarea>
 		<div class="qcap-foot">
@@ -137,7 +137,7 @@
 			</div>
 			<div class="row" style="gap:8px">
 				<span class="faint" style="font-size:12px">save with</span>
-				<span class="kbd">⌘</span>
+				<span class="kbd">Ctrl</span>
 				<span class="kbd">↵</span>
 				<button class="btn btn-ghost" onclick={close}>Cancel</button>
 				<button class="btn btn-primary" onclick={submit} disabled={!canSave}>

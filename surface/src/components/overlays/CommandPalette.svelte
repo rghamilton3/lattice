@@ -33,7 +33,7 @@
 		id: string;
 		label: string;
 		hint: string;
-		kbd: string;
+		kbd: string[];
 		kind: 'action' | 'working' | 'capture';
 		run: () => void;
 	};
@@ -44,7 +44,7 @@
 				id: 'cap',
 				label: 'Quick capture',
 				hint: 'open capture overlay',
-				kbd: 'c',
+				kbd: ['c'],
 				kind: 'action',
 				run: () => (wb.activeOverlay = 'capture')
 			},
@@ -52,7 +52,7 @@
 				id: 'search',
 				label: 'Search everything',
 				hint: 'go to search view',
-				kbd: '⌘/',
+				kbd: ['Ctrl', '/'],
 				kind: 'action',
 				run: () => wb.openInPane(0, { kind: 'search', query: '' })
 			},
@@ -60,7 +60,7 @@
 				id: 'home',
 				label: 'Go home',
 				hint: 'inbox + working docs',
-				kbd: 'g h',
+				kbd: ['g', 'h'],
 				kind: 'action',
 				run: () => wb.openInPane(0, { kind: 'home' })
 			},
@@ -68,7 +68,7 @@
 				id: 'new',
 				label: 'New working doc',
 				hint: 'creates a markdown working doc',
-				kbd: '⌘⇧J',
+				kbd: ['Ctrl', 'Shift', 'J'],
 				kind: 'action',
 				run: () => (wb.activeOverlay = 'newDoc')
 			},
@@ -76,7 +76,7 @@
 				id: 'focus',
 				label: 'Toggle focus mode',
 				hint: 'hide all chrome',
-				kbd: '⌘.',
+				kbd: ['Ctrl', '.'],
 				kind: 'action',
 				run: () => (wb.focusMode = !wb.focusMode)
 			},
@@ -84,7 +84,7 @@
 				id: 'vim',
 				label: 'Toggle vim mode',
 				hint: 'editor pane',
-				kbd: '⌃⌥V',
+				kbd: ['Ctrl', 'Alt', 'V'],
 				kind: 'action',
 				run: () => wb.toggleVim()
 			},
@@ -92,7 +92,7 @@
 				id: 'theme',
 				label: 'Switch theme…',
 				hint: 'light / dark / sepia',
-				kbd: '',
+				kbd: [],
 				kind: 'action',
 				run: () => (wb.activeOverlay = 'settings')
 			}
@@ -105,7 +105,7 @@
 			id: 'w-' + d.slug,
 			label: d.title,
 			hint: d.slug + '.md',
-			kbd: '',
+			kbd: [],
 			kind: 'working',
 			run: () =>
 				wb.openInPane(wb.focusedPane, { kind: 'doc', ref: { kind: 'working', slug: d.slug } })
@@ -114,7 +114,7 @@
 			id: 'c-' + c.id,
 			label: c.text.slice(0, 80),
 			hint: 'capture · ' + c.source,
-			kbd: '',
+			kbd: [],
 			kind: 'capture',
 			run: () => wb.openInPane(wb.focusedPane, { kind: 'doc', ref: { kind: 'capture', id: c.id } })
 		}));
@@ -229,9 +229,9 @@
 						<span class={chipClass(it.kind)}>{it.kind}</span>
 						<span class="palette-label">{it.label}</span>
 						<span class="palette-hint faint">{it.hint}</span>
-						{#if it.kbd}
+						{#if it.kbd.length > 0}
 							<span class="palette-kbd-row mono">
-								{#each it.kbd.split('') as k, ki (ki)}
+								{#each it.kbd as k, ki (ki)}
 									<span class="kbd">{k}</span>
 								{/each}
 							</span>

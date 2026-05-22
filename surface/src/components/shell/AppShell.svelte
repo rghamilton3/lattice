@@ -45,7 +45,7 @@
 				<Icon name="search" size={14} />
 				<span class="palette-button-label">Find anything</span>
 				<span class="palette-kbd">
-					<span class="kbd">⌘</span>
+					<span class="kbd">Ctrl</span>
 					<span class="kbd">K</span>
 				</span>
 			</button>

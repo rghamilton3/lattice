@@ -160,7 +160,14 @@ export async function search(q: string): Promise<SearchResult[]> {
   const captures = capturesDir();
   const working = workingDir();
   const localFiles = localFilesDir();
-  const results = await _store.search({ query: q, limit: 20 });
+  const results = await _store.search({
+    queries: [
+      { type: "lex", query: q },
+      { type: "vec", query: q },
+    ],
+    rerank: false,
+    limit: 20,
+  });
   return results.flatMap((r): SearchResult[] => {
     if (r.file.startsWith(captures + "/")) {
       const id = parseInt(basename(r.file, ".md"), 10);

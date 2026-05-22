@@ -31,6 +31,10 @@ name = "lattice-tray"
 path = "src/bin/lattice-tray.rs"
 
 [[bin]]
+name = "lattice-capture"
+path = "src/bin/lattice-capture.rs"
+
+[[bin]]
 name = "lattice-config"
 path = "src/bin/lattice-config.rs"
 required-features = ["config-ui"]

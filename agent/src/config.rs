@@ -25,6 +25,9 @@ pub struct WatchEntry {
 #[derive(Deserialize)]
 struct RootConfig {
     spine: SpineSection,
+    // Optional so capture-only installs (no lattice-agent running, no watch dirs
+    // configured) don't fail to parse a config that omits the [agent] section.
+    #[serde(default)]
     agent: AgentSection,
 }
 
@@ -44,6 +47,20 @@ struct AgentSection {
     max_file_bytes: u64,
     #[serde(default)]
     watch: Vec<WatchEntry>,
+}
+
+impl Default for AgentSection {
+    // Used when the whole [agent] section is omitted (e.g. capture-only installs).
+    // Keep numeric defaults consistent with the per-field serde defaults so the
+    // agent still behaves sanely if it does start up against this config.
+    fn default() -> Self {
+        Self {
+            machine_id: String::new(),
+            poll_interval_minutes: default_poll_interval(),
+            max_file_bytes: default_max_file_bytes(),
+            watch: Vec::new(),
+        }
+    }
 }
 
 fn default_poll_interval() -> u64 {

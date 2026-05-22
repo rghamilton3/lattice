@@ -54,7 +54,22 @@ communicates with the agent over a Unix socket at `$XDG_RUNTIME_DIR/lattice-agen
 - Last error — shown only when errors occurred in the last pass
 - Stop / Start Agent — toggles based on whether the agent is running
 - Restart Agent — restarts the systemd service
+- Capture… — launches `lattice-capture` (prompts via walker/wofi/rofi)
+- Configure… — launches the `lattice-config` editor
 - Exit — stops the agent and quits the tray
+
+## Quick capture (lattice-capture)
+
+`lattice-capture` is a small companion binary for sending quick text captures to the spine
+(e.g. bound to a global hotkey). It reads the spine URL and agent token from the same
+`config.toml` and queues captures locally at `~/.local/share/lattice/queue.db` when the
+spine is unreachable, draining the queue on the next successful run.
+
+```bash
+lattice-capture "some thought"          # arg form, for hotkeys
+echo "some thought" | lattice-capture   # pipe form
+lattice-capture                         # interactive — uses walker/wofi/rofi --dmenu
+```
 
 **Prerequisites:** your panel must support the StatusNotifierItem protocol.
 On Hyprland, enable waybar's `"tray"` module in your waybar config.

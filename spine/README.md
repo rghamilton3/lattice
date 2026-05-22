@@ -78,23 +78,25 @@ Data is persisted to `/var/lib/lattice` on the host via a named volume mount.
 
 ## lattice-capture
 
-`scripts/lattice-capture.sh` is a shell helper for sending captures from any machine. It queues offline captures in a local SQLite database (`~/.local/share/lattice/queue.db`) and flushes them on the next successful run.
+`lattice-capture` is a native Rust binary in the [`agent/`](../agent) crate that sends captures from any machine. It queues offline captures in a local SQLite database (`~/.local/share/lattice/queue.db`) and flushes them on the next successful run.
+
+Installed alongside `lattice-tray` via [`install.sh`](../install.sh) or built directly:
 
 ```bash
-# Install
-cp scripts/lattice-capture.sh ~/.local/bin/lattice-capture
-chmod +x ~/.local/bin/lattice-capture
-
-# Configure
-export LATTICE_AGENT_TOKEN="..."          # or write to ~/.config/lattice/token
-export SPINE_URL="https://your-spine"     # default: http://localhost:3000
-
-# Use
-lattice-capture "some thought"
-echo "some thought" | lattice-capture
+cd ../agent
+cargo build --release --bin lattice-capture
+cp target/release/lattice-capture ~/.local/bin/
 ```
 
-Requires: `curl`, `jq`, `sqlite3`.
+Reads spine URL and agent token from `~/.config/lattice/config.toml` (shared with `lattice-agent`).
+
+```bash
+lattice-capture "some thought"          # from a hotkey
+echo "some thought" | lattice-capture   # from a pipe
+lattice-capture                         # interactive — prompts via walker/wofi/rofi
+```
+
+The tray menu's **Capture…** item invokes the no-arg form.
 
 ## Signal relay
 

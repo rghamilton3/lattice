@@ -1,4 +1,4 @@
-name: CI — lattice-agent
+name: CI lattice-agent
 
 on:
   push:

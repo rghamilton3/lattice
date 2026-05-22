@@ -3,7 +3,7 @@ name: Release — lattice-agent
 on:
   push:
     tags:
-      - 'v*'
+      - 'agent-v*'
 
 jobs:
   build:

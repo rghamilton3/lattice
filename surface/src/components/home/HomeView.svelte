@@ -112,6 +112,9 @@
 		wb.showToast(`${TRIAGE_ACTION_LABEL[action]} · capture #${id}`);
 		try {
 			await triageCapture(id, action);
+			if (action === 'task') {
+				queryClient.invalidateQueries({ queryKey: taskKeys.list() });
+			}
 		} catch {
 			queryClient.invalidateQueries({ queryKey: captureKeys.list(20) });
 			wb.showToast(`Triage failed for capture #${id}`);

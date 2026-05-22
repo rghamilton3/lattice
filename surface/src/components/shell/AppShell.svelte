@@ -38,6 +38,12 @@
 					onclick={() => onnav('search')}
 				/>
 				<NavBtn
+					label="Tasks"
+					icon="task"
+					active={wb.view === 'tasks'}
+					onclick={() => onnav('tasks')}
+				/>
+				<NavBtn
 					label="Library"
 					icon="library"
 					active={wb.view === 'library'}

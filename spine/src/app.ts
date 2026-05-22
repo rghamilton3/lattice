@@ -9,6 +9,7 @@ import { filesRoutes } from './routes/files';
 import { workingRoutes } from './routes/working';
 import { lateralRoutes } from './routes/lateral';
 import { agentRoutes } from './routes/agent';
+import { tasksRoutes } from './routes/tasks';
 
 export interface AppDeps {
 	db: Database;
@@ -33,6 +34,7 @@ export function buildApp(deps: AppDeps) {
 		.guard({ beforeHandle: authentikBeforeHandle({ allowHttp, devUser }) }, (app) =>
 			app
 				.use(capturesRoutes(db))
+				.use(tasksRoutes(db))
 				.use(searchRoutes())
 				.use(filesRoutes(db))
 				.use(workingRoutes(db))

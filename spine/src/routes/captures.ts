@@ -143,6 +143,9 @@ export const capturesRoutes = (db: Database) =>
 					ingested_at: now,
 					triaged_at: null,
 					triage_action: null,
+					task_due_date: null,
+					task_priority: null,
+					task_notes: null,
 				});
 				return { id: row.id };
 			},

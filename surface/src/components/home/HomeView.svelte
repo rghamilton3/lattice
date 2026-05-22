@@ -10,7 +10,9 @@
 	} from '$lib/api/captures';
 	import type { TriageAction } from '$lib/api/captures';
 	import { workingKeys, fetchWorkingList } from '$lib/api/working';
-	import type { Capture, DocRef } from '$lib/types';
+	import { taskKeys, fetchTasks } from '$lib/api/tasks';
+	import { useCompleteTask } from '$lib/state/useCompleteTask.svelte';
+	import type { Capture, DocRef, Task } from '$lib/types';
 	import Icon from '$components/icons/Icon.svelte';
 	import NowCard from './NowCard.svelte';
 	import InboxList from './InboxList.svelte';
@@ -23,6 +25,7 @@
 
 	const wb = getWorkbenchContext();
 	const queryClient = useQueryClient();
+	const doneTask = useCompleteTask();
 
 	let connected = false;
 	$effect(() => {
@@ -70,6 +73,12 @@
 		enabled: browser
 	}));
 
+	const tasksQuery = createQuery(() => ({
+		queryKey: taskKeys.list(),
+		queryFn: fetchTasks,
+		enabled: browser
+	}));
+
 	let now = $state(Date.now());
 	$effect(() => {
 		const t = setInterval(() => (now = Date.now()), 60_000);
@@ -80,6 +89,9 @@
 	const visibleCaptures = $derived(capturesQuery.data ?? []);
 	const workingDocs = $derived(workingQuery.data ?? []);
 	const last = $derived(workingDocs[0] ?? null);
+
+	const allTasks = $derived<Task[]>(tasksQuery.data ?? []);
+	const previewTasks = $derived(allTasks.slice(0, 5));
 
 	function openDocRef(ref: DocRef) {
 		wb.openInPane(paneIndex, { kind: 'doc', ref });
@@ -193,6 +205,71 @@
 						</button>
 					{/if}
 				</div>
+			</section>
+
+			<section class="card home-section">
+				<div class="home-section-head">
+					<h2 class="section-title">
+						<Icon name="task" size={16} />
+						<span>Tasks</span>
+						{#if wb.postureView.showCounts && allTasks.length > 0}
+							<span class="count-soft">{allTasks.length}</span>
+						{/if}
+					</h2>
+					<button class="btn btn-ghost" onclick={() => (wb.activeOverlay = 'newTask')}>
+						<Icon name="plus" size={14} />New task
+					</button>
+				</div>
+				{#if tasksQuery.isLoading}
+					<div class="inbox-empty soft">loading…</div>
+				{:else if tasksQuery.isError}
+					<div class="inbox-empty soft" style="color:var(--c-alarm)">couldn't load tasks</div>
+				{:else if allTasks.length === 0}
+					<div class="inbox-empty soft">no active tasks</div>
+				{:else}
+					<div class="home-task-list">
+						{#each previewTasks as task (task.id)}
+							<div class="home-task-row">
+								<button
+									class="home-task-check"
+									title="Mark done"
+									aria-label="Mark done"
+									onclick={() => doneTask(task)}
+								>
+									<Icon name="circle" size={13} />
+								</button>
+								<button
+									class="home-task-body"
+									onclick={() => wb.openInPane(paneIndex, { kind: 'tasks' })}
+								>
+									<span class="home-task-text">{task.text}</span>
+									{#if task.task_due_date || task.task_priority}
+										<span class="home-task-chips">
+											{#if task.task_due_date}
+												<span class="home-chip home-chip-due">{task.task_due_date}</span>
+											{/if}
+											{#if task.task_priority}
+												<span class="home-chip home-chip-{task.task_priority}"
+													>{task.task_priority}</span
+												>
+											{/if}
+										</span>
+									{/if}
+								</button>
+							</div>
+						{/each}
+					</div>
+					{#if allTasks.length > 5}
+						<div class="home-section-foot">
+							<button
+								class="btn btn-ghost"
+								onclick={() => wb.openInPane(paneIndex, { kind: 'tasks' })}
+							>
+								See all {allTasks.length} tasks
+							</button>
+						</div>
+					{/if}
+				{/if}
 			</section>
 
 			{#if wb.featureFlags.resurfacing && wb.postureView.showResurfaced}

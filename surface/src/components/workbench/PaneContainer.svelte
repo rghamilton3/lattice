@@ -22,6 +22,8 @@
 				return `edit: ${c.slug}`;
 			case 'library':
 				return 'library';
+			case 'tasks':
+				return 'tasks';
 		}
 	}
 </script>

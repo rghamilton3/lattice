@@ -20,7 +20,76 @@
 	<header class="toolbar">
 		<div class="row" style="gap:14px">
 			<button class="brand" title="Home" onclick={() => onnav('home')}>
-				<span class="brand-dot"></span>
+				<svg
+					class="brand-icon"
+					viewBox="0 0 16 16"
+					xmlns="http://www.w3.org/2000/svg"
+					aria-hidden="true"
+				>
+					<line
+						x1="2"
+						y1="2"
+						x2="14"
+						y2="2"
+						stroke="var(--c-accent)"
+						stroke-width="1.2"
+						stroke-linecap="round"
+					/>
+					<line
+						x1="2"
+						y1="8"
+						x2="14"
+						y2="8"
+						stroke="var(--c-accent)"
+						stroke-width="1.2"
+						stroke-linecap="round"
+					/>
+					<line
+						x1="2"
+						y1="14"
+						x2="14"
+						y2="14"
+						stroke="var(--c-accent)"
+						stroke-width="1.2"
+						stroke-linecap="round"
+					/>
+					<line
+						x1="2"
+						y1="2"
+						x2="2"
+						y2="14"
+						stroke="var(--c-accent)"
+						stroke-width="1.2"
+						stroke-linecap="round"
+					/>
+					<line
+						x1="8"
+						y1="2"
+						x2="8"
+						y2="14"
+						stroke="var(--c-accent)"
+						stroke-width="1.2"
+						stroke-linecap="round"
+					/>
+					<line
+						x1="14"
+						y1="2"
+						x2="14"
+						y2="14"
+						stroke="var(--c-accent)"
+						stroke-width="1.2"
+						stroke-linecap="round"
+					/>
+					<circle cx="2" cy="2" r="1.5" fill="var(--c-accent)" />
+					<circle cx="8" cy="2" r="1.5" fill="var(--c-accent)" />
+					<circle cx="14" cy="2" r="1.5" fill="var(--c-accent)" />
+					<circle cx="2" cy="8" r="1.5" fill="var(--c-accent)" />
+					<circle cx="8" cy="8" r="1.5" fill="var(--c-accent)" />
+					<circle cx="14" cy="8" r="1.5" fill="var(--c-accent)" />
+					<circle cx="2" cy="14" r="1.5" fill="var(--c-accent)" />
+					<circle cx="8" cy="14" r="1.5" fill="var(--c-accent)" />
+					<circle cx="14" cy="14" r="1.5" fill="var(--c-accent)" />
+				</svg>
 				<span class="brand-name">lattice</span>
 			</button>
 

@@ -145,18 +145,9 @@
 	font-weight: 600;
 	letter-spacing: 0.01em;
 }
-.brand-dot {
-	width: 10px;
-	height: 10px;
-	background: conic-gradient(
-		from 45deg,
-		var(--c-accent) 0 25%,
-		var(--c-ok) 25% 50%,
-		var(--c-caution) 50% 75%,
-		var(--c-info) 75% 100%
-	);
-	border-radius: 2px;
-	transform: rotate(45deg);
+.brand-icon {
+	width: 16px;
+	height: 16px;
 	flex-shrink: 0;
 }
 .brand-name {

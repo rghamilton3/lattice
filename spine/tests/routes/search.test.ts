@@ -1,8 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { join } from 'node:path';
 import { buildTestApp, json, req, type TestApp } from '../helpers/app';
-import { capturesDir, localFilesDir } from '../../src/search';
-import { workingDir as workingDirFn } from '../../src/working';
 
 let app: TestApp;
 
@@ -27,10 +24,9 @@ describe('GET /api/search', () => {
 	});
 
 	it('returns mapped capture hits from the mocked store', async () => {
-		const file = join(capturesDir(), '42.md');
 		app.qmd.setHits([
 			{
-				file,
+				file: 'qmd://captures/42.md',
 				score: 0.9,
 				bestChunk: 'snippet',
 				body: 'full body',
@@ -53,10 +49,9 @@ describe('GET /api/search', () => {
 	});
 
 	it('returns mapped working-doc hits with slug', async () => {
-		const file = join(workingDirFn(), 'my-note.md');
 		app.qmd.setHits([
 			{
-				file,
+				file: 'qmd://working/my-note.md',
 				score: 0.7,
 				bestChunk: 'wd snippet',
 				body: 'wd body',
@@ -79,10 +74,9 @@ describe('GET /api/search', () => {
 	});
 
 	it('returns mapped local-file hits with machine_id', async () => {
-		const file = join(localFilesDir(), 'laptop-1', 'abc.md');
 		app.qmd.setHits([
 			{
-				file,
+				file: 'qmd://local-files/laptop-1/abc.md',
 				score: 0.5,
 				bestChunk: 'lf snippet',
 				body: 'lf body',
@@ -113,10 +107,9 @@ describe('GET /api/search', () => {
 	});
 
 	it('drops capture hits whose filename does not parse as an integer', async () => {
-		const file = join(capturesDir(), 'not-a-number.md');
 		app.qmd.setHits([
 			{
-				file,
+				file: 'qmd://captures/not-a-number.md',
 				score: 0.5,
 				bestChunk: 'x',
 				body: 'x',

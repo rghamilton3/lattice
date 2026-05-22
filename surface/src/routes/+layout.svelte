@@ -20,7 +20,20 @@
 
 	$effect(() => {
 		const root = document.documentElement;
+		if (workbench.theme === 'system') {
+			const mql = window.matchMedia('(prefers-color-scheme: dark)');
+			const apply = () => {
+				root.dataset.theme = mql.matches ? 'dark' : 'light';
+			};
+			apply();
+			mql.addEventListener('change', apply);
+			return () => mql.removeEventListener('change', apply);
+		}
 		root.dataset.theme = workbench.theme;
+	});
+
+	$effect(() => {
+		const root = document.documentElement;
 		root.dataset.density = workbench.density;
 		root.style.setProperty(
 			'--font-ui',
@@ -29,6 +42,7 @@
 		// Read every persisted field so the effect re-runs on any change.
 		// Centralizing persistence here lets components mutate state directly
 		// without remembering to call wb.persist().
+		void workbench.theme;
 		void workbench.posture;
 		void workbench.focusMode;
 		void workbench.vimMode;

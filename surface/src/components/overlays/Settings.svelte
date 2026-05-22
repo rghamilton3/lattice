@@ -9,7 +9,7 @@
 
 	const wb = getWorkbenchContext();
 
-	const themes: Theme[] = ['light', 'dark', 'sepia'];
+	const themes: Theme[] = ['light', 'dark', 'sepia', 'system'];
 	const densities: Density[] = ['compact', 'comfortable', 'spacious'];
 	const postures: Posture[] = ['quiet', 'standard', 'active'];
 	const fonts: { id: string; label: string }[] = [

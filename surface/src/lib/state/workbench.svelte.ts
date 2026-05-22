@@ -13,13 +13,13 @@ function flagFromEnv(name: `PUBLIC_${string}`, fallback: boolean): boolean {
 const WORKBENCH_KEY = Symbol('workbench');
 const STORAGE_KEY = 'lattice.session';
 
-export type Theme = 'light' | 'dark' | 'sepia';
+export type Theme = 'light' | 'dark' | 'sepia' | 'system';
 export type Density = 'compact' | 'comfortable' | 'spacious';
 export type Posture = 'quiet' | 'standard' | 'active';
 export type View = 'home' | 'search' | 'doc';
 export type ActiveOverlay = 'none' | 'capture' | 'palette' | 'settings' | 'newDoc' | 'triage';
 
-const THEMES: readonly Theme[] = ['light', 'dark', 'sepia'];
+const THEMES: readonly Theme[] = ['light', 'dark', 'sepia', 'system'];
 const DENSITIES: readonly Density[] = ['compact', 'comfortable', 'spacious'];
 const POSTURES: readonly Posture[] = ['quiet', 'standard', 'active'];
 

@@ -91,7 +91,7 @@
 			{
 				id: 'theme',
 				label: 'Switch theme…',
-				hint: 'light / dark / sepia',
+				hint: 'light / dark / sepia / system',
 				kbd: [],
 				kind: 'action',
 				run: () => (wb.activeOverlay = 'settings')

@@ -8,6 +8,7 @@ mod time;
 
 use anyhow::Result;
 use ipc::AgentCommand;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::info;
@@ -23,7 +24,7 @@ async fn main() -> Result<()> {
 
     let force = std::env::args().any(|a| a == "--force");
 
-    let cfg = config::load()?;
+    let cfg = Arc::new(config::load()?);
     info!(
         machine_id = %cfg.machine_id,
         spine_url  = %cfg.spine_url,
@@ -48,8 +49,21 @@ async fn main() -> Result<()> {
     let ipc_status = status.clone();
     tokio::spawn(async move { ipc::serve(ipc_status, cmd_tx).await });
 
+    // Heartbeat: push status every 2 minutes so the surface shows the agent as
+    // active even between 15-minute scan cycles.
+    let hb_cfg = Arc::clone(&cfg);
+    let hb_client = client.clone();
+    let hb_status = status.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(120)).await;
+            scan::push_status(&hb_cfg, &hb_client, &hb_status).await;
+        }
+    });
+
     loop {
         scan::run_pass(&cfg, &cache, &client, &status).await;
+        scan::push_status(&cfg, &client, &status).await;
 
         // Wait for either the poll interval to elapse or a reindex command to arrive.
         // Multiple ForceReindex commands coalesce: we drain the channel before acting.

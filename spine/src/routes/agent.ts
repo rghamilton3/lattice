@@ -97,6 +97,48 @@ export const agentRoutes = (db: Database, { attachmentsDir }: AgentRoutesOptions
 			},
 		)
 		.post(
+			'/status',
+			({ body }) => {
+				db.prepare(
+					`INSERT INTO agent_status
+             (machine_id, state, last_scan_at, last_indexed, last_skipped, last_errors, spine_ok, last_error_msg, reported_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(machine_id) DO UPDATE SET
+             state          = excluded.state,
+             last_scan_at   = excluded.last_scan_at,
+             last_indexed   = excluded.last_indexed,
+             last_skipped   = excluded.last_skipped,
+             last_errors    = excluded.last_errors,
+             spine_ok       = excluded.spine_ok,
+             last_error_msg = excluded.last_error_msg,
+             reported_at    = excluded.reported_at`,
+				).run(
+					body.machine_id,
+					body.state,
+					body.last_scan_at ?? null,
+					body.last_indexed,
+					body.last_skipped,
+					body.last_errors,
+					body.spine_ok ? 1 : 0,
+					body.last_error_msg ?? null,
+					new Date().toISOString(),
+				);
+				return { ok: true };
+			},
+			{
+				body: t.Object({
+					machine_id: t.String({ minLength: 1 }),
+					state: t.Union([t.Literal('idle'), t.Literal('scanning'), t.Literal('error')]),
+					last_scan_at: t.Nullable(t.String()),
+					last_indexed: t.Integer({ minimum: 0 }),
+					last_skipped: t.Integer({ minimum: 0 }),
+					last_errors: t.Integer({ minimum: 0 }),
+					spine_ok: t.Boolean(),
+					last_error_msg: t.Nullable(t.String()),
+				}),
+			},
+		)
+		.post(
 			'/capture/:id/attachments',
 			({ params, body, set }) => {
 				const captureId = parseInt(params.id, 10);

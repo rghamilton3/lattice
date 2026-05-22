@@ -33,6 +33,7 @@ describe('db.initDb', () => {
 			'004_capture_triage.sql',
 			'005_tasks.sql',
 			'006_task_completed_at.sql',
+			'007_agent_status.sql',
 		]);
 		db.close();
 	});

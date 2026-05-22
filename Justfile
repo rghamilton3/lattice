@@ -54,7 +54,7 @@ down:
 
 # Lint all components (cargo clippy + oxlint + eslint)
 lint:
-    cargo clippy --manifest-path agent/Cargo.toml -- -D warnings
+    RUSTFLAGS="-D warnings" cargo clippy --manifest-path agent/Cargo.toml
     cd spine && bun run lint
     cd surface && bun run lint
 

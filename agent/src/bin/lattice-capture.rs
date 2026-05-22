@@ -214,7 +214,8 @@ fn enqueue(conn: &Connection, text: &str, source: &str, captured_at: &str) -> Re
 }
 
 async fn drain_queue(conn: &Connection, client: &reqwest::Client, cfg: &config::Config) {
-    let (rows, corrupt_ids): (Vec<(i64, String, String, String)>, Vec<i64>) = match conn
+    type QueueRow = (i64, String, String, String);
+    let (rows, corrupt_ids): (Vec<QueueRow>, Vec<i64>) = match conn
         .prepare("SELECT id, text, source, captured_at FROM queue ORDER BY id")
         .and_then(|mut stmt| {
             stmt.query_map([], |row| {

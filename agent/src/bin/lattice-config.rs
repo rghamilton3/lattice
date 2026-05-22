@@ -254,17 +254,20 @@ impl eframe::App for ConfigApp {
                             );
                             ui.end_row();
                             ui.label("Token:");
-                            ui.horizontal(|ui| {
-                                ui.add(
-                                    egui::TextEdit::singleline(&mut form.spine_token)
-                                        .password(!*show_token)
-                                        .desired_width(f32::INFINITY),
-                                );
-                                let lbl = if *show_token { "Hide" } else { "Show" };
-                                if ui.button(lbl).clicked() {
-                                    *show_token = !*show_token;
-                                }
-                            });
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    let lbl = if *show_token { "Hide" } else { "Show" };
+                                    if ui.button(lbl).clicked() {
+                                        *show_token = !*show_token;
+                                    }
+                                    ui.add(
+                                        egui::TextEdit::singleline(&mut form.spine_token)
+                                            .password(!*show_token)
+                                            .desired_width(ui.available_width()),
+                                    );
+                                },
+                            );
                             ui.end_row();
                         });
                 });
@@ -304,16 +307,24 @@ impl eframe::App for ConfigApp {
                     let mut to_remove: Option<usize> = None;
                     for (i, row) in form.watch_rows.iter_mut().enumerate() {
                         egui::Frame::group(ui.style()).show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                ui.label("Path:");
-                                ui.add(
-                                    egui::TextEdit::singleline(&mut row.path)
-                                        .desired_width(f32::INFINITY),
-                                );
-                                if ui.button("Remove").clicked() {
-                                    to_remove = Some(i);
-                                }
-                            });
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if ui.button("Remove").clicked() {
+                                        to_remove = Some(i);
+                                    }
+                                    ui.with_layout(
+                                        egui::Layout::left_to_right(egui::Align::Center),
+                                        |ui| {
+                                            ui.label("Path:");
+                                            ui.add(
+                                                egui::TextEdit::singleline(&mut row.path)
+                                                    .desired_width(ui.available_width()),
+                                            );
+                                        },
+                                    );
+                                },
+                            );
                             ui.label("Patterns (one per line):");
                             ui.add(egui::TextEdit::multiline(&mut row.patterns).desired_rows(3));
                         });

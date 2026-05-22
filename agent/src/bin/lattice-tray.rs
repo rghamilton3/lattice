@@ -49,19 +49,54 @@ const COLOR_ERR: [u8; 3] = [219, 68, 55];
 // Yellow — IPC error (socket unreachable, timeout, write failure, or bad response)
 const COLOR_IPC: [u8; 3] = [255, 200, 0];
 
-/// Renders a 16×16 anti-aliased filled circle in ARGB32 network-byte-order.
-fn circle_icon(rgb: [u8; 3]) -> Vec<ksni::Icon> {
+/// Signed distance from point (px, py) to line segment (ax,ay)-(bx,by).
+fn dist_to_segment(px: f32, py: f32, ax: f32, ay: f32, bx: f32, by: f32) -> f32 {
+    let dx = bx - ax;
+    let dy = by - ay;
+    let t = ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy);
+    let qx = ax + t.clamp(0.0, 1.0) * dx;
+    let qy = ay + t.clamp(0.0, 1.0) * dy;
+    ((px - qx).powi(2) + (py - qy).powi(2)).sqrt()
+}
+
+/// Renders a 16×16 anti-aliased lattice grid icon (3×3 nodes) in ARGB32 network-byte-order.
+fn lattice_icon(rgb: [u8; 3]) -> Vec<ksni::Icon> {
     const SIZE: i32 = 16;
+    // SVG grid coords 4/16/28 in 32×32 map to 2/8/14 in 16×16.
+    const NODES: [(f32, f32); 9] = [
+        (2.0, 2.0),
+        (8.0, 2.0),
+        (14.0, 2.0),
+        (2.0, 8.0),
+        (8.0, 8.0),
+        (14.0, 8.0),
+        (2.0, 14.0),
+        (8.0, 14.0),
+        (14.0, 14.0),
+    ];
+    // Three horizontal rows then three vertical columns.
+    const LINES: [(usize, usize); 6] = [(0, 2), (3, 5), (6, 8), (0, 6), (1, 7), (2, 8)];
+    const DOT_R: f32 = 1.5;
+    const LINE_HW: f32 = 0.5;
+
     let [r, g, b] = rgb;
     let mut data = Vec::with_capacity((SIZE * SIZE * 4) as usize);
-    for y in 0..SIZE {
-        for x in 0..SIZE {
-            let dx = x as f32 + 0.5 - 8.0;
-            let dy = y as f32 + 0.5 - 8.0;
-            let dist = (dx * dx + dy * dy).sqrt();
-            let alpha = ((7.0 - dist).clamp(0.0, 1.0) * 255.0) as u8;
-            // ARGB32 network byte order: A, R, G, B
-            data.extend_from_slice(&[alpha, r, g, b]);
+    for py in 0..SIZE {
+        for px in 0..SIZE {
+            let cx = px as f32 + 0.5;
+            let cy = py as f32 + 0.5;
+            let mut coverage: f32 = 0.0;
+            for &(nx, ny) in &NODES {
+                let d = ((cx - nx).powi(2) + (cy - ny).powi(2)).sqrt();
+                coverage = coverage.max((DOT_R + 0.5 - d).clamp(0.0, 1.0));
+            }
+            for &(i, j) in &LINES {
+                let (ax, ay) = NODES[i];
+                let (bx, by) = NODES[j];
+                let d = dist_to_segment(cx, cy, ax, ay, bx, by);
+                coverage = coverage.max((LINE_HW + 0.5 - d).clamp(0.0, 1.0));
+            }
+            data.extend_from_slice(&[(coverage * 255.0) as u8, r, g, b]);
         }
     }
     vec![ksni::Icon {
@@ -114,7 +149,7 @@ impl ksni::Tray for LatticeTray {
     }
 
     fn icon_pixmap(&self) -> Vec<ksni::Icon> {
-        circle_icon(self.icon_rgb)
+        lattice_icon(self.icon_rgb)
     }
 
     fn tool_tip(&self) -> ksni::ToolTip {

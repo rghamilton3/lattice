@@ -81,6 +81,12 @@
 			e.preventDefault();
 			wb.activeOverlay = 'capture';
 		}
+
+		// bare `?` — open command palette when not in a field and no overlay open
+		if (!mod && !e.altKey && e.key === '?' && !wb.anyOverlayOpen && !isEditableTarget(e.target)) {
+			e.preventDefault();
+			wb.activeOverlay = 'palette';
+		}
 	}
 
 	async function confirmNewDoc() {

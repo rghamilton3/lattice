@@ -1,4 +1,4 @@
-name: CI - spine
+name: CI spine
 
 on:
   push:

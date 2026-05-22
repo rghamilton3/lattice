@@ -3,6 +3,7 @@ import type { Database } from "bun:sqlite";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { writeCaptureFile, writeLocalFile, refreshIndex } from "../search";
+import { emitCapture } from "../captureEvents";
 
 export interface AgentRoutesOptions {
   attachmentsDir: string;
@@ -16,6 +17,7 @@ export const agentRoutes = (db: Database, { attachmentsDir }: AgentRoutesOptions
         // Atomic INSERT + markdown write: if writeCaptureFile throws (ENOSPC,
         // EACCES, …) bun:sqlite's transaction wrapper ROLLBACKs the row, so
         // a client retry doesn't leave duplicate DB rows with no on-disk file.
+        const ingestedAt = new Date().toISOString();
         const row = db.transaction(() => {
           const inserted = db
             .prepare(
@@ -25,12 +27,13 @@ export const agentRoutes = (db: Database, { attachmentsDir }: AgentRoutesOptions
               body.text,
               body.source,
               body.captured_at,
-              new Date().toISOString()
+              ingestedAt
             ) as { id: number };
           writeCaptureFile(inserted.id, body.text, body.source, body.captured_at);
           return inserted;
         })();
         refreshIndex();
+        emitCapture({ id: row.id, text: body.text, source: body.source, captured_at: body.captured_at, ingested_at: ingestedAt });
         return { id: row.id };
       },
       {

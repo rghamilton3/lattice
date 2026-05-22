@@ -1,63 +1,404 @@
 //! Configuration editor for the Lattice agent.
 //!
-//! Reads ~/.config/lattice/config.toml, presents a GTK4 form, and writes
+//! Reads the platform config file, presents an egui form, and writes
 //! changes back using toml_edit (preserves comments and formatting).
 //! Launched as a subprocess by lattice-tray.
-//! May invoke `systemctl --user restart lattice-agent`.
 
-use gtk4::{
-    Adjustment, Application, ApplicationWindow, Box as GBox, Button, Entry, Frame, Grid, Label,
-    Orientation, PolicyType, ScrolledWindow, SpinButton, TextView, prelude::*,
-};
+use eframe::egui;
 use lattice_agent::config::config_path;
-use std::cell::{Cell, RefCell};
-use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::UnixStream;
+use lattice_agent::config_edit::{self, ConfigForm, WatchRow};
+use lattice_agent::ipc_client;
 use std::path::PathBuf;
-use std::rc::Rc;
+use std::sync::mpsc;
 use std::time::Duration;
+use toml_edit::DocumentMut;
 
 const APP_ID: &str = "com.rghsoftware.lattice.config";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Modal state ───────────────────────────────────────────────────────────────
 
-fn socket_path() -> PathBuf {
-    if let Ok(dir) = std::env::var("XDG_RUNTIME_DIR") {
-        return PathBuf::from(dir).join("lattice-agent.sock");
-    }
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_owned());
-    PathBuf::from(home)
-        .join(".local")
-        .join("share")
-        .join("lattice")
-        .join("agent.sock")
+#[derive(Default)]
+enum ModalState {
+    #[default]
+    None,
+    AskRestart,
+    ReindexPending,
+    Error(String),
+    Info {
+        title: String,
+        body: String,
+    },
 }
 
-/// Sends "reindex" over the agent IPC socket. Returns Ok(()) on success or an
-/// error string describing what went wrong (agent not running, IPC error, etc.).
+// ── App state ─────────────────────────────────────────────────────────────────
+
+enum AppState {
+    Loaded { doc: DocumentMut, form: ConfigForm },
+    LoadError(String),
+}
+
+// ── ConfigApp ─────────────────────────────────────────────────────────────────
+
+struct ConfigApp {
+    state: AppState,
+    config_path: PathBuf,
+    show_token: bool,
+    modal: ModalState,
+    reindex_rx: Option<mpsc::Receiver<Result<(), String>>>,
+}
+
+impl ConfigApp {
+    fn new() -> Self {
+        let config_path = config_path();
+        let state = match config_edit::load(&config_path) {
+            Ok((doc, form)) => AppState::Loaded { doc, form },
+            Err(msg) => AppState::LoadError(msg),
+        };
+        Self {
+            state,
+            config_path,
+            show_token: false,
+            modal: ModalState::None,
+            reindex_rx: None,
+        }
+    }
+
+    fn poll_reindex_channel(&mut self) {
+        let done = match &self.reindex_rx {
+            None => return,
+            Some(rx) => {
+                match rx.try_recv() {
+                    Ok(Ok(())) => {
+                        self.modal = ModalState::Info {
+                        title: "Re-index started".into(),
+                        body: "The agent will re-upload all files.\nWatch the tray icon for progress.".into(),
+                    };
+                        true
+                    }
+                    Ok(Err(e)) => {
+                        self.modal = ModalState::Error(e);
+                        true
+                    }
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        self.modal = ModalState::Error("Reindex thread panicked".into());
+                        true
+                    }
+                    Err(mpsc::TryRecvError::Empty) => false,
+                }
+            }
+        };
+        if done {
+            self.reindex_rx = None;
+        }
+    }
+}
+
+impl eframe::App for ConfigApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.poll_reindex_channel();
+
+        // ── Load-error state ──────────────────────────────────────────────────
+        if let AppState::LoadError(ref msg) = self.state {
+            let msg = msg.clone();
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.label(&msg);
+                ui.add_space(8.0);
+                if ui.button("Close").clicked() {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+            });
+            return;
+        }
+
+        // ── Modal overlays ────────────────────────────────────────────────────
+        // Take ownership to avoid self-referential borrow inside closures.
+        let mut close_app = false;
+        let modal = std::mem::take(&mut self.modal);
+        self.modal = match modal {
+            ModalState::None => ModalState::None,
+
+            ModalState::AskRestart => {
+                let mut next: ModalState = ModalState::AskRestart;
+                egui::Window::new("Configuration Saved")
+                    .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                    .fixed_size([340.0, 130.0])
+                    .collapsible(false)
+                    .resizable(false)
+                    .show(ctx, |ui| {
+                        ui.label("Configuration saved.\nRestart the agent to apply changes?");
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            if ui.button("Not Now").clicked() {
+                                next = ModalState::None;
+                                close_app = true;
+                            }
+                            if ui.button("Restart Agent").clicked() {
+                                match restart_service() {
+                                    Ok(()) => {
+                                        next = ModalState::None;
+                                        close_app = true;
+                                    }
+                                    Err(e) => next = ModalState::Error(e),
+                                }
+                            }
+                        });
+                    });
+                next
+            }
+
+            ModalState::ReindexPending => {
+                ctx.request_repaint();
+                egui::Window::new("Working…")
+                    .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                    .fixed_size([200.0, 60.0])
+                    .collapsible(false)
+                    .resizable(false)
+                    .show(ctx, |ui| {
+                        ui.label("Requesting re-index…");
+                    });
+                ModalState::ReindexPending
+            }
+
+            ModalState::Error(msg) => {
+                let mut done = false;
+                egui::Window::new("Error")
+                    .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                    .fixed_size([380.0, 110.0])
+                    .collapsible(false)
+                    .resizable(false)
+                    .show(ctx, |ui| {
+                        ui.label(&msg);
+                        ui.add_space(8.0);
+                        if ui.button("Close").clicked() {
+                            done = true;
+                        }
+                    });
+                if done {
+                    ModalState::None
+                } else {
+                    ModalState::Error(msg)
+                }
+            }
+
+            ModalState::Info { title, body } => {
+                let mut done = false;
+                egui::Window::new(title.as_str())
+                    .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                    .fixed_size([380.0, 110.0])
+                    .collapsible(false)
+                    .resizable(false)
+                    .show(ctx, |ui| {
+                        ui.label(&body);
+                        ui.add_space(8.0);
+                        if ui.button("Close").clicked() {
+                            done = true;
+                        }
+                    });
+                if done {
+                    ModalState::None
+                } else {
+                    ModalState::Info { title, body }
+                }
+            }
+        };
+
+        if close_app {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            return;
+        }
+
+        // ── Main form ─────────────────────────────────────────────────────────
+        // Split field borrows so closures can capture distinct fields simultaneously.
+        let show_token = &mut self.show_token;
+        let modal = &mut self.modal;
+        let reindex_rx = &mut self.reindex_rx;
+        let config_path = &self.config_path;
+        let (doc, form) = match &mut self.state {
+            AppState::Loaded { doc, form } => (doc, form),
+            AppState::LoadError(_) => return,
+        };
+
+        let mut save_clicked = false;
+        let mut cancel_clicked = false;
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                // Spine
+                egui::Frame::group(ui.style()).show(ui, |ui| {
+                    ui.heading("Spine");
+                    egui::Grid::new("spine")
+                        .num_columns(2)
+                        .spacing([8.0, 6.0])
+                        .show(ui, |ui| {
+                            ui.label("URL:");
+                            ui.add(
+                                egui::TextEdit::singleline(&mut form.spine_url)
+                                    .desired_width(f32::INFINITY),
+                            );
+                            ui.end_row();
+                            ui.label("Token:");
+                            ui.horizontal(|ui| {
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut form.spine_token)
+                                        .password(!*show_token)
+                                        .desired_width(f32::INFINITY),
+                                );
+                                let lbl = if *show_token { "Hide" } else { "Show" };
+                                if ui.button(lbl).clicked() {
+                                    *show_token = !*show_token;
+                                }
+                            });
+                            ui.end_row();
+                        });
+                });
+                ui.add_space(8.0);
+
+                // Agent
+                egui::Frame::group(ui.style()).show(ui, |ui| {
+                    ui.heading("Agent");
+                    egui::Grid::new("agent")
+                        .num_columns(2)
+                        .spacing([8.0, 6.0])
+                        .show(ui, |ui| {
+                            ui.label("Machine ID:");
+                            ui.add(
+                                egui::TextEdit::singleline(&mut form.machine_id)
+                                    .hint_text("defaults to hostname")
+                                    .desired_width(f32::INFINITY),
+                            );
+                            ui.end_row();
+                            ui.label("Poll (min):");
+                            ui.add(egui::DragValue::new(&mut form.poll_minutes).range(1..=1440));
+                            ui.end_row();
+                            ui.label("Max file (MB):");
+                            ui.add(
+                                egui::DragValue::new(&mut form.max_file_mb)
+                                    .range(0.1..=2048.0)
+                                    .speed(0.1),
+                            );
+                            ui.end_row();
+                        });
+                });
+                ui.add_space(8.0);
+
+                // Watch paths
+                egui::Frame::group(ui.style()).show(ui, |ui| {
+                    ui.heading("Watch Paths");
+                    let mut to_remove: Option<usize> = None;
+                    for (i, row) in form.watch_rows.iter_mut().enumerate() {
+                        egui::Frame::group(ui.style()).show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label("Path:");
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut row.path)
+                                        .desired_width(f32::INFINITY),
+                                );
+                                if ui.button("Remove").clicked() {
+                                    to_remove = Some(i);
+                                }
+                            });
+                            ui.label("Patterns (one per line):");
+                            ui.add(egui::TextEdit::multiline(&mut row.patterns).desired_rows(3));
+                        });
+                        ui.add_space(4.0);
+                    }
+                    if let Some(i) = to_remove {
+                        form.watch_rows.remove(i);
+                    }
+                    if ui.button("+ Add Watch Path").clicked() {
+                        form.watch_rows.push(WatchRow::default());
+                    }
+                });
+                ui.add_space(8.0);
+
+                // Actions
+                egui::Frame::group(ui.style()).show(ui, |ui| {
+                    ui.heading("Actions");
+                    ui.horizontal(|ui| {
+                        let busy = matches!(modal, ModalState::ReindexPending);
+                        if ui
+                            .add_enabled(!busy, egui::Button::new("Update Index"))
+                            .clicked()
+                        {
+                            let (tx, rx) = mpsc::channel();
+                            *reindex_rx = Some(rx);
+                            *modal = ModalState::ReindexPending;
+                            ctx.request_repaint();
+                            std::thread::spawn(move || {
+                                tx.send(send_reindex()).ok();
+                            });
+                        }
+                        ui.label("Clear the file cache and re-upload all indexed files to Spine.");
+                    });
+                });
+            });
+
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Save").clicked() {
+                        save_clicked = true;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        cancel_clicked = true;
+                    }
+                });
+            });
+        });
+
+        if cancel_clicked {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+        if save_clicked {
+            config_edit::apply(doc, form);
+            match config_edit::save(doc, config_path) {
+                Ok(()) => *modal = ModalState::AskRestart,
+                Err(e) => *modal = ModalState::Error(e),
+            }
+        }
+    }
+}
+
+// ── Service restart ───────────────────────────────────────────────────────────
+
+fn restart_service() -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        let status = std::process::Command::new("systemctl")
+            .args(["--user", "restart", "lattice-agent"])
+            .status()
+            .map_err(|e| format!("systemctl failed to run: {e}"))?;
+        if !status.success() {
+            return Err(format!(
+                "systemctl restart returned exit code {:?}",
+                status.code()
+            ));
+        }
+    }
+    #[cfg(windows)]
+    {
+        let status = std::process::Command::new("schtasks")
+            .args(["/Run", "/TN", "LatticeAgent"])
+            .status()
+            .map_err(|e| format!("schtasks failed to run: {e}"))?;
+        if !status.success() {
+            return Err(format!(
+                "schtasks /Run returned exit code {:?}",
+                status.code()
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn send_reindex() -> Result<(), String> {
-    let path = socket_path();
-    let mut stream = UnixStream::connect(&path).map_err(|e| {
+    let line = ipc_client::send_command("reindex", Duration::from_secs(3)).map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
             "The agent is not running. Start it first.".to_owned()
         } else {
             format!("Could not connect to agent: {e}")
         }
     })?;
-    stream
-        .set_write_timeout(Some(Duration::from_secs(3)))
-        .map_err(|e| e.to_string())?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(3)))
-        .map_err(|e| e.to_string())?;
-    stream
-        .write_all(b"reindex\n")
-        .map_err(|e| format!("Write failed: {e}"))?;
-    let mut reader = BufReader::new(&stream);
-    let mut line = String::new();
-    reader
-        .read_line(&mut line)
-        .map_err(|e| format!("Read failed: {e}"))?;
     if line.contains("\"ok\"") {
         Ok(())
     } else {
@@ -65,878 +406,20 @@ fn send_reindex() -> Result<(), String> {
     }
 }
 
-fn systemctl_restart(parent: &ApplicationWindow) -> bool {
-    match std::process::Command::new("systemctl")
-        .args(["--user", "restart", "lattice-agent"])
-        .status()
-    {
-        Err(e) => {
-            show_error(parent, &format!("systemctl failed to run:\n{e}"));
-            false
-        }
-        Ok(s) if !s.success() => {
-            show_error(
-                parent,
-                &format!("systemctl restart returned exit code {:?}", s.code()),
-            );
-            false
-        }
-        Ok(_) => true,
-    }
-}
-
-// ── Watch row ─────────────────────────────────────────────────────────────────
-
-struct WatchRow {
-    container: GBox,
-    path_entry: Entry,
-    patterns_buffer: gtk4::TextBuffer,
-}
-
-fn make_watch_row(entries_box: &GBox, path: &str, patterns: &[String]) -> WatchRow {
-    let container = GBox::builder()
-        .orientation(Orientation::Vertical)
-        .spacing(4)
-        .build();
-
-    let path_row = GBox::builder()
-        .orientation(Orientation::Horizontal)
-        .spacing(6)
-        .build();
-    let path_lbl = Label::builder()
-        .label("Path:")
-        .width_chars(9)
-        .halign(gtk4::Align::Start)
-        .build();
-    let path_entry = Entry::builder().hexpand(true).text(path).build();
-    let remove_btn = Button::builder().label("Remove").build();
-    path_row.append(&path_lbl);
-    path_row.append(&path_entry);
-    path_row.append(&remove_btn);
-
-    let pat_row = GBox::builder()
-        .orientation(Orientation::Horizontal)
-        .spacing(6)
-        .build();
-    let pat_lbl = Label::builder()
-        .label("Patterns:")
-        .width_chars(9)
-        .halign(gtk4::Align::Start)
-        .valign(gtk4::Align::Start)
-        .build();
-    let pat_view = TextView::builder()
-        .hexpand(true)
-        .wrap_mode(gtk4::WrapMode::Word)
-        .build();
-    let patterns_buffer = pat_view.buffer();
-    patterns_buffer.set_text(&patterns.join("\n"));
-    let pat_scroll = ScrolledWindow::new();
-    pat_scroll.set_hexpand(true);
-    pat_scroll.set_min_content_height(60);
-    pat_scroll.set_max_content_height(120);
-    pat_scroll.set_vscrollbar_policy(PolicyType::Automatic);
-    pat_scroll.set_hscrollbar_policy(PolicyType::Never);
-    pat_scroll.set_child(Some(&pat_view));
-    pat_row.append(&pat_lbl);
-    pat_row.append(&pat_scroll);
-
-    container.append(&path_row);
-    container.append(&pat_row);
-    entries_box.append(&container);
-
-    {
-        let container_c = container.clone();
-        let entries_box_c = entries_box.clone();
-        remove_btn.connect_clicked(move |_| {
-            entries_box_c.remove(&container_c);
-        });
-    }
-
-    WatchRow {
-        container,
-        path_entry,
-        patterns_buffer,
-    }
-}
-
-// ── Post-save dialog ──────────────────────────────────────────────────────────
-
-fn prompt_restart(parent: &ApplicationWindow) {
-    let dialog = gtk4::Window::builder()
-        .transient_for(parent)
-        .modal(true)
-        .title("Configuration Saved")
-        .default_width(340)
-        .resizable(false)
-        .build();
-
-    let vbox = GBox::builder()
-        .orientation(Orientation::Vertical)
-        .spacing(16)
-        .margin_top(20)
-        .margin_bottom(16)
-        .margin_start(20)
-        .margin_end(20)
-        .build();
-
-    vbox.append(
-        &Label::builder()
-            .label("Configuration saved.\nRestart the agent to apply changes?")
-            .justify(gtk4::Justification::Center)
-            .build(),
-    );
-
-    let btn_row = GBox::builder()
-        .orientation(Orientation::Horizontal)
-        .spacing(8)
-        .halign(gtk4::Align::Center)
-        .build();
-    let not_now = Button::builder().label("Not Now").build();
-    let restart = Button::builder().label("Restart Agent").build();
-    restart.add_css_class("suggested-action");
-
-    {
-        let d = dialog.downgrade();
-        let p = parent.downgrade();
-        not_now.connect_clicked(move |_| {
-            d.upgrade().map(|w| w.close());
-            p.upgrade().map(|w| w.close());
-        });
-    }
-    {
-        let d = dialog.downgrade();
-        let p = parent.downgrade();
-        restart.connect_clicked(move |_| {
-            if let Some(win) = p.upgrade() {
-                if systemctl_restart(&win) {
-                    win.close();
-                }
-            }
-            d.upgrade().map(|w| w.close());
-        });
-    }
-
-    btn_row.append(&not_now);
-    btn_row.append(&restart);
-    vbox.append(&btn_row);
-    dialog.set_child(Some(&vbox));
-    dialog.present();
-}
-
-fn show_dialog(parent: &ApplicationWindow, title: &str, msg: &str) {
-    let dialog = gtk4::Window::builder()
-        .transient_for(parent)
-        .modal(true)
-        .title(title)
-        .default_width(380)
-        .resizable(false)
-        .build();
-    let vbox = GBox::builder()
-        .orientation(Orientation::Vertical)
-        .spacing(12)
-        .margin_top(16)
-        .margin_bottom(16)
-        .margin_start(16)
-        .margin_end(16)
-        .build();
-    vbox.append(&Label::builder().label(msg).wrap(true).xalign(0.0).build());
-    let btn = Button::builder()
-        .label("Close")
-        .halign(gtk4::Align::End)
-        .build();
-    let d = dialog.downgrade();
-    btn.connect_clicked(move |_| {
-        d.upgrade().map(|w| w.close());
-    });
-    vbox.append(&btn);
-    dialog.set_child(Some(&vbox));
-    dialog.present();
-}
-
-fn show_error(parent: &ApplicationWindow, msg: &str) {
-    show_dialog(parent, "Error", msg);
-}
-
-fn show_info(parent: &ApplicationWindow, title: &str, msg: &str) {
-    show_dialog(parent, title, msg);
-}
-
-// ── UI builder ────────────────────────────────────────────────────────────────
-
-fn build_ui(app: &Application) {
-    let path = config_path();
-
-    let content = match std::fs::read_to_string(&path) {
-        Ok(c) => c,
-        Err(e) => {
-            let win = ApplicationWindow::builder()
-                .application(app)
-                .title("Lattice Config")
-                .default_width(420)
-                .build();
-            let vbox = GBox::builder()
-                .orientation(Orientation::Vertical)
-                .spacing(12)
-                .margin_top(16)
-                .margin_bottom(16)
-                .margin_start(16)
-                .margin_end(16)
-                .build();
-            vbox.append(
-                &Label::builder()
-                    .label(&format!("Cannot read config at {}:\n{e}", path.display()))
-                    .wrap(true)
-                    .xalign(0.0)
-                    .build(),
-            );
-            let btn = Button::builder()
-                .label("Close")
-                .halign(gtk4::Align::End)
-                .build();
-            let w = win.downgrade();
-            btn.connect_clicked(move |_| {
-                w.upgrade().map(|x| x.close());
-            });
-            vbox.append(&btn);
-            win.set_child(Some(&vbox));
-            win.present();
-            return;
-        }
-    };
-
-    let doc: toml_edit::DocumentMut = match content.parse() {
-        Ok(d) => d,
-        Err(e) => {
-            let win = ApplicationWindow::builder()
-                .application(app)
-                .title("Lattice Config")
-                .default_width(420)
-                .build();
-            let vbox = GBox::builder()
-                .orientation(Orientation::Vertical)
-                .spacing(12)
-                .margin_top(16)
-                .margin_bottom(16)
-                .margin_start(16)
-                .margin_end(16)
-                .build();
-            vbox.append(
-                &Label::builder()
-                    .label(&format!("Cannot parse config:\n{e}"))
-                    .wrap(true)
-                    .xalign(0.0)
-                    .build(),
-            );
-            let btn = Button::builder()
-                .label("Close")
-                .halign(gtk4::Align::End)
-                .build();
-            let w = win.downgrade();
-            btn.connect_clicked(move |_| {
-                w.upgrade().map(|x| x.close());
-            });
-            vbox.append(&btn);
-            win.set_child(Some(&vbox));
-            win.present();
-            return;
-        }
-    };
-
-    let doc = Rc::new(RefCell::new(doc));
-
-    // ── Window ────────────────────────────────────────────────────────────────
-
-    let window = ApplicationWindow::builder()
-        .application(app)
-        .title("Lattice Config")
-        .default_width(520)
-        .default_height(640)
-        .build();
-
-    let root = GBox::builder().orientation(Orientation::Vertical).build();
-
-    let scroll = ScrolledWindow::new();
-    scroll.set_hscrollbar_policy(PolicyType::Never);
-    scroll.set_vscrollbar_policy(PolicyType::Automatic);
-    scroll.set_vexpand(true);
-
-    let form = GBox::builder()
-        .orientation(Orientation::Vertical)
-        .spacing(12)
-        .margin_top(12)
-        .margin_bottom(12)
-        .margin_start(16)
-        .margin_end(16)
-        .build();
-    scroll.set_child(Some(&form));
-
-    // ── Spine section ─────────────────────────────────────────────────────────
-
-    let (spine_url_init, spine_tok_init) = {
-        let d = doc.borrow();
-        let spine = d.get("spine").and_then(|i| i.as_table());
-        (
-            spine
-                .and_then(|t| t.get("url"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_owned(),
-            spine
-                .and_then(|t| t.get("agent_token"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_owned(),
-        )
-    };
-
-    let spine_frame = Frame::builder().label("Spine").build();
-    let spine_grid = Grid::builder()
-        .row_spacing(6)
-        .column_spacing(8)
-        .margin_top(8)
-        .margin_bottom(8)
-        .margin_start(8)
-        .margin_end(8)
-        .build();
-
-    let url_entry = Entry::builder()
-        .hexpand(true)
-        .text(spine_url_init.as_str())
-        .build();
-
-    let tok_entry = Entry::builder()
-        .hexpand(true)
-        .visibility(false)
-        .input_purpose(gtk4::InputPurpose::Password)
-        .text(spine_tok_init.as_str())
-        .build();
-    let tok_toggle = Button::builder().label("Show").build();
-    let tok_visible = Rc::new(Cell::new(false));
-    {
-        let tok_entry_c = tok_entry.clone();
-        let tok_visible_c = tok_visible.clone();
-        tok_toggle.connect_clicked(move |btn| {
-            let v = !tok_visible_c.get();
-            tok_visible_c.set(v);
-            tok_entry_c.set_visibility(v);
-            btn.set_label(if v { "Hide" } else { "Show" });
-        });
-    }
-    let tok_box = GBox::builder()
-        .orientation(Orientation::Horizontal)
-        .spacing(4)
-        .hexpand(true)
-        .build();
-    tok_box.append(&tok_entry);
-    tok_box.append(&tok_toggle);
-
-    spine_grid.attach(
-        &Label::builder()
-            .label("URL:")
-            .halign(gtk4::Align::Start)
-            .build(),
-        0,
-        0,
-        1,
-        1,
-    );
-    spine_grid.attach(&url_entry, 1, 0, 1, 1);
-    spine_grid.attach(
-        &Label::builder()
-            .label("Token:")
-            .halign(gtk4::Align::Start)
-            .build(),
-        0,
-        1,
-        1,
-        1,
-    );
-    spine_grid.attach(&tok_box, 1, 1, 1, 1);
-    spine_frame.set_child(Some(&spine_grid));
-    form.append(&spine_frame);
-
-    // ── Agent section ─────────────────────────────────────────────────────────
-
-    let (mid_init, poll_init, max_bytes_init) = {
-        let d = doc.borrow();
-        let agent = d.get("agent").and_then(|i| i.as_table());
-        (
-            agent
-                .and_then(|t| t.get("machine_id"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_owned(),
-            agent
-                .and_then(|t| t.get("poll_interval_minutes"))
-                .and_then(|v| v.as_integer())
-                .unwrap_or(15) as f64,
-            agent
-                .and_then(|t| t.get("max_file_bytes"))
-                .and_then(|v| v.as_integer())
-                .unwrap_or(10 * 1024 * 1024) as f64,
-        )
-    };
-
-    let agent_frame = Frame::builder().label("Agent").build();
-    let agent_grid = Grid::builder()
-        .row_spacing(6)
-        .column_spacing(8)
-        .margin_top(8)
-        .margin_bottom(8)
-        .margin_start(8)
-        .margin_end(8)
-        .build();
-
-    let mid_entry = Entry::builder()
-        .hexpand(true)
-        .text(mid_init.as_str())
-        .placeholder_text("defaults to hostname")
-        .build();
-    let poll_spin = SpinButton::builder()
-        .adjustment(&Adjustment::new(poll_init, 1.0, 1440.0, 1.0, 10.0, 0.0))
-        .digits(0)
-        .build();
-    let max_spin = SpinButton::builder()
-        .adjustment(&Adjustment::new(
-            max_bytes_init / (1024.0 * 1024.0),
-            0.1,
-            2048.0,
-            1.0,
-            10.0,
-            0.0,
-        ))
-        .digits(1)
-        .build();
-
-    agent_grid.attach(
-        &Label::builder()
-            .label("Machine ID:")
-            .halign(gtk4::Align::Start)
-            .build(),
-        0,
-        0,
-        1,
-        1,
-    );
-    agent_grid.attach(&mid_entry, 1, 0, 1, 1);
-    agent_grid.attach(
-        &Label::builder()
-            .label("Poll (min):")
-            .halign(gtk4::Align::Start)
-            .build(),
-        0,
-        1,
-        1,
-        1,
-    );
-    agent_grid.attach(&poll_spin, 1, 1, 1, 1);
-    agent_grid.attach(
-        &Label::builder()
-            .label("Max file (MB):")
-            .halign(gtk4::Align::Start)
-            .build(),
-        0,
-        2,
-        1,
-        1,
-    );
-    agent_grid.attach(&max_spin, 1, 2, 1, 1);
-    agent_frame.set_child(Some(&agent_grid));
-    form.append(&agent_frame);
-
-    // ── Watch paths section ───────────────────────────────────────────────────
-
-    let watch_frame = Frame::builder().label("Watch Paths").build();
-    let watch_outer = GBox::builder()
-        .orientation(Orientation::Vertical)
-        .spacing(8)
-        .margin_top(8)
-        .margin_bottom(8)
-        .margin_start(8)
-        .margin_end(8)
-        .build();
-    let entries_box = GBox::builder()
-        .orientation(Orientation::Vertical)
-        .spacing(8)
-        .build();
-
-    let watch_rows: Rc<RefCell<Vec<WatchRow>>> = Rc::new(RefCell::new(Vec::new()));
-
-    {
-        let d = doc.borrow();
-        let watch_opt = d
-            .get("agent")
-            .and_then(|i| i.as_table())
-            .and_then(|t| t.get("watch"))
-            .and_then(|w| w.as_array_of_tables());
-        if let Some(aot) = watch_opt {
-            for tbl in aot {
-                let p = tbl.get("path").and_then(|v| v.as_str()).unwrap_or("");
-                let pats: Vec<String> = tbl
-                    .get("patterns")
-                    .and_then(|v| v.as_array())
-                    .into_iter()
-                    .flat_map(|a| a.iter())
-                    .filter_map(|v| v.as_str())
-                    .map(str::to_owned)
-                    .collect();
-                let row = make_watch_row(&entries_box, p, &pats);
-                watch_rows.borrow_mut().push(row);
-            }
-        }
-    }
-
-    let add_btn = Button::builder()
-        .label("+ Add Watch Path")
-        .halign(gtk4::Align::Start)
-        .build();
-    {
-        let wr = watch_rows.clone();
-        let eb = entries_box.clone();
-        add_btn.connect_clicked(move |_| {
-            let row = make_watch_row(&eb, "", &[]);
-            wr.borrow_mut().push(row);
-        });
-    }
-    watch_outer.append(&entries_box);
-    watch_outer.append(&add_btn);
-    watch_frame.set_child(Some(&watch_outer));
-    form.append(&watch_frame);
-
-    // ── Actions section ───────────────────────────────────────────────────────
-
-    let actions_frame = Frame::builder().label("Actions").build();
-    let actions_box = GBox::builder()
-        .orientation(Orientation::Horizontal)
-        .spacing(12)
-        .margin_top(8)
-        .margin_bottom(8)
-        .margin_start(8)
-        .margin_end(8)
-        .build();
-
-    let reindex_btn = Button::builder().label("Update Index").build();
-    let reindex_lbl = Label::builder()
-        .label("Clear the file cache and re-upload all indexed files to Spine.")
-        .wrap(true)
-        .xalign(0.0)
-        .hexpand(true)
-        .build();
-    {
-        let win_c = window.clone();
-        reindex_btn.connect_clicked(move |_| {
-            match send_reindex() {
-                Ok(()) => show_info(
-                    &win_c,
-                    "Re-index started",
-                    "The agent will re-upload all files in the background.\nWatch the tray icon for progress.",
-                ),
-                Err(msg) => show_error(&win_c, &msg),
-            }
-        });
-    }
-    actions_box.append(&reindex_btn);
-    actions_box.append(&reindex_lbl);
-    actions_frame.set_child(Some(&actions_box));
-    form.append(&actions_frame);
-
-    // ── Button row ────────────────────────────────────────────────────────────
-
-    root.append(&scroll);
-    root.append(
-        &gtk4::Separator::builder()
-            .orientation(Orientation::Horizontal)
-            .build(),
-    );
-
-    let btn_row = GBox::builder()
-        .orientation(Orientation::Horizontal)
-        .spacing(8)
-        .halign(gtk4::Align::End)
-        .margin_top(8)
-        .margin_bottom(8)
-        .margin_end(12)
-        .build();
-
-    let cancel_btn = Button::builder().label("Cancel").build();
-    {
-        let w = window.downgrade();
-        cancel_btn.connect_clicked(move |_| {
-            w.upgrade().map(|x| x.close());
-        });
-    }
-
-    let save_btn = Button::builder().label("Save").build();
-    save_btn.add_css_class("suggested-action");
-    {
-        let doc_c = doc.clone();
-        let path_c = path.clone();
-        let wr_c = watch_rows.clone();
-        let win_c = window.clone();
-
-        save_btn.connect_clicked(move |_| {
-            let new_url = url_entry.text().to_string();
-            let new_tok = tok_entry.text().to_string();
-            let new_mid = mid_entry.text().to_string();
-            let new_poll = poll_spin.value() as i64;
-            let new_max = (max_spin.value() * 1024.0 * 1024.0) as i64;
-
-            let new_watches: Vec<(String, Vec<String>)> = wr_c
-                .borrow()
-                .iter()
-                .filter(|r| r.container.parent().is_some())
-                .map(|r| {
-                    let p = r.path_entry.text().trim().to_string();
-                    let buf = &r.patterns_buffer;
-                    let text = buf
-                        .text(&buf.start_iter(), &buf.end_iter(), false)
-                        .to_string();
-                    let pats = text
-                        .lines()
-                        .map(str::trim)
-                        .filter(|s| !s.is_empty())
-                        .map(str::to_owned)
-                        .collect();
-                    (p, pats)
-                })
-                .collect();
-
-            let mut d = doc_c.borrow_mut();
-
-            if !d.contains_key("spine") {
-                d.insert("spine", toml_edit::Item::Table(toml_edit::Table::new()));
-            }
-            if !d.contains_key("agent") {
-                d.insert("agent", toml_edit::Item::Table(toml_edit::Table::new()));
-            }
-
-            d["spine"]["url"] = toml_edit::value(new_url);
-            d["spine"]["agent_token"] = toml_edit::value(new_tok);
-
-            if new_mid.is_empty() {
-                if let Some(t) = d["agent"].as_table_mut() {
-                    t.remove("machine_id");
-                }
-            } else {
-                d["agent"]["machine_id"] = toml_edit::value(new_mid);
-            }
-            d["agent"]["poll_interval_minutes"] = toml_edit::value(new_poll);
-            d["agent"]["max_file_bytes"] = toml_edit::value(new_max);
-
-            // Replace [[agent.watch]] entries entirely.
-            if let Some(t) = d["agent"].as_table_mut() {
-                t.remove("watch");
-            }
-            if !new_watches.is_empty() {
-                let mut aot = toml_edit::ArrayOfTables::new();
-                for (p, pats) in &new_watches {
-                    let mut tbl = toml_edit::Table::new();
-                    tbl.insert("path", toml_edit::value(p.clone()));
-                    let mut arr = toml_edit::Array::new();
-                    for pat in pats {
-                        arr.push(pat.as_str());
-                    }
-                    tbl.insert(
-                        "patterns",
-                        toml_edit::Item::Value(toml_edit::Value::Array(arr)),
-                    );
-                    aot.push(tbl);
-                }
-                d["agent"]["watch"] = toml_edit::Item::ArrayOfTables(aot);
-            }
-
-            let output = d.to_string();
-            drop(d);
-
-            let tmp = path_c.with_extension("toml.tmp");
-            let write_result =
-                std::fs::write(&tmp, &output).and_then(|_| std::fs::rename(&tmp, &path_c));
-            match write_result {
-                Ok(_) => prompt_restart(&win_c),
-                Err(e) => show_error(&win_c, &format!("Failed to save config:\n{e}")),
-            }
-        });
-    }
-
-    btn_row.append(&cancel_btn);
-    btn_row.append(&save_btn);
-    root.append(&btn_row);
-
-    window.set_child(Some(&root));
-    window.present();
-}
+// ── Entry point ───────────────────────────────────────────────────────────────
 
 fn main() {
-    let app = Application::builder().application_id(APP_ID).build();
-    app.connect_activate(build_ui);
-    app.run();
-}
-
-#[cfg(test)]
-mod tests {
-    use toml_edit::{ArrayOfTables, Item, Table, Value};
-
-    fn round_trip(input: &str) -> String {
-        let mut doc: toml_edit::DocumentMut = input.parse().unwrap();
-
-        doc["spine"]["url"] = toml_edit::value("https://updated.example.com");
-        doc["agent"]["poll_interval_minutes"] = toml_edit::value(15i64);
-
-        if let Some(t) = doc["agent"].as_table_mut() {
-            t.remove("watch");
-        }
-        let mut aot = ArrayOfTables::new();
-        let mut tbl = Table::new();
-        tbl.insert("path", toml_edit::value("/home/user/notes"));
-        let mut arr = toml_edit::Array::new();
-        arr.push("**/*.md");
-        tbl.insert("patterns", Item::Value(Value::Array(arr)));
-        aot.push(tbl);
-        doc["agent"]["watch"] = Item::ArrayOfTables(aot);
-
-        doc.to_string()
-    }
-
-    #[test]
-    fn config_round_trip_preserves_comments() {
-        let input = r#"[spine]
-# production server
-url         = "https://lattice.rghsoftware.com"
-agent_token = "secret"
-
-[agent]
-# poll interval comment
-poll_interval_minutes = 30
-
-[[agent.watch]]
-path     = "/home/user/notes"
-patterns = ["**/*.md"]
-
-[[agent.watch]]
-path     = "/home/user/books"
-patterns = ["**/*.pdf"]
-"#;
-
-        let output = round_trip(input);
-        assert!(
-            output.contains("# production server"),
-            "spine comment preserved"
-        );
-        assert!(
-            output.contains("# poll interval comment"),
-            "agent comment preserved"
-        );
-        assert!(
-            output.contains("https://updated.example.com"),
-            "url updated"
-        );
-        assert!(
-            output.contains("poll_interval_minutes = 15"),
-            "poll updated"
-        );
-        assert!(
-            !output.contains("/home/user/books"),
-            "removed watch entry gone"
-        );
-        assert!(
-            output.contains("/home/user/notes"),
-            "kept watch entry present"
-        );
-    }
-
-    #[test]
-    fn config_round_trip_empty_watch_removes_section() {
-        let input = r#"[spine]
-url         = "https://lattice.rghsoftware.com"
-agent_token = "tok"
-
-[agent]
-
-[[agent.watch]]
-path     = "/home/user/notes"
-patterns = ["**/*.md"]
-"#;
-        let mut doc: toml_edit::DocumentMut = input.parse().unwrap();
-        if let Some(t) = doc["agent"].as_table_mut() {
-            t.remove("watch");
-        }
-        let output = doc.to_string();
-        assert!(!output.contains("[[agent.watch]]"), "watch section removed");
-    }
-
-    #[test]
-    fn fresh_config_missing_sections_produce_table_headers() {
-        let mut doc: toml_edit::DocumentMut = "".parse().unwrap();
-
-        if !doc.contains_key("spine") {
-            doc.insert("spine", toml_edit::Item::Table(toml_edit::Table::new()));
-        }
-        if !doc.contains_key("agent") {
-            doc.insert("agent", toml_edit::Item::Table(toml_edit::Table::new()));
-        }
-
-        doc["spine"]["url"] = toml_edit::value("https://example.com");
-        doc["spine"]["agent_token"] = toml_edit::value("tok");
-        doc["agent"]["poll_interval_minutes"] = toml_edit::value(15i64);
-        doc["agent"]["max_file_bytes"] = toml_edit::value(10485760i64);
-
-        let output = doc.to_string();
-        assert!(
-            !output.contains("spine = {"),
-            "spine must not be an inline table"
-        );
-        assert!(
-            !output.contains("agent = {"),
-            "agent must not be an inline table"
-        );
-        assert!(output.contains("[spine]"), "spine must be a section header");
-        assert!(output.contains("[agent]"), "agent must be a section header");
-    }
-
-    #[test]
-    fn empty_machine_id_removes_key() {
-        let input = r#"[spine]
-url = "https://example.com"
-agent_token = "tok"
-
-[agent]
-machine_id = "my-machine"
-poll_interval_minutes = 15
-max_file_bytes = 10485760
-"#;
-        let mut doc: toml_edit::DocumentMut = input.parse().unwrap();
-        // Simulate save handler with empty machine_id field
-        if let Some(t) = doc["agent"].as_table_mut() {
-            t.remove("machine_id");
-        }
-        let output = doc.to_string();
-        assert!(
-            !output.contains("machine_id"),
-            "machine_id must be removed when cleared"
-        );
-    }
-
-    #[test]
-    fn watch_patterns_with_blank_lines_filtered() {
-        let buf_text = "**/*.md\n\n  \n**/*.txt\n";
-        let pats: Vec<String> = buf_text
-            .lines()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(str::to_owned)
-            .collect();
-        assert_eq!(pats, ["**/*.md", "**/*.txt"]);
-    }
-
-    #[test]
-    fn all_blank_watch_patterns_yield_empty_list() {
-        let buf_text = "\n\n   \n";
-        let pats: Vec<String> = buf_text
-            .lines()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(str::to_owned)
-            .collect();
-        assert!(pats.is_empty());
-    }
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_title("Lattice Config")
+            .with_inner_size([520.0, 640.0])
+            .with_app_id(APP_ID),
+        ..Default::default()
+    };
+    eframe::run_native(
+        "Lattice Config",
+        options,
+        Box::new(|_cc| Ok(Box::new(ConfigApp::new()))),
+    )
+    .expect("eframe failed to start");
 }

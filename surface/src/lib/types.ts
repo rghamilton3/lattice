@@ -29,6 +29,28 @@ export type SearchResult =
 			path: string;
 			slug: string;
 			modified_at: string;
+	  }
+	| {
+			kind: 'capture-attachment';
+			id: number;
+			score: number;
+			snippet: string;
+			body: string;
+			path: string;
+			capture_id: number;
+			filename: string;
+			modified_at: string;
+	  }
+	| {
+			kind: 'working-attachment';
+			id: number;
+			score: number;
+			snippet: string;
+			body: string;
+			path: string;
+			slug: string;
+			filename: string;
+			modified_at: string;
 	  };
 
 export interface Capture {
@@ -55,6 +77,24 @@ export interface Task {
 	task_priority: TaskPriority | null;
 	task_notes: string | null;
 	task_completed_at: string | null;
+}
+
+export interface BaseAttachment {
+	id: number;
+	filename: string;
+	content_type: string;
+	size_bytes: number;
+	stored_path: string;
+	created_at: string;
+}
+
+export interface CaptureAttachment extends BaseAttachment {
+	capture_id: number;
+	upload_source: string;
+}
+
+export interface WorkingAttachment extends BaseAttachment {
+	slug: string;
 }
 
 export interface FileEntry {

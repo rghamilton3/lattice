@@ -16,7 +16,7 @@ Personal knowledge management substrate, designed around ADHD-aware constraints:
 |-----------|----------|------|
 | [`spine/`](./spine) | TypeScript (Bun, Elysia) | Central server on the VPS. Owns SQLite, hosts QMD search, serves the API and surface. |
 | [`agent/`](./agent) | Rust | Per-machine local file indexer. Polls watched directories, POSTs text to spine. |
-| [`surface/`](./surface) | TypeScript (SvelteKit) | SPA workbench: search, reading panes, working docs. Served as static files by spine. |
+| [`surface/`](./surface) | TypeScript (SvelteKit) | SPA workbench: search, reading panes, working docs, file attachments. Served as static files by spine. |
 
 See [`plan.md`](./plan.md) for the full architecture and phased build plan.
 

@@ -300,6 +300,13 @@
 	flex-wrap: wrap;
 	gap: 6px;
 }
+.doc-content {
+	display: flex;
+	flex-direction: row;
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+}
 .doc-body {
 	flex: 1;
 	min-height: 0;
@@ -314,6 +321,7 @@
 	border-top: 1px solid var(--line);
 	background: var(--bg-raised);
 	padding: 14px 22px 22px;
+	position: relative;
 }
 .related-head {
 	display: flex;

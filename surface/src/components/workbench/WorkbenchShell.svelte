@@ -8,6 +8,7 @@
 	import QuickCapture from '$components/overlays/QuickCapture.svelte';
 	import Settings from '$components/overlays/Settings.svelte';
 	import NewTask from '$components/overlays/NewTask.svelte';
+	import FileUpload from '$components/overlays/FileUpload.svelte';
 	import ProcessMode from '$components/process/ProcessMode.svelte';
 	import Toast from '$components/ui/Toast.svelte';
 
@@ -156,6 +157,10 @@
 
 	{#if wb.activeOverlay === 'newTask'}
 		<NewTask />
+	{/if}
+
+	{#if wb.activeOverlay === 'fileUpload'}
+		<FileUpload />
 	{/if}
 
 	{#if wb.activeOverlay === 'newDoc'}

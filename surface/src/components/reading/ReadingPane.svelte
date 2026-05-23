@@ -11,6 +11,9 @@
 	import MarkdownRenderer from './MarkdownRenderer.svelte';
 	import PdfViewer from './PdfViewer.svelte';
 	import RelatedRail from './RelatedRail.svelte';
+	import AttachmentRail from './AttachmentRail.svelte';
+	import { uploadAttachment, uploadWorkingAttachment, attachmentKeys } from '$lib/api/attachments';
+	import { logError } from '$lib/utils/logError';
 
 	const { paneIndex, ref }: { paneIndex: 0 | 1; ref: DocRef } = $props();
 
@@ -18,6 +21,30 @@
 	const qc = useQueryClient();
 
 	let promoteError = $state('');
+	let attachFileInput = $state<HTMLInputElement | null>(null);
+	let attachUploading = $state(false);
+
+	async function onAttachFile(e: Event) {
+		const input = e.target as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+		input.value = '';
+		attachUploading = true;
+		try {
+			if (ref.kind === 'capture') {
+				await uploadAttachment(ref.id, file);
+				qc.invalidateQueries({ queryKey: attachmentKeys.captureList(ref.id) });
+			} else if (ref.kind === 'working') {
+				await uploadWorkingAttachment(ref.slug, file);
+				qc.invalidateQueries({ queryKey: attachmentKeys.workingList(ref.slug) });
+			}
+		} catch (err) {
+			logError('attachFile', err);
+			wb.showToast('Upload failed');
+		} finally {
+			attachUploading = false;
+		}
+	}
 
 	const captureQuery = createQuery(() => ({
 		queryKey: captureKeys.detail(ref.kind === 'capture' ? ref.id : -1),
@@ -156,6 +183,17 @@
 				</button>
 			{/if}
 			<span class="vbar"></span>
+			{#if ref.kind === 'capture' || ref.kind === 'working'}
+				<button
+					class="btn btn-ghost"
+					title="Attach a file to this document"
+					disabled={attachUploading}
+					onclick={() => attachFileInput?.click()}
+				>
+					<Icon name="paperclip" size={14} />
+					{attachUploading ? 'Uploading…' : 'Attach'}
+				</button>
+			{/if}
 			{#if ref.kind === 'working'}
 				<button
 					class="btn btn-ghost"
@@ -175,30 +213,45 @@
 		</div>
 	</div>
 
+	<input
+		bind:this={attachFileInput}
+		type="file"
+		style="display:none"
+		onchange={onAttachFile}
+		aria-hidden="true"
+	/>
+
 	{#if promoteError}
 		<div class="px-3 py-1 text-xs" style="color:var(--c-alarm)">{promoteError}</div>
 	{/if}
 
-	<div class="doc-body">
-		{#if isLoading}
-			<p class="p-3 text-sm" style="color:var(--text-mute)">loading…</p>
-		{:else if isError}
-			<p class="p-3 text-xs" style="color:var(--c-alarm)">
-				{captureQuery.error?.message ??
-					fileQuery.error?.message ??
-					workingQuery.error?.message ??
-					'error loading document'}
-			</p>
-		{:else if ref.kind === 'capture' && captureQuery.data}
-			<MarkdownRenderer content={captureQuery.data.text} />
-		{:else if ref.kind === 'file' && fileQuery.data}
-			{#if fileQuery.data.mime_type === 'application/pdf'}
-				<PdfViewer fileId={ref.id} />
-			{:else}
-				<MarkdownRenderer content={fileQuery.data.text} />
+	<div class="doc-content">
+		<div class="doc-body">
+			{#if isLoading}
+				<p class="p-3 text-sm" style="color:var(--text-mute)">loading…</p>
+			{:else if isError}
+				<p class="p-3 text-xs" style="color:var(--c-alarm)">
+					{captureQuery.error?.message ??
+						fileQuery.error?.message ??
+						workingQuery.error?.message ??
+						'error loading document'}
+				</p>
+			{:else if ref.kind === 'capture' && captureQuery.data}
+				<MarkdownRenderer content={captureQuery.data.text} />
+			{:else if ref.kind === 'file' && fileQuery.data}
+				{#if fileQuery.data.mime_type === 'application/pdf'}
+					<PdfViewer fileId={ref.id} />
+				{:else}
+					<MarkdownRenderer content={fileQuery.data.text} />
+				{/if}
+			{:else if ref.kind === 'working' && workingQuery.data}
+				<MarkdownRenderer content={workingQuery.data.content} />
 			{/if}
-		{:else if ref.kind === 'working' && workingQuery.data}
-			<MarkdownRenderer content={workingQuery.data.content} />
+		</div>
+		{#if ref.kind === 'capture'}
+			<AttachmentRail kind="capture" captureId={ref.id} />
+		{:else if ref.kind === 'working'}
+			<AttachmentRail kind="working" slug={ref.slug} />
 		{/if}
 	</div>
 

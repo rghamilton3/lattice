@@ -123,18 +123,24 @@
 					class="btn btn-ghost"
 					class:is-on={voice}
 					aria-pressed={voice}
+					title={voice ? 'Stop recording' : 'Voice input'}
 					onclick={() => (voice = !voice)}
 				>
 					<Icon name="mic" size={13} />
-					{voice ? 'Recording' : 'Voice'}
 				</button>
-				<button class="btn btn-ghost">
-					<Icon name="link" size={13} />
-					Paste link
+				<button
+					class="btn btn-ghost"
+					title="Attach file"
+					onclick={() => {
+						wb.fileUploadInitialNote = text.trim();
+						wb.activeOverlay = 'fileUpload';
+					}}
+				>
+					<Icon name="paperclip" size={13} />
 				</button>
 				<span
 					class="faint"
-					style="font-size:12px; margin-left:10px"
+					style="font-size:12px; margin-left:6px"
 					style:color={failed ? 'var(--c-alarm)' : undefined}
 				>
 					{#if failed}
@@ -142,15 +148,11 @@
 					{:else if confirmed}
 						Captured — inbox updated
 					{:else}
-						{text.length} chars
+						{text.length} chars · /task, /note, /skip
 					{/if}
 				</span>
 			</div>
 			<div class="row" style="gap:8px">
-				<span class="faint" style="font-size:12px">/task, /note, /skip to auto-route</span>
-				<span class="faint" style="font-size:12px">· save with</span>
-				<span class="kbd">Ctrl</span>
-				<span class="kbd">↵</span>
 				<button class="btn btn-ghost" onclick={close}>Cancel</button>
 				<button class="btn btn-primary" onclick={submit} disabled={!canSave}>
 					<Icon name="check" size={13} />

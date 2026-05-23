@@ -26,7 +26,8 @@ export type ActiveOverlay =
 	| 'settings'
 	| 'newDoc'
 	| 'triage'
-	| 'newTask';
+	| 'newTask'
+	| 'fileUpload';
 
 const THEMES: readonly Theme[] = ['light', 'dark', 'sepia', 'system'];
 const DENSITIES: readonly Density[] = ['compact', 'comfortable', 'spacious'];
@@ -80,6 +81,8 @@ export class WorkbenchStore {
 	// All persisted fields auto-save via +layout.svelte's $effect; never call
 	// persist() from components.
 	activeOverlay = $state<ActiveOverlay>('none');
+	// Text carried from QuickCapture when switching to the file upload overlay.
+	fileUploadInitialNote = $state('');
 
 	// TODO(spine): Resurfaced / clusters / triage need backing endpoints.
 	// Resurfaced renders hardcoded mock data when on — default off until

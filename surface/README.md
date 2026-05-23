@@ -6,7 +6,7 @@
 
 SPA workbench for [Lattice](https://github.com/rghamilton3/lattice) — a personal knowledge management system. Built with [Svelte 5](https://svelte.dev) (runes mode) and [SvelteKit](https://kit.svelte.dev), using [`adapter-static`](https://github.com/sveltejs/kit/tree/main/packages/adapter-static) to emit static files served by [spine](../spine).
 
-Provides search, reading panes, and working-doc editing over the spine REST API.
+Provides search, reading panes, working-doc editing, and file attachments over the spine REST API.
 
 ## Architecture
 
@@ -63,6 +63,12 @@ Global shortcuts (active outside text inputs):
 
 Inside Process Mode (the triage flow) the keys are `k` keep · `a` archive · `p` promote · `t` task · `␣` skip · `Esc` exit.
 
+## File attachments
+
+Files can be attached to any capture or working doc. Use the **Attach** button in the reading pane toolbar (after the `|` separator). Attachments appear in a resizable, minimizable right rail alongside the document content. Filenames and metadata are indexed by QMD and searchable alongside all other content.
+
+The global quick-capture overlay also accepts a file attachment, creating a new capture with the file in one step.
+
 ## Deep links
 
 `adapter-static` serves the SPA from `index.html` for every path. The following query params restore state on first paint:
@@ -81,12 +87,12 @@ When no query params are present, `localStorage` (`lattice.session`) restores th
 
 Phase-1 dark features ship behind build-time env vars. Set any of these to `false` (or `0`) before `bun run build` to disable; anything else keeps the default:
 
-| Variable                              | Default | Hides                                              |
-| ------------------------------------- | ------- | -------------------------------------------------- |
-| `PUBLIC_LATTICE_FEATURE_RESURFACING`  | `true`  | "From your past" rail on Home                      |
-| `PUBLIC_LATTICE_FEATURE_RELATED_RAIL` | `true`  | Related-doc rail at the bottom of the reading pane |
-| `PUBLIC_LATTICE_FEATURE_TRIAGE`       | `true`  | "Process 10 in 5 min" button + ProcessMode flow    |
-| `PUBLIC_LATTICE_FEATURE_CLUSTERS`     | `false` | Cluster facet (no spine endpoint yet)              |
+| Variable                              | Default | Hides                                                                       |
+| ------------------------------------- | ------- | --------------------------------------------------------------------------- |
+| `PUBLIC_LATTICE_FEATURE_RESURFACING`  | `true`  | "From your past" rail on Home                                               |
+| `PUBLIC_LATTICE_FEATURE_RELATED_RAIL` | `true`  | Related-doc rail at the bottom of the reading pane (resizable, minimizable) |
+| `PUBLIC_LATTICE_FEATURE_TRIAGE`       | `true`  | "Process 10 in 5 min" button + ProcessMode flow                             |
+| `PUBLIC_LATTICE_FEATURE_CLUSTERS`     | `false` | Cluster facet (no spine endpoint yet)                                       |
 
 ## Key dependencies
 

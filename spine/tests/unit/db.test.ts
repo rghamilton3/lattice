@@ -34,6 +34,8 @@ describe('db.initDb', () => {
 			'005_tasks.sql',
 			'006_task_completed_at.sql',
 			'007_agent_status.sql',
+			'008_attachment_upload_source.sql',
+			'009_working_attachments.sql',
 		]);
 		db.close();
 	});
@@ -127,8 +129,8 @@ describe('db migration table schemas', () => {
 		expect(() =>
 			db.run(
 				`INSERT INTO capture_attachments
-           (capture_id, signal_id, content_type, filename, size_bytes, stored_path, created_at)
-         VALUES (9999, 'sig1', 'audio/aac', 'f.aac', 100, '9999/f.aac', '2026-01-01')`,
+           (capture_id, signal_id, content_type, filename, size_bytes, stored_path, upload_source, created_at)
+         VALUES (9999, 'sig1', 'audio/aac', 'f.aac', 100, '9999/f.aac', 'signal', '2026-01-01')`,
 			),
 		).toThrow();
 		db.close();

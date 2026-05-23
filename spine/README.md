@@ -31,14 +31,22 @@ SQLite via Bun's built-in `bun:sqlite`. Migrations live in `migrations/` and are
 
 ## Routes
 
-| Method | Path                    | Auth     | Description                                                        |
-| ------ | ----------------------- | -------- | ------------------------------------------------------------------ |
-| `GET`  | `/ping`                 | none     | Health check — returns `{ ok: true }`                              |
-| `GET`  | `/`                     | Authelia | UI: recent captures or search results                              |
-| `GET`  | `/api/captures?limit=N` | Authelia | Returns up to 200 recent captures                                  |
-| `GET`  | `/api/search?q=<query>` | Authelia | QMD hybrid search (BM25 + vector + rerank)                         |
-| `POST` | `/api/agent/capture`    | Bearer   | Accepts `{ text, source, captured_at }` — returns `{ id }`         |
-| `POST` | `/api/agent/index`      | Bearer   | Upserts file index entry; idempotent on `(machine_id, path, hash)` |
+| Method   | Path                                        | Auth     | Description                                                          |
+| -------- | ------------------------------------------- | -------- | -------------------------------------------------------------------- |
+| `GET`    | `/ping`                                     | none     | Health check — returns `{ ok: true }`                                |
+| `GET`    | `/`                                         | Authelia | UI: recent captures or search results                                |
+| `GET`    | `/api/captures?limit=N`                     | Authelia | Returns up to 200 recent captures                                    |
+| `GET`    | `/api/search?q=<query>`                     | Authelia | QMD hybrid search (BM25 + vector + rerank)                           |
+| `GET`    | `/api/captures/:id/attachments`             | Authelia | List attachments for a capture                                       |
+| `POST`   | `/api/captures/:id/attachments`             | Authelia | Upload a file attachment to a capture (multipart/form-data)          |
+| `GET`    | `/api/captures/:id/attachments/:attId/raw`  | Authelia | Download attachment binary (forces download via Content-Disposition) |
+| `DELETE` | `/api/captures/:id/attachments/:attId`      | Authelia | Delete an attachment                                                 |
+| `GET`    | `/api/working/:slug/attachments`            | Authelia | List attachments for a working doc                                   |
+| `POST`   | `/api/working/:slug/attachments`            | Authelia | Upload a file attachment to a working doc (multipart/form-data)      |
+| `GET`    | `/api/working/:slug/attachments/:attId/raw` | Authelia | Download attachment binary (forces download via Content-Disposition) |
+| `DELETE` | `/api/working/:slug/attachments/:attId`     | Authelia | Delete an attachment                                                 |
+| `POST`   | `/api/agent/capture`                        | Bearer   | Accepts `{ text, source, captured_at }` — returns `{ id }`           |
+| `POST`   | `/api/agent/index`                          | Bearer   | Upserts file index entry; idempotent on `(machine_id, path, hash)`   |
 
 ## Development
 
@@ -79,7 +87,15 @@ docker compose -f docker-compose.yml -f docker-compose.relay.yml up -d
 
 The image is published to `ghcr.io/rghamilton3/lattice-spine:latest` by GitHub Actions on every push to `main`.
 
-Data is persisted to `/var/lib/lattice` on the host via a named volume mount.
+Data is persisted to `/var/lib/lattice` on the host via a named volume mount:
+
+| Path on host                    | Inside container     | Contents                  |
+| ------------------------------- | -------------------- | ------------------------- |
+| `/var/lib/lattice/lattice.db`   | `/data/lattice.db`   | SQLite database           |
+| `/var/lib/lattice/attachments/` | `/data/attachments/` | Uploaded file attachments |
+| `/var/lib/lattice/.cache/`      | `/data/.cache/`      | QMD embedding cache       |
+
+The attachments directory is created automatically on first use. No extra volume configuration is required.
 
 ## lattice-capture
 

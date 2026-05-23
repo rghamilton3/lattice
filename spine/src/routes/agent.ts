@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia';
 import type { Database } from 'bun:sqlite';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { writeCaptureFile, writeLocalFile, refreshIndex } from '../search';
+import { writeCaptureFile, writeLocalFile, writeAttachmentIndex, refreshIndex } from '../search';
 import { emitCapture } from '../captureEvents';
 import { parseCommand } from '../commands';
 
@@ -177,25 +177,42 @@ export const agentRoutes = (db: Database, { attachmentsDir }: AgentRoutesOptions
 					set.status = 400;
 					return { error: 'size_bytes does not match decoded data length' };
 				}
-				const dir = join(attachmentsDir, String(captureId));
-				mkdirSync(dir, { recursive: true });
-				writeFileSync(join(dir, sid), bytes);
 				const storedPath = `${captureId}/${sid}`;
-				const row = db
-					.prepare(
-						`INSERT INTO capture_attachments
-               (capture_id, signal_id, content_type, filename, size_bytes, stored_path, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-					)
-					.get(
-						captureId,
-						sid,
-						body.content_type,
-						body.filename,
-						body.size_bytes,
-						storedPath,
-						new Date().toISOString(),
-					) as { id: number };
+				const now = new Date().toISOString();
+				// Wrap file write + INSERT in a transaction: if INSERT fails (e.g. FK
+				// violation because capture was deleted between the check above and here),
+				// the file is left on disk. The transaction rolls back the SQL but cannot
+				// un-write the file; however, Signal retries with the same signal_id so the
+				// file is overwritten cleanly on the next attempt.
+				const row = db.transaction(() => {
+					const dir = join(attachmentsDir, String(captureId));
+					mkdirSync(dir, { recursive: true });
+					writeFileSync(join(dir, sid), bytes);
+					return db
+						.prepare(
+							`INSERT INTO capture_attachments
+               (capture_id, signal_id, content_type, filename, size_bytes, stored_path, upload_source, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, 'signal', ?) RETURNING id`,
+						)
+						.get(
+							captureId,
+							sid,
+							body.content_type,
+							body.filename,
+							body.size_bytes,
+							storedPath,
+							now,
+						) as { id: number };
+				})();
+				writeAttachmentIndex(
+					row.id,
+					captureId,
+					body.filename,
+					body.content_type,
+					body.size_bytes,
+					now,
+				);
+				refreshIndex();
 				return { id: row.id };
 			},
 			{

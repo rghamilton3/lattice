@@ -97,5 +97,12 @@
 		<rect x="4" y="4" width="4" height="16" rx="0.5" />
 		<rect x="10" y="7" width="4" height="13" rx="0.5" />
 		<rect x="16" y="5" width="4" height="15" rx="0.5" />
+	{:else if name === 'minimize'}
+		<rect x="2" y="2" width="20" height="20" rx="3" />
+		<path d="M8 16h8" />
+	{:else if name === 'paperclip'}
+		<path
+			d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66L9.41 17.41a2 2 0 01-2.83-2.83l8.49-8.48"
+		/>
 	{/if}
 </svg>

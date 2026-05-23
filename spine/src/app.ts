@@ -6,11 +6,12 @@ import { authentikBeforeHandle, agentBeforeHandle } from './guards';
 import { capturesRoutes } from './routes/captures';
 import { searchRoutes } from './routes/search';
 import { filesRoutes } from './routes/files';
-import { workingRoutes } from './routes/working';
+import { workingRoutes, type WorkingRoutesOptions } from './routes/working';
 import { lateralRoutes } from './routes/lateral';
 import { agentRoutes } from './routes/agent';
 import { statusRoutes } from './routes/status';
 import { tasksRoutes } from './routes/tasks';
+import { attachmentRoutes } from './routes/attachments';
 
 export interface AppDeps {
 	db: Database;
@@ -39,9 +40,10 @@ export function buildApp(deps: AppDeps) {
 				.use(tasksRoutes(db))
 				.use(searchRoutes())
 				.use(filesRoutes(db))
-				.use(workingRoutes(db))
+				.use(workingRoutes(db, { attachmentsDir }))
 				.use(lateralRoutes(db))
-				.use(statusRoutes(db)),
+				.use(statusRoutes(db))
+				.use(attachmentRoutes(db, { attachmentsDir })),
 		)
 		.group('/api/agent', (app) =>
 			app.guard({ beforeHandle: agentBeforeHandle({ allowHttp, agentToken }) }, (inner) =>

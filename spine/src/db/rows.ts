@@ -40,6 +40,16 @@ export interface AgentStatusRow {
 	reported_at: string;
 }
 
+export interface WorkingAttachmentRow {
+	id: number;
+	slug: string;
+	content_type: string;
+	filename: string;
+	size_bytes: number;
+	stored_path: string;
+	created_at: string;
+}
+
 export interface CaptureAttachmentRow {
 	id: number;
 	capture_id: number;
@@ -48,5 +58,6 @@ export interface CaptureAttachmentRow {
 	filename: string;
 	size_bytes: number;
 	stored_path: string;
+	upload_source: string;
 	created_at: string;
 }

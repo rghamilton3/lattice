@@ -134,3 +134,9 @@ Write-Host "  schtasks /Run /TN LatticeAgent"
 if (-not $SkipTray) {
     Write-Host "  schtasks /Run /TN LatticeTray"
 }
+
+Write-Host ""
+Write-Host "To bind a global hotkey for quick capture, either:"
+Write-Host "  - Create a shortcut to '$captureExe --prompt' and set its 'Shortcut key' in Properties, or"
+Write-Host "  - With AutoHotkey v2 installed, add this line to your AHK script:"
+Write-Host "      ^!l::Run('`"$captureExe`" --prompt')"

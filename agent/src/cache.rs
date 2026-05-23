@@ -98,12 +98,5 @@ pub fn open() -> Result<Cache> {
 }
 
 fn cache_db_path() -> PathBuf {
-    // XDG_DATA_HOME or ~/.local/share
-    let base = if let Ok(v) = std::env::var("XDG_DATA_HOME") {
-        PathBuf::from(v)
-    } else {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_owned());
-        PathBuf::from(home).join(".local").join("share")
-    };
-    base.join("lattice").join("agent.db")
+    lattice_agent::platform::data_dir().join("agent.db")
 }

@@ -213,9 +213,10 @@ fn spawn_sibling(name: &str, args: &[&str], failure_summary: &str) {
 
     if let Err(e) = std::process::Command::new(&bin).args(args).spawn() {
         tracing::warn!(bin = %bin.display(), error = %e, "failed to launch {name}");
-        let _ = std::process::Command::new("notify-send")
-            .args(["Lattice", &format!("{failure_summary}: {e}")])
-            .spawn();
+        lattice_agent::platform::notify(
+            &format!("{failure_summary}: {e}"),
+            lattice_agent::platform::Urgency::Normal,
+        );
     }
 }
 
@@ -229,9 +230,7 @@ fn service_control(op: &str) {
         Ok(_) => return,
     };
     tracing::warn!(op, "{msg}");
-    let _ = std::process::Command::new("notify-send")
-        .args(["Lattice", &msg, "--urgency", "critical"])
-        .spawn();
+    lattice_agent::platform::notify(&msg, lattice_agent::platform::Urgency::Critical);
 }
 
 // ── Entry points ──────────────────────────────────────────────────────────────

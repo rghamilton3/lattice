@@ -2,6 +2,7 @@
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { createCapture } from '$lib/api/captures';
+	import { taskKeys } from '$lib/api/tasks';
 	import { logError } from '$lib/utils/logError';
 	import Icon from '$components/icons/Icon.svelte';
 
@@ -26,6 +27,13 @@
 		wb.activeOverlay = 'none';
 	}
 
+	function toastForAction(action: string | null): string {
+		if (action === 'task') return 'Task created — see Tasks view';
+		if (action === 'keep') return 'Noted — kept';
+		if (action === 'skip') return 'Skipped';
+		return 'Captured — inbox updated';
+	}
+
 	function submit() {
 		if (!canSave) {
 			close();
@@ -36,9 +44,12 @@
 		failed = false;
 		submitting = true;
 		createCapture(payload)
-			.then(() => {
+			.then((result) => {
 				queryClient.invalidateQueries({ queryKey: ['captures', 'list'] });
-				wb.showToast('Captured — inbox updated');
+				if (result.triage_action === 'task') {
+					queryClient.invalidateQueries({ queryKey: taskKeys.list() });
+				}
+				wb.showToast(toastForAction(result.triage_action));
 				setTimeout(close, 650);
 			})
 			.catch((err) => {
@@ -136,7 +147,8 @@
 				</span>
 			</div>
 			<div class="row" style="gap:8px">
-				<span class="faint" style="font-size:12px">save with</span>
+				<span class="faint" style="font-size:12px">/task, /note, /skip to auto-route</span>
+				<span class="faint" style="font-size:12px">· save with</span>
 				<span class="kbd">Ctrl</span>
 				<span class="kbd">↵</span>
 				<button class="btn btn-ghost" onclick={close}>Cancel</button>

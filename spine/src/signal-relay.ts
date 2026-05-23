@@ -202,11 +202,11 @@ function handleMessage(msg: unknown): void {
 	sendReaction('👀', parsed.sourceNumber, parsed.sourceTimestamp);
 
 	postCapture(parsed.captureText, parsed.capturedAt)
-		.then((captureId) => {
+		.then((result) => {
 			sendReaction('✅', parsed.sourceNumber, parsed.sourceTimestamp);
 			if (parsed.attachments.length === 0 || !SIGNAL_ATTACHMENTS_DIR) return;
 			for (const att of parsed.attachments) {
-				postAttachment(captureId, att).catch((err: Error) =>
+				postAttachment(result.id, att).catch((err: Error) =>
 					console.error(`[signal-relay] failed to store attachment ${att.id}:`, err.message),
 				);
 			}
@@ -219,7 +219,13 @@ function handleMessage(msg: unknown): void {
 // The relay runs on the same VPS host and hits spine over loopback, so it
 // asserts the header itself: this is trusted local traffic that already
 // holds the bearer token.
-async function postCapture(text: string, captured_at: string): Promise<number> {
+interface CaptureResult {
+	id: number;
+	triage_action: string | null;
+	text: string;
+}
+
+async function postCapture(text: string, captured_at: string): Promise<CaptureResult> {
 	const res = await fetch(SPINE_URL, {
 		method: 'POST',
 		headers: {
@@ -234,10 +240,20 @@ async function postCapture(text: string, captured_at: string): Promise<number> {
 		throw new Error(`POST /api/agent/capture returned ${res.status}`);
 	}
 
-	const { id } = (await res.json()) as { id: number };
-	console.log(`[signal-relay] captured id=${id}: ${text.slice(0, 80)}`);
-	sendReply(`✓ #${id}`);
-	return id;
+	const result = (await res.json()) as CaptureResult;
+	console.log(`[signal-relay] captured id=${result.id}: ${result.text.slice(0, 80)}`);
+
+	if (result.triage_action === 'task') {
+		sendReply(`Task queued: ${result.text}`);
+	} else if (result.triage_action === 'keep') {
+		sendReply(`Note saved: ${result.text}`);
+	} else if (result.triage_action === 'skip') {
+		// silent — no text reply for discarded captures
+	} else {
+		sendReply(`✓ #${result.id}`);
+	}
+
+	return result;
 }
 
 async function postAttachment(captureId: number, att: SignalAttachment): Promise<void> {

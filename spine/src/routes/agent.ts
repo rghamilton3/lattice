@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { writeCaptureFile, writeLocalFile, refreshIndex } from '../search';
 import { emitCapture } from '../captureEvents';
+import { parseCommand } from '../commands';
 
 export interface AgentRoutesOptions {
 	attachmentsDir: string;
@@ -18,30 +19,41 @@ export const agentRoutes = (db: Database, { attachmentsDir }: AgentRoutesOptions
 				// EACCES, …) bun:sqlite's transaction wrapper ROLLBACKs the row, so
 				// a client retry doesn't leave duplicate DB rows with no on-disk file.
 				const ingestedAt = new Date().toISOString();
+				const cmd = parseCommand(body.text);
+				const storedText = cmd ? cmd.strippedText : body.text;
+				const triagedAt = cmd ? ingestedAt : null;
+				const triagedAction = cmd ? cmd.action : null;
 				const row = db.transaction(() => {
 					const inserted = db
 						.prepare(
-							'INSERT INTO captures (text, source, captured_at, ingested_at) VALUES (?, ?, ?, ?) RETURNING id',
+							'INSERT INTO captures (text, source, captured_at, ingested_at, triaged_at, triage_action) VALUES (?, ?, ?, ?, ?, ?) RETURNING id',
 						)
-						.get(body.text, body.source, body.captured_at, ingestedAt) as { id: number };
-					writeCaptureFile(inserted.id, body.text, body.source, body.captured_at);
+						.get(
+							storedText,
+							body.source,
+							body.captured_at,
+							ingestedAt,
+							triagedAt,
+							triagedAction,
+						) as { id: number };
+					writeCaptureFile(inserted.id, storedText, body.source, body.captured_at);
 					return inserted;
 				})();
 				refreshIndex();
 				emitCapture({
 					id: row.id,
-					text: body.text,
+					text: storedText,
 					source: body.source,
 					captured_at: body.captured_at,
 					ingested_at: ingestedAt,
-					triaged_at: null,
-					triage_action: null,
+					triaged_at: triagedAt,
+					triage_action: triagedAction,
 					task_due_date: null,
 					task_priority: null,
 					task_notes: null,
 					task_completed_at: null,
 				});
-				return { id: row.id };
+				return { id: row.id, triage_action: triagedAction, text: storedText };
 			},
 			{
 				body: t.Object({

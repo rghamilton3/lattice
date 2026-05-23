@@ -137,7 +137,7 @@ describe('GET /api/captures/stream', () => {
 });
 
 describe('POST /api/captures', () => {
-	it('creates a capture and returns its id', async () => {
+	it('creates a capture and returns id, triage_action, and text', async () => {
 		const res = await app.app.handle(
 			req('/api/captures', {
 				method: 'POST',
@@ -146,7 +146,84 @@ describe('POST /api/captures', () => {
 			}),
 		);
 		expect(res.status).toBe(200);
-		expect(typeof (await json(res)).id).toBe('number');
+		const body = await json(res);
+		expect(typeof body.id).toBe('number');
+		expect(body.triage_action).toBeNull();
+		expect(body.text).toBe('hello');
+	});
+
+	describe('slash commands', () => {
+		it('/task stores stripped text with triage_action=task and triaged_at set', async () => {
+			const res = await app.app.handle(
+				req('/api/captures', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ text: '/task buy oat milk', source: 'browser' }),
+				}),
+			);
+			expect(res.status).toBe(200);
+			const body = await json(res);
+			expect(body.triage_action).toBe('task');
+			expect(body.text).toBe('buy oat milk');
+
+			const row = app.db.query('SELECT * FROM captures WHERE id = ?').get(body.id) as any;
+			expect(row.text).toBe('buy oat milk');
+			expect(row.triage_action).toBe('task');
+			expect(typeof row.triaged_at).toBe('string');
+		});
+
+		it('/note stores stripped text with triage_action=keep', async () => {
+			const res = await app.app.handle(
+				req('/api/captures', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ text: '/note remember this', source: 'browser' }),
+				}),
+			);
+			const body = await json(res);
+			expect(body.triage_action).toBe('keep');
+			expect(body.text).toBe('remember this');
+		});
+
+		it('/skip stores stripped text with triage_action=skip', async () => {
+			const res = await app.app.handle(
+				req('/api/captures', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ text: '/skip dry cleaning', source: 'browser' }),
+				}),
+			);
+			const body = await json(res);
+			expect(body.triage_action).toBe('skip');
+			expect(body.text).toBe('dry cleaning');
+		});
+
+		it('unknown command is stored as plain text', async () => {
+			const res = await app.app.handle(
+				req('/api/captures', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ text: '/foobar some text', source: 'browser' }),
+				}),
+			);
+			const body = await json(res);
+			expect(body.triage_action).toBeNull();
+			expect(body.text).toBe('/foobar some text');
+		});
+
+		it('command captures do not appear in the inbox list', async () => {
+			const res = await app.app.handle(
+				req('/api/captures', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ text: '/task buy milk', source: 'browser' }),
+				}),
+			);
+			const { id } = await json(res);
+			const inbox = await app.app.handle(req('/api/captures'));
+			const inboxBody = await json(inbox);
+			expect(inboxBody.find((c: any) => c.id === id)).toBeUndefined();
+		});
 	});
 
 	it('returns 422 when text is empty', async () => {

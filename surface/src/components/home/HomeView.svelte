@@ -34,6 +34,7 @@
 		sse.addEventListener('capture', (e) => {
 			try {
 				const capture = JSON.parse(e.data) as Capture;
+				if (capture.triaged_at !== null) return; // pre-triaged: bypass inbox
 				queryClient.setQueryData(captureKeys.list(20), (old: Capture[] | undefined) => {
 					if (!old) return [capture];
 					if (old.some((c) => c.id === capture.id)) return old;

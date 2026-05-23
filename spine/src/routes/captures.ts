@@ -3,6 +3,7 @@ import type { Database } from 'bun:sqlite';
 import type { CaptureRow } from '../db/rows';
 import { writeCaptureFile, refreshIndex } from '../search';
 import { onCapture, emitCapture } from '../captureEvents';
+import { parseCommand } from '../commands';
 
 const VALID_TRIAGE_ACTIONS = new Set(['keep', 'archive', 'promote', 'task', 'skip']);
 
@@ -125,30 +126,34 @@ export const capturesRoutes = (db: Database) =>
 				// timestamps. Atomic INSERT + markdown write so an FS failure rolls
 				// back the row (matches /api/agent/capture).
 				const now = new Date().toISOString();
+				const cmd = parseCommand(body.text);
+				const storedText = cmd ? cmd.strippedText : body.text;
+				const triagedAt = cmd ? now : null;
+				const triagedAction = cmd ? cmd.action : null;
 				const row = db.transaction(() => {
 					const inserted = db
 						.prepare(
-							'INSERT INTO captures (text, source, captured_at, ingested_at) VALUES (?, ?, ?, ?) RETURNING id',
+							'INSERT INTO captures (text, source, captured_at, ingested_at, triaged_at, triage_action) VALUES (?, ?, ?, ?, ?, ?) RETURNING id',
 						)
-						.get(body.text, body.source, now, now) as { id: number };
-					writeCaptureFile(inserted.id, body.text, body.source, now);
+						.get(storedText, body.source, now, now, triagedAt, triagedAction) as { id: number };
+					writeCaptureFile(inserted.id, storedText, body.source, now);
 					return inserted;
 				})();
 				refreshIndex();
 				emitCapture({
 					id: row.id,
-					text: body.text,
+					text: storedText,
 					source: body.source,
 					captured_at: now,
 					ingested_at: now,
-					triaged_at: null,
-					triage_action: null,
+					triaged_at: triagedAt,
+					triage_action: triagedAction,
 					task_due_date: null,
 					task_priority: null,
 					task_notes: null,
 					task_completed_at: null,
 				});
-				return { id: row.id };
+				return { id: row.id, triage_action: triagedAction, text: storedText };
 			},
 			{
 				body: t.Object({

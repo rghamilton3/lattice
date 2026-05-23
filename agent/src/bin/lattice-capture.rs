@@ -39,6 +39,8 @@ struct Payload<'a> {
 #[derive(Deserialize)]
 struct CaptureResponse {
     id: i64,
+    triage_action: Option<String>,
+    text: String,
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -83,7 +85,13 @@ async fn run() -> Result<()> {
     }
 
     match post(&client, &cfg, &text, CAPTURE_SOURCE, &captured_at).await {
-        Ok(id) => notify(&format!("Captured #{id}"), "low"),
+        Ok(resp) => {
+            let msg = match resp.triage_action.as_deref() {
+                Some("task") => format!("Task created #{}: {}", resp.id, resp.text),
+                _ => format!("Captured #{}", resp.id),
+            };
+            notify(&msg, "low");
+        }
         Err(post_err) => {
             let queue = match maybe_queue {
                 Some(q) => q,
@@ -293,7 +301,7 @@ async fn post(
     text: &str,
     source: &str,
     captured_at: &str,
-) -> Result<i64> {
+) -> Result<CaptureResponse> {
     let url = format!("{}/api/agent/capture", cfg.spine_url);
     let resp = client
         .post(&url)
@@ -308,7 +316,7 @@ async fn post(
         .error_for_status()?
         .json::<CaptureResponse>()
         .await?;
-    Ok(resp.id)
+    Ok(resp)
 }
 
 /// Translates a reqwest failure into a short, user-facing reason that's

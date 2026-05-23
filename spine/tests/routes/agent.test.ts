@@ -90,6 +90,120 @@ describe('POST /api/agent/capture', () => {
 		const count = (app.db.query('SELECT COUNT(*) AS c FROM captures').get() as { c: number }).c;
 		expect(count).toBe(0);
 	});
+
+	it('returns id, triage_action, and text in the response', async () => {
+		const res = await app.app.handle(
+			agentPost('/api/agent/capture', {
+				text: 'hello world',
+				source: 'signal',
+				captured_at: '2026-01-01T00:00:00Z',
+			}),
+		);
+		expect(res.status).toBe(200);
+		const body = await json(res);
+		expect(typeof body.id).toBe('number');
+		expect(body.triage_action).toBeNull();
+		expect(body.text).toBe('hello world');
+	});
+
+	describe('slash commands', () => {
+		it('/task stores stripped text with triage_action=task and triaged_at set', async () => {
+			const res = await app.app.handle(
+				agentPost('/api/agent/capture', {
+					text: '/task buy oat milk',
+					source: 'signal',
+					captured_at: '2026-01-01T00:00:00Z',
+				}),
+			);
+			expect(res.status).toBe(200);
+			const body = await json(res);
+			expect(body.triage_action).toBe('task');
+			expect(body.text).toBe('buy oat milk');
+
+			const row = app.db.query('SELECT * FROM captures WHERE id = ?').get(body.id) as any;
+			expect(row.text).toBe('buy oat milk');
+			expect(row.triage_action).toBe('task');
+			expect(typeof row.triaged_at).toBe('string');
+		});
+
+		it('/note stores stripped text with triage_action=keep', async () => {
+			const res = await app.app.handle(
+				agentPost('/api/agent/capture', {
+					text: '/note remember this',
+					source: 'signal',
+					captured_at: '2026-01-01T00:00:00Z',
+				}),
+			);
+			const body = await json(res);
+			expect(body.triage_action).toBe('keep');
+			expect(body.text).toBe('remember this');
+		});
+
+		it('/skip stores stripped text with triage_action=skip', async () => {
+			const res = await app.app.handle(
+				agentPost('/api/agent/capture', {
+					text: '/skip dry cleaning',
+					source: 'signal',
+					captured_at: '2026-01-01T00:00:00Z',
+				}),
+			);
+			const body = await json(res);
+			expect(body.triage_action).toBe('skip');
+			expect(body.text).toBe('dry cleaning');
+		});
+
+		it('command is case-insensitive', async () => {
+			const res = await app.app.handle(
+				agentPost('/api/agent/capture', {
+					text: '/TASK buy milk',
+					source: 'signal',
+					captured_at: '2026-01-01T00:00:00Z',
+				}),
+			);
+			const body = await json(res);
+			expect(body.triage_action).toBe('task');
+		});
+
+		it('unknown command is stored as plain text with no triage', async () => {
+			const res = await app.app.handle(
+				agentPost('/api/agent/capture', {
+					text: '/foobar some text',
+					source: 'signal',
+					captured_at: '2026-01-01T00:00:00Z',
+				}),
+			);
+			const body = await json(res);
+			expect(body.triage_action).toBeNull();
+			expect(body.text).toBe('/foobar some text');
+		});
+
+		it('/task with no body is stored as plain text with no triage', async () => {
+			const res = await app.app.handle(
+				agentPost('/api/agent/capture', {
+					text: '/task',
+					source: 'signal',
+					captured_at: '2026-01-01T00:00:00Z',
+				}),
+			);
+			const body = await json(res);
+			expect(body.triage_action).toBeNull();
+			expect(body.text).toBe('/task');
+		});
+
+		it('command captures do not appear in the inbox list (triaged_at is set)', async () => {
+			const res = await app.app.handle(
+				agentPost('/api/agent/capture', {
+					text: '/task buy milk',
+					source: 'signal',
+					captured_at: '2026-01-01T00:00:00Z',
+				}),
+			);
+			const { id } = await json(res);
+			const inbox = await app.app.handle(req('/api/captures'));
+			const inboxBody = await json(inbox);
+			expect(inboxBody.find((c: any) => c.id === id)).toBeUndefined();
+		});
+	});
 });
 
 describe('POST /api/agent/index', () => {

@@ -22,7 +22,13 @@ export interface CreateCaptureParams {
 	source: string;
 }
 
-export function createCapture(params: CreateCaptureParams): Promise<{ id: number }> {
+export interface CaptureCreated {
+	id: number;
+	triage_action: string | null;
+	text: string;
+}
+
+export function createCapture(params: CreateCaptureParams): Promise<CaptureCreated> {
 	return apiFetch('/api/captures', { method: 'POST', body: JSON.stringify(params) });
 }
 

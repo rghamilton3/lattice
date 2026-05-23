@@ -109,6 +109,7 @@ describe('parseSignalMessage', () => {
 					timestamp: 1_700_000_000_000,
 					syncMessage: {
 						sentMessage: {
+							destination: SELF,
 							message: '',
 							attachments: [{ contentType: 'audio/aac' }],
 						},
@@ -119,6 +120,44 @@ describe('parseSignalMessage', () => {
 		const parsed = parseSignalMessage(msg, SELF);
 		expect(parsed?.captureText).toBe('[voice note]');
 		expect(parsed?.attachments.length).toBe(1);
+	});
+
+	it('returns null for sync sent to someone else', () => {
+		const msg = {
+			method: 'receive',
+			params: {
+				envelope: {
+					sourceNumber: SELF,
+					timestamp: 1_700_000_000_000,
+					syncMessage: {
+						sentMessage: {
+							destination: '+19999999999',
+							timestamp: 1_700_000_000_500,
+							message: 'hey friend',
+						},
+					},
+				},
+			},
+		};
+		expect(parseSignalMessage(msg, SELF)).toBeNull();
+	});
+
+	it('returns null for sync sent to a group (no destination)', () => {
+		const msg = {
+			method: 'receive',
+			params: {
+				envelope: {
+					sourceNumber: SELF,
+					timestamp: 1_700_000_000_000,
+					syncMessage: {
+						sentMessage: {
+							message: 'group message',
+						},
+					},
+				},
+			},
+		};
+		expect(parseSignalMessage(msg, SELF)).toBeNull();
 	});
 
 	it('returns null when text is empty and no attachments', () => {
@@ -197,6 +236,19 @@ describe('parseSignalMessage debug hook', () => {
 			['wrong-method', { method: 'send', params: {} }],
 			['no-envelope', { method: 'receive', params: {} }],
 			['wrong-sender', envelope({ sourceNumber: '+19999999999' }, { message: 'hi' })],
+			[
+				'wrong-destination',
+				{
+					method: 'receive',
+					params: {
+						envelope: {
+							sourceNumber: SELF,
+							timestamp: 1_700_000_000_000,
+							syncMessage: { sentMessage: { destination: '+19999999999', message: 'hi' } },
+						},
+					},
+				},
+			],
 			['no-message-payload', envelope({}, null)],
 			['empty-payload', envelope({}, { message: '   ' })],
 		];

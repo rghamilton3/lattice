@@ -20,6 +20,7 @@ export type ParseSkipReason =
 	| 'wrong-method'
 	| 'no-envelope'
 	| 'wrong-sender'
+	| 'wrong-destination'
 	| 'no-message-payload'
 	| 'empty-payload';
 
@@ -75,6 +76,12 @@ export function parseSignalMessage(
 	const dataMessage = envelope.dataMessage as Record<string, unknown> | null | undefined;
 	const syncMessage = envelope.syncMessage as Record<string, unknown> | null | undefined;
 	const sentMessage = syncMessage?.sentMessage as Record<string, unknown> | null | undefined;
+	// sentMessage fires for every outgoing message (to anyone). Only capture
+	// it when the destination is ourselves — that is the Note-to-Self case.
+	if (sentMessage && sentMessage.destination !== selfNumber) {
+		debug?.skip('wrong-destination');
+		return null;
+	}
 	const payload = dataMessage ?? sentMessage;
 	if (!payload) {
 		debug?.skip('no-message-payload');

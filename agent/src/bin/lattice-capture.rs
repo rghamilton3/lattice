@@ -1,33 +1,27 @@
 //! lattice-capture — POST quick text captures to the Lattice spine.
 //!
 //! Native replacement for the legacy `lattice-capture.sh`. Owns a local SQLite
-//! queue at `~/.local/share/lattice/queue.db`; drains it at the start of each
-//! successful run and falls back to it when the spine is unreachable.
+//! queue under the per-OS data dir (see `platform::data_dir()`); drains it at
+//! the start of each successful run and falls back to it when the spine is
+//! unreachable.
 //!
 //! Text source resolution order:
 //!   1. CLI args (joined with spaces)
 //!   2. stdin if not a TTY
-//!   3. interactive dmenu prompt (walker → wofi → rofi)
+//!   3. interactive prompt window (eframe, cross-platform)
 
 use anyhow::{Context, Result, bail};
 use lattice_agent::config;
+use lattice_agent::platform::{self, Urgency};
 use lattice_agent::time::now_iso;
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 use std::io::{self, IsTerminal, Read};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
 use std::time::Duration;
 
 const CAPTURE_SOURCE: &str = "desktop-hotkey";
 const POST_TIMEOUT: Duration = Duration::from_secs(5);
-
-// dmenu-style prompts, tried in order. First one found on $PATH wins.
-const DMENU_CANDIDATES: &[(&str, &[&str])] = &[
-    ("walker", &["--dmenu"]),
-    ("wofi", &["--dmenu"]),
-    ("rofi", &["-dmenu"]),
-];
 
 #[derive(Serialize)]
 struct Payload<'a> {
@@ -54,7 +48,7 @@ async fn main() {
 
     if let Err(e) = run().await {
         eprintln!("lattice-capture: {e:#}");
-        notify(&format!("{e}"), "critical");
+        platform::notify(&format!("{e}"), Urgency::Critical);
         std::process::exit(1);
     }
 }
@@ -90,7 +84,7 @@ async fn run() -> Result<()> {
                 Some("task") => format!("Task created #{}: {}", resp.id, resp.text),
                 _ => format!("Captured #{}", resp.id),
             };
-            notify(&msg, "low");
+            platform::notify(&msg, Urgency::Low);
         }
         Err(post_err) => {
             let queue = match maybe_queue {
@@ -101,7 +95,7 @@ async fn run() -> Result<()> {
                 Ok(()) => {
                     let reason = classify_post_error(&post_err);
                     tracing::warn!(error = %post_err, reason = %reason, "spine post failed; capture queued");
-                    notify(&format!("Capture queued ({reason})"), "normal");
+                    platform::notify(&format!("Capture queued ({reason})"), Urgency::Normal);
                 }
                 Err(queue_err) => {
                     // Both spine AND the local queue failed — the capture is about
@@ -117,9 +111,9 @@ async fn run() -> Result<()> {
                     eprintln!("--- LOST CAPTURE (copy from here) ---");
                     eprintln!("{text}");
                     eprintln!("--- END LOST CAPTURE ---");
-                    notify(
+                    platform::notify(
                         &format!("CAPTURE LOST — spine: {spine_reason}; queue: {queue_err}"),
-                        "critical",
+                        Urgency::Critical,
                     );
                     // Exit non-zero without returning Err so main() doesn't double-notify.
                     std::process::exit(1);
@@ -136,7 +130,7 @@ async fn run() -> Result<()> {
 fn read_text() -> Result<Option<String>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|a| a == "--prompt") {
-        return prompt_dmenu();
+        return platform::prompt_text("Capture to Lattice");
     }
     if !args.is_empty() {
         return Ok(Some(args.join(" ")));
@@ -147,49 +141,13 @@ fn read_text() -> Result<Option<String>> {
         stdin.lock().read_to_string(&mut buf)?;
         return Ok(Some(buf.trim_end_matches('\n').to_owned()));
     }
-    prompt_dmenu()
-}
-
-fn prompt_dmenu() -> Result<Option<String>> {
-    for (bin, args) in DMENU_CANDIDATES {
-        if which(bin).is_none() {
-            continue;
-        }
-        let child = Command::new(bin)
-            .args(*args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()
-            .with_context(|| format!("spawning {bin}"))?;
-        let out = child.wait_with_output()?;
-        if !out.status.success() {
-            // Non-zero typically means the user dismissed (Esc / closed window).
-            return Ok(None);
-        }
-        let text = String::from_utf8_lossy(&out.stdout).trim().to_owned();
-        return Ok(if text.is_empty() { None } else { Some(text) });
-    }
-    bail!("no dmenu prompt available (install walker, wofi, or rofi)");
-}
-
-fn which(bin: &str) -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path)
-        .map(|d| d.join(bin))
-        .find(|p| p.is_file())
+    platform::prompt_text("Capture to Lattice")
 }
 
 // ── Offline queue ─────────────────────────────────────────────────────────────
 
 fn queue_path() -> PathBuf {
-    let base = std::env::var_os("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_owned());
-            PathBuf::from(home).join(".local").join("share")
-        });
-    base.join("lattice").join("queue.db")
+    platform::data_dir().join("queue.db")
 }
 
 fn open_queue() -> Result<Connection> {
@@ -289,7 +247,10 @@ async fn drain_queue(conn: &Connection, client: &reqwest::Client, cfg: &config::
         }
     }
     if flushed > 0 {
-        notify(&format!("Flushed {flushed} queued capture(s)"), "low");
+        platform::notify(
+            &format!("Flushed {flushed} queued capture(s)"),
+            Urgency::Low,
+        );
     }
 }
 
@@ -351,14 +312,4 @@ fn classify_post_error(err: &anyhow::Error) -> String {
         return "spine redirected (auth proxy in front of /api/agent?)".into();
     }
     re.to_string()
-}
-
-// ── Misc helpers ──────────────────────────────────────────────────────────────
-
-fn notify(body: &str, urgency: &str) {
-    let _ = Command::new("notify-send")
-        .args(["Lattice", body, "--urgency", urgency])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn();
 }

@@ -46,6 +46,8 @@ volumes:
 
 ## Install the agent
 
+### Linux
+
 On any Linux machine you want to index:
 
 ```bash
@@ -54,6 +56,29 @@ bash <(curl -fsSL https://raw.githubusercontent.com/rghamilton3/lattice/main/ins
 
 The installer prompts for your spine URL, agent token, and watch directories, then installs
 `lattice-agent` and enables it as a systemd user service.
+
+### Windows
+
+In PowerShell:
+
+```powershell
+iwr https://raw.githubusercontent.com/rghamilton3/lattice/main/install.ps1 -OutFile install.ps1
+.\install.ps1 -SpineUrl https://lattice.example.com -AgentToken "<token>"
+```
+
+Binaries land in `%LOCALAPPDATA%\lattice\`, the starter config in
+`%APPDATA%\lattice\config.toml`. The installer registers Task Scheduler entries
+that launch the agent and tray at logon.
+
+For a global capture hotkey, either pin a shortcut to
+`%LOCALAPPDATA%\lattice\lattice-capture.exe --prompt` and set its **Shortcut
+key** in the Properties dialog, or, with [AutoHotkey](https://www.autohotkey.com/)
+installed, add to your script:
+
+```ahk
+; AutoHotkey v2
+^!l::Run('"' A_LocalAppData '\lattice\lattice-capture.exe" --prompt')
+```
 
 ## Quickstart
 

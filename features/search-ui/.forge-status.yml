@@ -1,0 +1,50 @@
+schema_version: 3
+feature: "search-ui"
+created_at: "2026-05-23"
+last_updated: "2026-05-23T00:00:00Z"
+feature_mode: "standard"
+backfilled: true
+phases:
+  problem_discovery:
+    status: "not_applicable"
+  research:
+    status: "not_applicable"
+  revalidation:
+    status: "not_applicable"
+  bridge:
+    status: "not_applicable"
+  product_spec:
+    status: "completed"
+    digest_path: "product-spec/digest.md"
+  plan:
+    status: "completed"
+    digest_path: "plan/digest.md"
+  tasks:
+    status: "completed"
+    digest_path: "tasks/digest.md"
+  implement:
+    status: "completed"
+    digest_path: "implement/digest.md"
+  verify:
+    status: "completed"
+    digest_path: "verify/digest.md"
+  test_plan:
+    status: "pending"
+  test_run:
+    status: "pending"
+  tracking_plan:
+    status: "pending"
+  security_check:
+    status: "pending"
+  release_readiness:
+    status: "pending"
+task_log: []
+gates: []
+sync_runs:
+  last_run: ""
+  total_runs: 0
+dependencies:
+  depends_on: []
+  depended_on_by: []
+role_approvals:
+  solo_mode: true

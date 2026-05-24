@@ -1,14 +1,22 @@
 ---
-name: "speckit-plan"
-description: "Execute the implementation planning workflow using the plan template to generate design artifacts."
-argument-hint: "Optional guidance for the planning phase"
-compatibility: "Requires spec-kit project structure with .specify/ directory"
+name: speckit-plan
+description: Execute the implementation planning workflow using the plan template
+  to generate design artifacts.
+compatibility: Requires spec-kit project structure with .specify/ directory
 metadata:
-  author: "github-spec-kit"
-  source: "templates/commands/plan.md"
+  author: github-spec-kit
+  source: preset:a11y-governance
 user-invocable: true
 disable-model-invocation: false
 ---
+
+# Speckit Plan Skill
+
+Before continuing, apply the A11Y Governance preset:
+
+- plan accessibility review work explicitly
+- plan bilingual content work explicitly
+- include CLI accessibility checks where user-facing terminal output is changed
 
 
 ## User Input

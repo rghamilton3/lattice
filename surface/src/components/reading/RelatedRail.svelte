@@ -87,9 +87,9 @@
 		<div class="related-head">
 			<span class="related-title">Related notes</span>
 			<div class="row" style="gap:6px">
-				{#if relatedQuery.isError}
-					<span class="faint" style="font-size:12px; color:var(--c-alarm)">couldn't load</span>
-				{:else}
+				{#if relatedQuery.isError && !minimized}
+					<span style="font-size:12px; color:var(--c-alarm)">spine unavailable</span>
+				{:else if !relatedQuery.isError}
 					<span class="faint" style="font-size:12px">semantic neighbors · QMD cosine</span>
 				{/if}
 				<button
@@ -103,8 +103,13 @@
 		</div>
 		{#if !minimized}
 			{#if relatedQuery.isError}
-				<div style="padding: 0 22px 12px">
-					<button class="btn btn-ghost" onclick={() => relatedQuery.refetch()}>Try again</button>
+				<div style="padding: 0 22px 16px; display:flex; flex-direction:column; gap:8px">
+					<span class="soft" style="font-size:13px"
+						>Couldn't reach spine - it may not be running.</span
+					>
+					<div>
+						<button class="btn btn-ghost" onclick={() => relatedQuery.refetch()}>Retry</button>
+					</div>
 				</div>
 			{:else if relatedQuery.data}
 				<div class="related-list" style="overflow-y:auto; padding: 0 22px 22px">

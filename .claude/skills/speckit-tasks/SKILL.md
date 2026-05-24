@@ -1,14 +1,22 @@
 ---
-name: "speckit-tasks"
-description: "Generate an actionable, dependency-ordered tasks.md for the feature based on available design artifacts."
-argument-hint: "Optional task generation constraints"
-compatibility: "Requires spec-kit project structure with .specify/ directory"
+name: speckit-tasks
+description: Generate an actionable, dependency-ordered tasks.md for the feature based
+  on available design artifacts.
+compatibility: Requires spec-kit project structure with .specify/ directory
 metadata:
-  author: "github-spec-kit"
-  source: "templates/commands/tasks.md"
+  author: github-spec-kit
+  source: preset:a11y-governance
 user-invocable: true
 disable-model-invocation: false
 ---
+
+# Speckit Tasks Skill
+
+Before continuing, apply the A11Y Governance preset:
+
+- convert accessibility expectations into explicit tasks
+- convert bilingual delivery work into explicit tasks
+- do not leave A11Y or language review implicit
 
 
 ## User Input

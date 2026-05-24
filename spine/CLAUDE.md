@@ -18,11 +18,49 @@ Spine binds to **localhost only**. Caddy is the only process that talks to it fr
 ## Commands
 
 ```bash
-bun run dev       # dev server with hot reload (--watch)
-bun run src/index.ts  # run directly
-bun test          # run tests (bun's built-in test runner)
+bun run dev       # dev server with hot reload; needs env vars below
+bun run start     # run without watch
+bun run relay     # run the Signal -> spine relay process
+bun test          # run all tests
 bun test src/foo.test.ts  # run a single test file
+bun run lint      # oxlint src/
+bun run format    # prettier --write .
 ```
+
+From the monorepo root (preferred for full-stack dev):
+
+```bash
+just dev          # run spine + surface dev servers together
+just test         # run spine tests
+just lint         # clippy + oxlint + eslint across all components
+just fmt          # format all components
+just check        # tsc --noEmit for all TypeScript components
+```
+
+## Environment variables
+
+| Variable              | Default               | Notes                                                                    |
+| --------------------- | --------------------- | ------------------------------------------------------------------------ |
+| `LATTICE_AGENT_TOKEN` | read from config.toml | Required for agent routes; unset means all agent routes reject with 401  |
+| `DEV_USER`            | unset                 | Set to any string to bypass Authentik auth. **Never set in production.** |
+| `ALLOW_HTTP`          | unset                 | Set to `true` to allow non-TLS connections (required in dev)             |
+| `DATABASE_PATH`       | `./lattice.dev.db`    | Override main SQLite path                                                |
+| `SURFACE_BUILD`       | `../../surface/build` | Path to built surface static files                                       |
+
+Config file alternative to env vars: `~/.config/lattice/config.toml`
+
+```toml
+[spine]
+agent_token = "..."
+database_path = "/var/lib/lattice/lattice.db"
+```
+
+## Databases
+
+Spine uses two SQLite files side-by-side:
+
+- `lattice.dev.db` (or `DATABASE_PATH`) - all structured data; migrations from `migrations/` applied on startup
+- `lattice.qmd.db` - QMD vector embeddings; managed entirely by `@tobilu/qmd`, never hand-migrated
 
 ## Architecture
 
@@ -42,14 +80,35 @@ Spine must fail closed on non-HTTPS requests (Caddy handles TLS, but defense in 
 - Migrations live in `spine/migrations/` as numbered SQL files (e.g. `001_captures.sql`). They are applied in order on startup.
 - The migrations directory is the canonical schema definition — never alter tables by hand.
 
-### Route structure (per plan)
+### Route structure
 
-- `GET /ping` — health check, no auth
-- `POST /api/agent/capture` — bearer-token auth; accepts `{ text, source, captured_at }`; validates with TypeBox;
-  returns `{ id }`
-- `GET /api/captures?limit=N` — Authentik auth; returns recent captures
-- `POST /api/agent/index` — bearer-token auth; upserts local file index entries; idempotent on `(machine_id, path, hash)`
-- `GET /api/search?q=<query>` — Authentik auth; delegates to QMD vector search
+**No auth:**
+
+- `GET /ping` - health check
+
+**Bearer-token auth (`/api/agent/*`):**
+
+- `POST /api/agent/capture` - ingest a capture `{ text, source, captured_at }`
+- `POST /api/agent/index` - upsert file index entries; idempotent on `(machine_id, path, hash)`
+- `GET /api/agent/status` - agent heartbeat / status report
+
+**Authentik auth (all other `/api/*`):**
+
+- `GET /api/captures` - recent captures
+- `GET /api/captures/stream` - SSE stream of new captures
+- `GET /api/tasks` - active tasks
+- `GET /api/tasks/done` - completed tasks
+- `PATCH /api/tasks/:id/triage` - triage a capture into a task
+- `PATCH /api/tasks/:id/complete` - mark task complete
+- `GET /api/search?q=` - vector search via QMD
+- `GET /api/lateral/:id` - related items for a capture or file
+- `GET /api/working` - list working docs
+- `POST /api/working` - create working doc
+- `GET|PUT|DELETE /api/working/:slug` - read/update/delete a working doc
+- `GET|POST /api/working/:slug/attachments` - list or upload attachments
+- `GET|DELETE /api/working/:slug/attachments/:id` - read or delete attachment
+- `GET /api/files` - local file index
+- `GET /api/status` - spine system status
 
 ### Idempotency
 

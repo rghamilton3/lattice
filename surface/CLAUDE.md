@@ -1,14 +1,77 @@
-## Project Configuration
+## What surface is
 
-- **Language**: TypeScript
-- **Package Manager**: bun
-- **Add-ons**: prettier, eslint, vitest, playwright, tailwindcss, sveltekit-adapter, mcp
+Surface is the SvelteKit SPA for Lattice. It is built to static files (`surface/build/`) and served by spine from `/`.
+In production it talks to spine via relative `/api/*` paths. In dev, Vite proxies `/api` to `localhost:3000` and
+automatically injects the `x-authentik-username: dev` header so no auth setup is needed.
+
+## Commands
+
+```bash
+bun run dev       # dev server on port 5173 (proxies /api to spine at :3000)
+bun run build     # build static files to build/
+bun run check     # svelte-check + tsc
+bun run lint      # prettier + eslint
+bun run format    # prettier --write .
+bun run test      # unit tests (vitest) + e2e (playwright)
+bun run test:unit # vitest only
+bun run test:e2e  # playwright only
+```
+
+From the monorepo root: `just dev` runs spine + surface together.
+
+## Architecture
+
+- **Framework**: SvelteKit with `@sveltejs/adapter-static` (no SSR; fully static output)
+- **Styling**: Tailwind CSS v4 (Vite plugin, no config file)
+- **Server state**: TanStack Query (`@tanstack/svelte-query`) for all API calls
+- **Editor**: CodeMirror 6 with Vim bindings (`@replit/codemirror-vim`) and Markdown mode
+- **Rich text rendering**: `marked` + KaTeX + Mermaid + `dompurify`
+- **PDF viewer**: `pdfjs-dist`
+
+## Directory structure
+
+```
+src/
+  routes/           single SvelteKit route (+page.svelte, +layout.svelte)
+  lib/
+    api/            typed fetch wrappers for each spine endpoint
+    state/          Svelte 5 runes-based UI state (workbench.svelte.ts, etc.)
+    styles/         shared CSS
+    utils/          helpers
+    types.ts        shared TypeScript types
+  components/
+    editor/         CodeMirror editor wrapper
+    home/           inbox / capture list
+    icons/          SVG icon components
+    overlays/       modal/drawer overlays
+    process/        capture triage flow
+    reading/        document reading view
+    search/         search UI
+    shell/          app shell (nav, layout)
+    tasks/          task management view
+    ui/             generic UI primitives
+    workbench/      working doc editor
+```
+
+## Dev proxy
+
+`vite.config.ts` proxies all `/api` requests to `http://localhost:3000` and injects:
+
+- `x-forwarded-proto: https` (satisfies spine's HTTPS enforcement)
+- `x-authentik-username: dev` (bypasses Authentik auth)
+
+Spine must be running with `ALLOW_HTTP=true DEV_USER=dev` for this to work end-to-end.
+
+## Testing
+
+Unit tests (`*.svelte.test.ts`) run in a headless Chromium browser via `@vitest/browser-playwright`.
+Server-side tests (`*.test.ts`) run in Node. E2E tests live in `e2e/` and use Playwright.
 
 ---
 
-You are able to use the Svelte MCP server, where you have access to comprehensive Svelte 5 and SvelteKit documentation. Here's how to use the available tools effectively:
+## Svelte MCP Tools
 
-## Available Svelte MCP Tools:
+You have access to a Svelte MCP server with comprehensive Svelte 5 and SvelteKit documentation.
 
 ### 1. list-sections
 

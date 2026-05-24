@@ -201,7 +201,7 @@ describe('POST /api/agent/capture', () => {
 			const { id } = await json(res);
 			const inbox = await app.app.handle(req('/api/captures'));
 			const inboxBody = await json(inbox);
-			expect(inboxBody.find((c: any) => c.id === id)).toBeUndefined();
+			expect(inboxBody.items.find((c: any) => c.id === id)).toBeUndefined();
 		});
 	});
 });

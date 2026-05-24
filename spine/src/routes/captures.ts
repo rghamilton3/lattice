@@ -9,20 +9,81 @@ const VALID_TRIAGE_ACTIONS = new Set(['keep', 'archive', 'promote', 'task', 'ski
 const IMAGE_SUBQ =
 	"(SELECT id FROM capture_attachments WHERE capture_id = captures.id AND content_type LIKE 'image/%' ORDER BY created_at ASC LIMIT 1) AS first_image_id";
 
+interface CaptureCursor {
+	v: 1;
+	kind: 'captures';
+	ingested_at: string;
+	id: number;
+}
+
+function encodeCursor(row: Pick<CaptureRow, 'ingested_at' | 'id'>): string {
+	return Buffer.from(
+		JSON.stringify({ v: 1, kind: 'captures', ingested_at: row.ingested_at, id: row.id }),
+	).toString('base64url');
+}
+
+function parseCursor(value: string | undefined): CaptureCursor | null | undefined {
+	if (!value) return undefined;
+	try {
+		const parsed = JSON.parse(
+			Buffer.from(value, 'base64url').toString('utf8'),
+		) as Partial<CaptureCursor>;
+		if (
+			parsed.v !== 1 ||
+			parsed.kind !== 'captures' ||
+			typeof parsed.ingested_at !== 'string' ||
+			typeof parsed.id !== 'number' ||
+			!Number.isInteger(parsed.id)
+		) {
+			return null;
+		}
+		return parsed as CaptureCursor;
+	} catch {
+		return null;
+	}
+}
+
 export const capturesRoutes = (db: Database) =>
 	new Elysia()
 		.get(
 			'/api/captures',
-			({ query }) => {
+			({ query, set }) => {
 				const raw = query.limit ? Number(query.limit) : 50;
 				const limit = Math.min(Number.isFinite(raw) && raw > 0 ? raw : 50, 200);
 				const all = query.all === '1';
-				const sql = all
-					? `SELECT id, text, source, captured_at, ingested_at, triaged_at, triage_action, ${IMAGE_SUBQ} FROM captures ORDER BY ingested_at DESC LIMIT ?`
-					: `SELECT id, text, source, captured_at, ingested_at, triaged_at, triage_action, ${IMAGE_SUBQ} FROM captures WHERE triaged_at IS NULL ORDER BY ingested_at DESC LIMIT ?`;
-				return db.query(sql).all(limit) as CaptureRow[];
+				const cursor = parseCursor(query.cursor);
+				if (cursor === null) {
+					set.status = 400;
+					return { error: 'Invalid cursor' };
+				}
+
+				const filters = [];
+				const params: Array<string | number> = [];
+				if (!all) filters.push('triaged_at IS NULL');
+				if (cursor) {
+					filters.push('(ingested_at < ? OR (ingested_at = ? AND id < ?))');
+					params.push(cursor.ingested_at, cursor.ingested_at, cursor.id);
+				}
+				params.push(limit + 1);
+				const where = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+				const rows = db
+					.query(
+						`SELECT id, text, source, captured_at, ingested_at, triaged_at, triage_action, ${IMAGE_SUBQ} FROM captures ${where} ORDER BY ingested_at DESC, id DESC LIMIT ?`,
+					)
+					.all(...params) as CaptureRow[];
+				const items = rows.slice(0, limit);
+				return {
+					items,
+					next_cursor: rows.length > limit ? encodeCursor(items[items.length - 1]) : null,
+				};
 			},
-			{ query: t.Object({ limit: t.Optional(t.String()), all: t.Optional(t.String()) }) },
+			{
+				query: t.Object({
+					limit: t.Optional(t.String()),
+					all: t.Optional(t.String()),
+					cursor: t.Optional(t.String()),
+				}),
+			},
 		)
 		.get('/api/captures/stream', () => {
 			const encoder = new TextEncoder();

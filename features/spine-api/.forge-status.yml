@@ -1,7 +1,7 @@
 schema_version: 3
 feature: "spine-api"
 created_at: "2026-05-23"
-last_updated: "2026-05-23T00:00:00Z"
+last_updated: "2026-05-24T18:23:24Z"
 feature_mode: "standard"
 backfilled: true
 phases:
@@ -25,6 +25,9 @@ phases:
   implement:
     status: "completed"
     digest_path: "implement/digest.md"
+  code_review:
+    status: "completed"
+    digest_path: "code-review.md"
   verify:
     status: "completed"
     digest_path: "verify/digest.md"
@@ -38,8 +41,120 @@ phases:
     status: "pending"
   release_readiness:
     status: "pending"
-task_log: []
-gates: []
+tasks:
+  total: 13
+  groups: 4
+  story_coverage: "3/3"
+  functional_requirement_coverage: "9/9"
+scope:
+  paths:
+    - spine
+    - surface
+  cross_workspace: true
+task_log:
+  - id: "T001"
+    size: "M"
+    status: "completed"
+    paths:
+      - "spine:tests/routes/captures.test.ts"
+    completed_at: "2026-05-24T16:39:09Z"
+  - id: "T002"
+    size: "S"
+    status: "completed"
+    paths:
+      - "spine:src/routes/captures.ts"
+    completed_at: "2026-05-24T16:39:09Z"
+  - id: "T003"
+    size: "M"
+    status: "completed"
+    paths:
+      - "spine:src/routes/captures.ts"
+    completed_at: "2026-05-24T16:39:09Z"
+  - id: "T004"
+    size: "M"
+    status: "completed"
+    paths:
+      - "spine:src/routes/captures.ts"
+    completed_at: "2026-05-24T16:39:09Z"
+  - id: "T005"
+    size: "M"
+    status: "completed"
+    paths:
+      - "spine:tests/routes/files.test.ts"
+    completed_at: "2026-05-24T16:39:09Z"
+  - id: "T006"
+    size: "S"
+    status: "completed"
+    paths:
+      - "spine:src/routes/files.ts"
+    completed_at: "2026-05-24T16:39:09Z"
+  - id: "T007"
+    size: "M"
+    status: "completed"
+    paths:
+      - "spine:src/routes/files.ts"
+    completed_at: "2026-05-24T16:39:09Z"
+  - id: "T008"
+    size: "M"
+    status: "completed"
+    paths:
+      - "spine:src/routes/files.ts"
+    completed_at: "2026-05-24T16:39:09Z"
+  - id: "T009"
+    size: "S"
+    status: "completed"
+    paths:
+      - "surface:src/lib/api/captures.ts"
+    completed_at: "2026-05-24T16:39:09Z"
+  - id: "T010"
+    size: "S"
+    status: "completed"
+    paths:
+      - "surface:src/lib/api/files.ts"
+    completed_at: "2026-05-24T16:39:09Z"
+  - id: "T011"
+    size: "XS"
+    status: "completed"
+    paths:
+      - "spine:src/routes/captures.ts"
+      - "spine:src/routes/files.ts"
+    completed_at: "2026-05-24T16:39:09Z"
+  - id: "T012"
+    size: "M"
+    status: "completed"
+    paths:
+      - "spine:tests/routes/captures.test.ts"
+      - "spine:tests/routes/files.test.ts"
+      - "spine:src/routes/captures.ts"
+      - "spine:src/routes/files.ts"
+    completed_at: "2026-05-24T16:39:09Z"
+  - id: "T013"
+    size: "M"
+    status: "completed"
+    paths:
+      - "spine:src/routes/captures.ts"
+      - "spine:src/routes/files.ts"
+      - "surface:src/lib/api/captures.ts"
+      - "surface:src/lib/api/files.ts"
+    completed_at: "2026-05-24T16:39:09Z"
+implement:
+  tasks_completed: 13
+  tasks_total: 13
+  progressive_checkpoints: 3
+  progressive_warnings: 2
+  progressive_critical: 0
+gates:
+  - phase: "code_review"
+    decision: "approved"
+    timestamp: "2026-05-24T18:23:24Z"
+    notes: "All code review recommendations fixed. Limit-cap tests now assert 200 capture and 500 file caps; tsconfig deprecation suppression is documented."
+    findings:
+      critical: 0
+      high: 0
+      medium: 0
+      low: 0
+      fixed: 3
+      acknowledged: 0
 sync_runs:
   last_run: ""
   total_runs: 0

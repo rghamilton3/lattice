@@ -8,9 +8,21 @@ export const captureKeys = {
 	detail: (id: number) => ['captures', 'detail', id] as const
 };
 
-export function fetchCaptures(limit = 50, all = false): Promise<Capture[]> {
-	const params = `limit=${limit}${all ? '&all=1' : ''}`;
-	return apiFetch(`/api/captures?${params}`);
+export interface CapturePage {
+	items: Capture[];
+	next_cursor: string | null;
+}
+
+export function fetchCapturePage(limit = 50, all = false, cursor?: string): Promise<CapturePage> {
+	const params = new URLSearchParams({ limit: String(limit) });
+	if (all) params.set('all', '1');
+	if (cursor) params.set('cursor', cursor);
+	return apiFetch(`/api/captures?${params.toString()}`);
+}
+
+export async function fetchCaptures(limit = 50, all = false): Promise<Capture[]> {
+	const page = await fetchCapturePage(limit, all);
+	return page.items;
 }
 
 export function fetchCapture(id: number): Promise<Capture> {

@@ -65,7 +65,7 @@
 		}
 		if (mod && e.key === '/') {
 			e.preventDefault();
-			wb.openInPane(0, { kind: 'search', query: '' });
+			wb.openInPane(0, { kind: 'library', query: '' });
 			return;
 		}
 
@@ -123,9 +123,8 @@
 
 	function handleNav(view: View) {
 		if (view === 'home') wb.openInPane(0, { kind: 'home' });
-		else if (view === 'search') wb.openInPane(0, { kind: 'search', query: '' });
 		else if (view === 'tasks') wb.openInPane(0, { kind: 'tasks' });
-		else if (view === 'library') wb.openInPane(0, { kind: 'library' });
+		else if (view === 'library') wb.openInPane(0, { kind: 'library', query: '' });
 	}
 </script>
 

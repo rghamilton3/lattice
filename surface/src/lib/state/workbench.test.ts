@@ -59,9 +59,7 @@ describe('WorkbenchStore', () => {
 	it('view is derived from panes[0].kind, not persisted', () => {
 		const a = new WorkbenchStore();
 		expect(a.view).toBe('home');
-		a.openInPane(0, { kind: 'search', query: '' });
-		expect(a.view).toBe('search');
-		a.openInPane(0, { kind: 'library' });
+		a.openInPane(0, { kind: 'library', query: '' });
 		expect(a.view).toBe('library');
 		a.openInPane(0, { kind: 'doc', ref: { kind: 'working', slug: 'x' } });
 		expect(a.view).toBe('doc');
@@ -105,8 +103,8 @@ describe('WorkbenchStore', () => {
 		expect(wb.panes[0]).toEqual({ kind: 'home' });
 		expect(wb.isSplit).toBe(false);
 
-		wb.openInPane(0, { kind: 'search', query: 'foo' });
-		expect(wb.panes[0]).toEqual({ kind: 'search', query: 'foo' });
+		wb.openInPane(0, { kind: 'library', query: 'foo' });
+		expect(wb.panes[0]).toEqual({ kind: 'library', query: 'foo' });
 		expect(wb.focusedPane).toBe(0);
 
 		wb.openInPane(1, { kind: 'doc', ref: { kind: 'working', slug: 'notes' } });
@@ -117,7 +115,7 @@ describe('WorkbenchStore', () => {
 
 	it('closeRightPane collapses to single pane and refocuses left', () => {
 		const wb = new WorkbenchStore();
-		wb.openInPane(1, { kind: 'search', query: 'x' });
+		wb.openInPane(1, { kind: 'library', query: 'x' });
 		expect(wb.isSplit).toBe(true);
 		wb.closeRightPane();
 		expect(wb.isSplit).toBe(false);

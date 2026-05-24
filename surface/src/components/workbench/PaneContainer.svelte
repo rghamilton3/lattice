@@ -11,8 +11,8 @@
 		switch (c.kind) {
 			case 'home':
 				return 'home';
-			case 'search':
-				return c.query ? `search: ${c.query}` : 'search';
+			case 'library':
+				return c.query ? `library: ${c.query}` : 'library';
 			case 'results':
 				return c.source.kind;
 			case 'doc':
@@ -20,8 +20,6 @@
 				return `${c.ref.kind} #${c.ref.id}`;
 			case 'editor':
 				return `edit: ${c.slug}`;
-			case 'library':
-				return 'library';
 			case 'tasks':
 				return 'tasks';
 		}

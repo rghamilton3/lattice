@@ -140,11 +140,10 @@ export type LateralSource =
 
 export type PaneContent =
 	| { kind: 'home' }
-	| { kind: 'search'; query: string }
+	| { kind: 'library'; query: string }
 	| { kind: 'results'; source: LateralSource }
 	| { kind: 'doc'; ref: DocRef }
 	| { kind: 'editor'; slug: string }
-	| { kind: 'library' }
 	| { kind: 'tasks' };
 
 // ── Workbench ─────────────────────────────────────────────────────────────────

@@ -51,10 +51,10 @@
 			{
 				id: 'search',
 				label: 'Search everything',
-				hint: 'go to search view',
+				hint: 'open library',
 				kbd: ['Ctrl', '/'],
 				kind: 'action',
-				run: () => wb.openInPane(0, { kind: 'search', query: '' })
+				run: () => wb.openInPane(0, { kind: 'library', query: '' })
 			},
 			{
 				id: 'home',

@@ -6,6 +6,21 @@ import type { FileIndexRow } from '../db/rows';
 export const filesRoutes = (db: Database) =>
 	new Elysia()
 		.get(
+			'/api/files',
+			({ query }) => {
+				const raw = query.limit ? Number(query.limit) : 100;
+				const limit = Math.min(Number.isFinite(raw) && raw > 0 ? raw : 100, 500);
+				return db
+					.query(
+						'SELECT id, machine_id, path, mime_type, modified_at FROM file_index ORDER BY modified_at DESC LIMIT ?',
+					)
+					.all(limit) as Array<
+					Pick<FileIndexRow, 'id' | 'machine_id' | 'path' | 'mime_type' | 'modified_at'>
+				>;
+			},
+			{ query: t.Object({ limit: t.Optional(t.String()) }) },
+		)
+		.get(
 			'/api/files/:id',
 			({ params, set }) => {
 				const id = parseInt(params.id, 10);

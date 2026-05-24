@@ -34,7 +34,7 @@ test('quick capture: c → type → ⌘↵ shows toast', async ({ page }) => {
 	await expect(page.getByRole('status')).toBeVisible();
 });
 
-test('command palette: ⌘K → "search" → Enter switches the pane to search', async ({ page }) => {
+test('command palette: ⌘K → "search" → Enter switches the pane to library', async ({ page }) => {
 	await page.goto('/');
 	await page.getByRole('heading', { name: /Where you were/i }).waitFor();
 
@@ -45,7 +45,7 @@ test('command palette: ⌘K → "search" → Enter switches the pane to search',
 	await palette.getByRole('textbox').fill('search');
 	await page.keyboard.press('Enter');
 
-	await expect(page.getByPlaceholder('What were you trying to find?')).toBeVisible();
+	await expect(page.getByPlaceholder('Filter your library…')).toBeVisible();
 });
 
 test('settings drawer cycles each theme and updates <html data-theme>', async ({ page }) => {
@@ -141,7 +141,7 @@ test('search facets: toggle kind off filters results', async ({ page }) => {
 	await page.getByRole('heading', { name: /Where you were/i }).waitFor();
 	await page.keyboard.press(`${modLocal}+/`);
 
-	const input = page.getByPlaceholder('What were you trying to find?');
+	const input = page.getByPlaceholder('Filter your library…');
 	await input.fill('foo');
 
 	await expect(page.getByText('cap snippet')).toBeVisible();

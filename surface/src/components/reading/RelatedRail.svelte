@@ -97,7 +97,7 @@
 					onclick={toggleMinimized}
 					aria-label={minimized ? 'Expand related notes' : 'Minimize related notes'}
 				>
-					<Icon name="minimize" size={12} />
+					<Icon name={minimized ? 'maximize' : 'minimize'} size={12} />
 				</button>
 			</div>
 		</div>

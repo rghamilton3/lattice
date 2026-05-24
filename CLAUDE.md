@@ -36,3 +36,8 @@ just install       # install all dependencies + git hooks (run once after clone)
 - UI, SPA views, client state: `surface/`
 - Local file indexing, system tray, IPC: `agent/`
 - Cross-component config: `config.toml.example` (deployed to `~/.config/lattice/config.toml`)
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
+<!-- SPECKIT END -->

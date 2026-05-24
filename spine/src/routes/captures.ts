@@ -6,6 +6,8 @@ import { onCapture, emitCapture } from '../captureEvents';
 import { parseCommand } from '../commands';
 
 const VALID_TRIAGE_ACTIONS = new Set(['keep', 'archive', 'promote', 'task', 'skip']);
+const IMAGE_SUBQ =
+	"(SELECT id FROM capture_attachments WHERE capture_id = captures.id AND content_type LIKE 'image/%' ORDER BY created_at ASC LIMIT 1) AS first_image_id";
 
 export const capturesRoutes = (db: Database) =>
 	new Elysia()
@@ -16,8 +18,8 @@ export const capturesRoutes = (db: Database) =>
 				const limit = Math.min(Number.isFinite(raw) && raw > 0 ? raw : 50, 200);
 				const all = query.all === '1';
 				const sql = all
-					? 'SELECT id, text, source, captured_at, ingested_at, triaged_at, triage_action FROM captures ORDER BY ingested_at DESC LIMIT ?'
-					: 'SELECT id, text, source, captured_at, ingested_at, triaged_at, triage_action FROM captures WHERE triaged_at IS NULL ORDER BY ingested_at DESC LIMIT ?';
+					? `SELECT id, text, source, captured_at, ingested_at, triaged_at, triage_action, ${IMAGE_SUBQ} FROM captures ORDER BY ingested_at DESC LIMIT ?`
+					: `SELECT id, text, source, captured_at, ingested_at, triaged_at, triage_action, ${IMAGE_SUBQ} FROM captures WHERE triaged_at IS NULL ORDER BY ingested_at DESC LIMIT ?`;
 				return db.query(sql).all(limit) as CaptureRow[];
 			},
 			{ query: t.Object({ limit: t.Optional(t.String()), all: t.Optional(t.String()) }) },
@@ -80,7 +82,7 @@ export const capturesRoutes = (db: Database) =>
 				}
 				const row = db
 					.query(
-						'SELECT id, text, source, captured_at, ingested_at, triaged_at, triage_action FROM captures WHERE id = ?',
+						`SELECT id, text, source, captured_at, ingested_at, triaged_at, triage_action, ${IMAGE_SUBQ} FROM captures WHERE id = ?`,
 					)
 					.get(id) as CaptureRow | null;
 				if (!row) {
@@ -152,6 +154,7 @@ export const capturesRoutes = (db: Database) =>
 					task_priority: null,
 					task_notes: null,
 					task_completed_at: null,
+					first_image_id: null,
 				});
 				return { id: row.id, triage_action: triagedAction, text: storedText };
 			},

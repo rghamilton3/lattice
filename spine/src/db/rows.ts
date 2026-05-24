@@ -14,6 +14,7 @@ export interface CaptureRow {
 	task_priority: string | null;
 	task_notes: string | null;
 	task_completed_at: string | null;
+	first_image_id: number | null;
 }
 
 export interface FileIndexRow {

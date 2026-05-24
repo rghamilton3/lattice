@@ -52,6 +52,7 @@ export const agentRoutes = (db: Database, { attachmentsDir }: AgentRoutesOptions
 					task_priority: null,
 					task_notes: null,
 					task_completed_at: null,
+					first_image_id: null,
 				});
 				return { id: row.id, triage_action: triagedAction, text: storedText };
 			},

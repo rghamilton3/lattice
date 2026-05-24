@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Capture } from '$lib/types';
 	import type { TriageAction } from '$lib/api/captures';
+	import { attachmentRawUrl } from '$lib/api/attachments';
 	import Icon from '$components/icons/Icon.svelte';
 	import TriageBtn from './TriageBtn.svelte';
 	import { relTime } from '$lib/utils/relTime';
@@ -30,6 +31,7 @@
 			<div
 				class="inbox-row"
 				data-active={i === active}
+				data-has-thumb={c.first_image_id != null}
 				role="button"
 				tabindex="0"
 				onmouseenter={() => (active = i)}
@@ -71,6 +73,14 @@
 						<TriageBtn icon="skip" label="Skip" kkey="␣" onclick={() => onTriage(c.id, 'skip')} />
 					</div>
 				</div>
+				{#if c.first_image_id != null}
+					<img
+						class="inbox-thumb"
+						src={attachmentRawUrl(c.id, c.first_image_id)}
+						alt="attachment preview"
+						loading="lazy"
+					/>
+				{/if}
 			</div>
 		{/each}
 	</div>

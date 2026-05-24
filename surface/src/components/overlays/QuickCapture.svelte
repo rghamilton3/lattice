@@ -1,7 +1,9 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { createCapture } from '$lib/api/captures';
+	import { uploadAttachment, attachmentKeys } from '$lib/api/attachments';
 	import { taskKeys } from '$lib/api/tasks';
 	import { logError } from '$lib/utils/logError';
 	import Icon from '$components/icons/Icon.svelte';
@@ -16,11 +18,19 @@
 	let confirmed = $state(false);
 	let failed = $state(false);
 	let submitting = $state(false);
+	let attachedFile = $state<File | null>(null);
+	let previewUrl = $state<string | null>(null);
+	let dragDepth = $state(0);
 
-	const canSave = $derived(text.trim().length >= 1 && !submitting);
+	const canSave = $derived((text.trim().length >= 1 || attachedFile !== null) && !submitting);
+	const dragOver = $derived(dragDepth > 0);
 
 	$effect(() => {
 		textarea?.focus();
+	});
+
+	onDestroy(() => {
+		if (previewUrl) URL.revokeObjectURL(previewUrl);
 	});
 
 	function close() {
@@ -34,33 +44,105 @@
 		return 'Captured — inbox updated';
 	}
 
-	function submit() {
+	function extFromMime(mime: string): string {
+		const map: Record<string, string> = {
+			'image/png': 'png',
+			'image/jpeg': 'jpg',
+			'image/gif': 'gif',
+			'image/webp': 'webp',
+			'image/svg+xml': 'svg',
+			'image/avif': 'avif'
+		};
+		return map[mime] ?? mime.split('/')[1] ?? 'bin';
+	}
+
+	function setFile(file: File) {
+		if (previewUrl) URL.revokeObjectURL(previewUrl);
+		attachedFile = file;
+		previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+	}
+
+	function clearFile() {
+		if (previewUrl) URL.revokeObjectURL(previewUrl);
+		attachedFile = null;
+		previewUrl = null;
+	}
+
+	function onPaste(e: ClipboardEvent) {
+		const item = Array.from(e.clipboardData?.items ?? []).find(
+			(i) => i.kind === 'file' && i.type.startsWith('image/')
+		);
+		if (!item) return;
+		e.preventDefault();
+		const blob = item.getAsFile();
+		if (!blob) return;
+		const ext = extFromMime(blob.type);
+		setFile(new File([blob], `pasted-${Date.now()}.${ext}`, { type: blob.type }));
+	}
+
+	function onDragEnter(e: DragEvent) {
+		if (!e.dataTransfer?.types.includes('Files')) return;
+		dragDepth++;
+	}
+
+	function onDragOver(e: DragEvent) {
+		if (!e.dataTransfer?.types.includes('Files')) return;
+		e.preventDefault();
+		e.dataTransfer.dropEffect = 'copy';
+	}
+
+	function onDragLeave() {
+		dragDepth = Math.max(0, dragDepth - 1);
+	}
+
+	function onDrop(e: DragEvent) {
+		e.preventDefault();
+		dragDepth = 0;
+		const file = e.dataTransfer?.files[0];
+		if (!file) return;
+		setFile(file);
+	}
+
+	async function submit() {
 		if (!canSave) {
 			close();
 			return;
 		}
-		const payload = { text: text.trim(), source: voice ? 'voice' : 'desktop-hotkey' };
-		confirmed = true;
+		const captureText = text.trim() || attachedFile?.name || '';
+		if (!captureText) {
+			close();
+			return;
+		}
+		const payload = { text: captureText, source: voice ? 'voice' : 'desktop-hotkey' };
 		failed = false;
 		submitting = true;
-		createCapture(payload)
-			.then((result) => {
-				queryClient.invalidateQueries({ queryKey: ['captures', 'list'] });
-				if (result.triage_action === 'task') {
-					queryClient.invalidateQueries({ queryKey: taskKeys.list() });
-				}
-				wb.showToast(toastForAction(result.triage_action));
-				setTimeout(close, 650);
-			})
-			.catch((err) => {
-				logError('createCapture', err);
-				confirmed = false;
-				failed = true;
-				wb.showToast('Save failed — capture not stored');
-			})
-			.finally(() => {
-				submitting = false;
-			});
+		let result: Awaited<ReturnType<typeof createCapture>>;
+		try {
+			result = await createCapture(payload);
+		} catch (err) {
+			logError('createCapture', err);
+			failed = true;
+			submitting = false;
+			wb.showToast('Save failed — capture not stored');
+			return;
+		}
+		confirmed = true;
+		submitting = false;
+		if (attachedFile) {
+			try {
+				await uploadAttachment(result.id, attachedFile);
+				queryClient.invalidateQueries({ queryKey: attachmentKeys.captureList(result.id) });
+			} catch (err) {
+				logError('uploadAttachment', err);
+				wb.showToast('Captured — attachment upload failed');
+			}
+		}
+		queryClient.invalidateQueries({ queryKey: ['captures', 'list'] });
+		if (result.triage_action === 'task') {
+			queryClient.invalidateQueries({ queryKey: taskKeys.list() });
+		}
+		wb.showToast(toastForAction(result.triage_action));
+		setTimeout(close, 650);
 	}
 
 	function onTextareaKey(e: KeyboardEvent) {
@@ -92,12 +174,18 @@
 	<div
 		bind:this={modal}
 		class="qcap soft-in"
+		class:qcap-drag-over={dragOver}
 		role="dialog"
 		aria-modal="true"
 		aria-label="Quick capture"
 		tabindex="-1"
 		onclick={(e) => e.stopPropagation()}
 		onkeydown={trapTab}
+		onpaste={onPaste}
+		ondragenter={onDragEnter}
+		ondragover={onDragOver}
+		ondragleave={onDragLeave}
+		ondrop={onDrop}
 	>
 		<div class="qcap-head">
 			<div class="row" style="gap:8px; flex-wrap:wrap">
@@ -110,6 +198,23 @@
 				<Icon name="x" size={14} />
 			</button>
 		</div>
+		{#if attachedFile}
+			<div class="qcap-attachment">
+				{#if previewUrl}
+					<img class="qcap-preview-img" src={previewUrl} alt="Attached" />
+				{:else}
+					<Icon name="doc" size={16} />
+					<span class="mono" style="font-size:13px">{attachedFile.name}</span>
+				{/if}
+				<button
+					class="btn btn-ghost qcap-clear-att"
+					onclick={clearFile}
+					aria-label="Remove attachment"
+				>
+					<Icon name="x" size={12} />
+				</button>
+			</div>
+		{/if}
 		<textarea
 			bind:this={textarea}
 			bind:value={text}
@@ -147,6 +252,8 @@
 						Save failed — try again
 					{:else if confirmed}
 						Captured — inbox updated
+					{:else if attachedFile && !text.trim()}
+						{attachedFile.name} · paste or drag to replace
 					{:else}
 						{text.length} chars · /task, /note, /skip
 					{/if}
@@ -162,3 +269,31 @@
 		</div>
 	</div>
 </div>
+
+<style>
+	.qcap-drag-over {
+		outline: 2px dashed var(--c-accent, var(--text-link));
+		outline-offset: -2px;
+	}
+	.qcap-attachment {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 8px 12px;
+		background: var(--bg-raised);
+		border-bottom: 1px solid var(--line);
+		position: relative;
+	}
+	.qcap-preview-img {
+		max-height: 160px;
+		max-width: 100%;
+		object-fit: contain;
+		border-radius: 4px;
+		display: block;
+	}
+	.qcap-clear-att {
+		position: absolute;
+		top: 6px;
+		right: 8px;
+	}
+</style>

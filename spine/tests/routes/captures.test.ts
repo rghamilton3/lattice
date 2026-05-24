@@ -71,6 +71,7 @@ describe('GET /api/captures', () => {
 		const [row] = await json(res);
 		expect(Object.keys(row).sort()).toEqual([
 			'captured_at',
+			'first_image_id',
 			'id',
 			'ingested_at',
 			'source',
@@ -78,6 +79,27 @@ describe('GET /api/captures', () => {
 			'triage_action',
 			'triaged_at',
 		]);
+	});
+
+	it('first_image_id is null when capture has no attachments', async () => {
+		seedCapture(app, 'no attachments');
+		const res = await app.app.handle(req('/api/captures'));
+		const [row] = await json(res);
+		expect(row.first_image_id).toBeNull();
+	});
+
+	it('first_image_id is populated when capture has an image attachment', async () => {
+		const { id } = seedCapture(app, 'with image');
+		const attachRow = app.db
+			.prepare(
+				`INSERT INTO capture_attachments (capture_id, filename, content_type, size_bytes, stored_path, upload_source, created_at)
+				 VALUES (?, 'snap.png', 'image/png', 100, '/tmp/snap.png', 'browser', '2026-01-01T00:00:00Z') RETURNING id`,
+			)
+			.get(id) as { id: number };
+
+		const res = await app.app.handle(req('/api/captures'));
+		const [row] = await json(res);
+		expect(row.first_image_id).toBe(attachRow.id);
 	});
 
 	it('excludes triaged captures by default', async () => {
@@ -126,6 +148,27 @@ describe('GET /api/captures/:id', () => {
 		const res = await app.app.handle(req('/api/captures/99999'));
 		expect(res.status).toBe(404);
 		expect((await json(res)).error).toBe('Not found');
+	});
+
+	it('first_image_id is null when capture has no attachments', async () => {
+		const { id } = seedCapture(app, 'no attachment');
+		const res = await app.app.handle(req(`/api/captures/${id}`));
+		expect(res.status).toBe(200);
+		expect((await json(res)).first_image_id).toBeNull();
+	});
+
+	it('first_image_id is populated when capture has an image attachment', async () => {
+		const { id } = seedCapture(app, 'with image');
+		const attachRow = app.db
+			.prepare(
+				`INSERT INTO capture_attachments (capture_id, filename, content_type, size_bytes, stored_path, upload_source, created_at)
+				 VALUES (?, 'snap.png', 'image/png', 100, '/tmp/snap.png', 'browser', '2026-01-01T00:00:00Z') RETURNING id`,
+			)
+			.get(id) as { id: number };
+
+		const res = await app.app.handle(req(`/api/captures/${id}`));
+		expect(res.status).toBe(200);
+		expect((await json(res)).first_image_id).toBe(attachRow.id);
 	});
 });
 

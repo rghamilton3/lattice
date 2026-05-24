@@ -64,6 +64,7 @@ export interface Capture {
 	task_due_date: string | null;
 	task_priority: 'high' | 'medium' | 'low' | null;
 	task_notes: string | null;
+	first_image_id: number | null;
 }
 
 export type TaskPriority = 'high' | 'medium' | 'low';

@@ -57,6 +57,10 @@
 	}
 
 	function setFile(file: File) {
+		if (file.size > 20 * 1024 * 1024) {
+			wb.showToast('File too large — 20 MB max');
+			return;
+		}
 		if (previewUrl) URL.revokeObjectURL(previewUrl);
 		attachedFile = file;
 		previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
@@ -108,7 +112,7 @@
 			close();
 			return;
 		}
-		const captureText = text.trim() || attachedFile?.name || '';
+		const captureText = text.trim() || (attachedFile ? `(attached: ${attachedFile.name})` : '');
 		if (!captureText) {
 			close();
 			return;
@@ -135,6 +139,9 @@
 			} catch (err) {
 				logError('uploadAttachment', err);
 				wb.showToast('Captured — attachment upload failed');
+				queryClient.invalidateQueries({ queryKey: ['captures', 'list'] });
+				setTimeout(close, 650);
+				return;
 			}
 		}
 		queryClient.invalidateQueries({ queryKey: ['captures', 'list'] });

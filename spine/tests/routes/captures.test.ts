@@ -149,6 +149,27 @@ describe('GET /api/captures/:id', () => {
 		expect(res.status).toBe(404);
 		expect((await json(res)).error).toBe('Not found');
 	});
+
+	it('first_image_id is null when capture has no attachments', async () => {
+		const { id } = seedCapture(app, 'no attachment');
+		const res = await app.app.handle(req(`/api/captures/${id}`));
+		expect(res.status).toBe(200);
+		expect((await json(res)).first_image_id).toBeNull();
+	});
+
+	it('first_image_id is populated when capture has an image attachment', async () => {
+		const { id } = seedCapture(app, 'with image');
+		const attachRow = app.db
+			.prepare(
+				`INSERT INTO capture_attachments (capture_id, filename, content_type, size_bytes, stored_path, upload_source, created_at)
+				 VALUES (?, 'snap.png', 'image/png', 100, '/tmp/snap.png', 'browser', '2026-01-01T00:00:00Z') RETURNING id`,
+			)
+			.get(id) as { id: number };
+
+		const res = await app.app.handle(req(`/api/captures/${id}`));
+		expect(res.status).toBe(200);
+		expect((await json(res)).first_image_id).toBe(attachRow.id);
+	});
 });
 
 describe('GET /api/captures/stream', () => {

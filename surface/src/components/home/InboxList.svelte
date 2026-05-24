@@ -79,6 +79,7 @@
 						src={attachmentRawUrl(c.id, c.first_image_id)}
 						alt="attachment preview"
 						loading="lazy"
+						onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')}
 					/>
 				{/if}
 			</div>

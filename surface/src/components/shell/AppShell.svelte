@@ -127,22 +127,16 @@
 					onclick={() => onnav('home')}
 				/>
 				<NavBtn
-					label="Search"
-					icon="search"
-					active={wb.view === 'search'}
-					onclick={() => onnav('search')}
+					label="Library"
+					icon="library"
+					active={wb.view === 'library'}
+					onclick={() => onnav('library')}
 				/>
 				<NavBtn
 					label="Tasks"
 					icon="task"
 					active={wb.view === 'tasks'}
 					onclick={() => onnav('tasks')}
-				/>
-				<NavBtn
-					label="Library"
-					icon="library"
-					active={wb.view === 'library'}
-					onclick={() => onnav('library')}
 				/>
 			</nav>
 		</div>

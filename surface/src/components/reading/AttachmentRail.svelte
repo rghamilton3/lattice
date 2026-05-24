@@ -99,7 +99,7 @@
 				onclick={toggleMinimized}
 				aria-label="Expand attachments"
 			>
-				<Icon name="minimize" size={13} />
+				<Icon name="maximize" size={13} />
 			</button>
 			<span class="att-min-badge">{query.data.length}</span>
 		</div>

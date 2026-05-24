@@ -18,7 +18,7 @@ const STORAGE_KEY = 'lattice.session';
 export type Theme = 'light' | 'dark' | 'sepia' | 'system';
 export type Density = 'compact' | 'comfortable' | 'spacious';
 export type Posture = 'quiet' | 'standard' | 'active';
-export type View = 'home' | 'search' | 'doc' | 'library' | 'tasks';
+export type View = 'home' | 'doc' | 'library' | 'tasks';
 export type ActiveOverlay =
 	| 'none'
 	| 'capture'
@@ -99,11 +99,10 @@ export class WorkbenchStore {
 	isSplit = $derived(this.panes.length === 2);
 
 	// Nav highlight follows the focused pane's content. `doc`/`editor`/`results`
-	// fall through to `'doc'` — neither Home nor Search nor Library highlights.
+	// fall through to `'doc'` — neither Home nor Library nor Tasks highlights.
 	view = $derived.by<View>(() => {
 		const kind = this.panes[0].kind;
 		if (kind === 'home') return 'home';
-		if (kind === 'search') return 'search';
 		if (kind === 'library') return 'library';
 		if (kind === 'tasks') return 'tasks';
 		return 'doc';
@@ -233,7 +232,7 @@ export class WorkbenchStore {
 			const count = data.results.length;
 			const label = count === 1 ? '1 result' : `${count} results`;
 			this.showToast(`Deep search: ${label} for "${q}"`, {
-				onclick: () => this.openInPane(0, { kind: 'search', query: q })
+				onclick: () => this.openInPane(0, { kind: 'library', query: q })
 			});
 		} catch (e) {
 			const httpStatus = e instanceof ApiError ? e.status : 0;

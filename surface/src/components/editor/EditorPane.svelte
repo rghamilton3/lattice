@@ -75,7 +75,7 @@
 	}
 
 	function goBack() {
-		wb.openInPane(paneIndex, { kind: 'search', query: '' });
+		wb.openInPane(paneIndex, { kind: 'library', query: '' });
 	}
 
 	// Wire vim ex commands (global registry — last-mounted editor wins when two are open simultaneously)
@@ -159,7 +159,7 @@
 
 <div class="editor-shell">
 	<div class="editor-status">
-		<button class="btn btn-ghost" title="Back to search" onclick={goBack}>
+		<button class="btn btn-ghost" title="Back to library" onclick={goBack}>
 			<Icon name="arrow-right" size={14} class="rotate-180" /> Back
 		</button>
 		<span class="mono faint truncate" style="font-size:12px">{slug}.md</span>

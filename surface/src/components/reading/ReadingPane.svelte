@@ -153,8 +153,8 @@
 		<div class="row" style="gap:4px; min-width:0">
 			<button
 				class="btn btn-ghost"
-				title="Back to search"
-				onclick={() => wb.openInPane(paneIndex, { kind: 'search', query: '' })}
+				title="Back to library"
+				onclick={() => wb.openInPane(paneIndex, { kind: 'library', query: '' })}
 			>
 				<Icon name="arrow-right" size={14} class="rotate-180" /> Back
 			</button>

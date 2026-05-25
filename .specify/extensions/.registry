@@ -18,6 +18,27 @@
       },
       "registered_skills": [],
       "installed_at": "2026-05-24T02:57:50.455514+00:00"
+    },
+    "time-machine": {
+      "version": "1.0.0",
+      "source": "local",
+      "manifest_hash": "sha256:8ad282a27149aa67765dbebd4031a0175394de5eb1578649f563e651c9eb5a92",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "claude": [
+          "speckit.time-machine.analyze",
+          "speckit.time-machine.next",
+          "speckit.time-machine.status"
+        ],
+        "opencode": [
+          "speckit.time-machine.analyze",
+          "speckit.time-machine.next",
+          "speckit.time-machine.status"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-05-25T23:38:14.810770+00:00"
     }
   }
 }

@@ -1,6 +1,5 @@
 installed:
 - git
-- product-forge
 settings:
   auto_execute_hooks: true
 hooks:

@@ -26,6 +26,10 @@ function seedCapture(
 		.get(text, source, capturedAt, ingestedAt) as { id: number };
 }
 
+function encodeCaptureCursor(cursor: unknown): string {
+	return Buffer.from(JSON.stringify(cursor)).toString('base64url');
+}
+
 describe('GET /api/captures', () => {
 	it('returns recent captures ordered by ingested_at descending', async () => {
 		seedCapture(app, 'first');
@@ -207,6 +211,24 @@ describe('GET /api/captures', () => {
 
 	it('returns 400 for malformed capture cursors', async () => {
 		const res = await app.app.handle(req('/api/captures?cursor=not-a-cursor'));
+		expect(res.status).toBe(400);
+		expect(await json(res)).toEqual({ error: 'Invalid cursor' });
+	});
+
+	it('returns 400 for empty capture cursors', async () => {
+		const res = await app.app.handle(req('/api/captures?cursor='));
+		expect(res.status).toBe(400);
+		expect(await json(res)).toEqual({ error: 'Invalid cursor' });
+	});
+
+	it('returns 400 for non-positive capture cursor ids', async () => {
+		const cursor = encodeCaptureCursor({
+			v: 1,
+			kind: 'captures',
+			ingested_at: '2026-01-01T00:00:00.000Z',
+			id: 0,
+		});
+		const res = await app.app.handle(req(`/api/captures?cursor=${cursor}`));
 		expect(res.status).toBe(400);
 		expect(await json(res)).toEqual({ error: 'Invalid cursor' });
 	});

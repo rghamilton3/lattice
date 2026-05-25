@@ -23,7 +23,8 @@ function encodeCursor(row: Pick<CaptureRow, 'ingested_at' | 'id'>): string {
 }
 
 function parseCursor(value: string | undefined): CaptureCursor | null | undefined {
-	if (!value) return undefined;
+	if (value === undefined) return undefined;
+	if (!value) return null;
 	try {
 		const parsed = JSON.parse(
 			Buffer.from(value, 'base64url').toString('utf8'),
@@ -33,7 +34,8 @@ function parseCursor(value: string | undefined): CaptureCursor | null | undefine
 			parsed.kind !== 'captures' ||
 			typeof parsed.ingested_at !== 'string' ||
 			typeof parsed.id !== 'number' ||
-			!Number.isInteger(parsed.id)
+			!Number.isInteger(parsed.id) ||
+			parsed.id <= 0
 		) {
 			return null;
 		}

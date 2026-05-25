@@ -32,6 +32,10 @@ function seedFile(
 	};
 }
 
+function encodeFileCursor(cursor: unknown): string {
+	return Buffer.from(JSON.stringify(cursor)).toString('base64url');
+}
+
 describe('GET /api/files', () => {
 	it('returns a paginated first page ordered by modified_at and id descending', async () => {
 		seedFile(app, '/data/old.txt', 'old', 'm1', 'h1', '2026-01-01T00:00:00.000Z');
@@ -95,6 +99,24 @@ describe('GET /api/files', () => {
 
 	it('returns 400 for malformed file cursors', async () => {
 		const res = await app.app.handle(req('/api/files?cursor=not-a-cursor'));
+		expect(res.status).toBe(400);
+		expect(await json(res)).toEqual({ error: 'Invalid cursor' });
+	});
+
+	it('returns 400 for empty file cursors', async () => {
+		const res = await app.app.handle(req('/api/files?cursor='));
+		expect(res.status).toBe(400);
+		expect(await json(res)).toEqual({ error: 'Invalid cursor' });
+	});
+
+	it('returns 400 for non-positive file cursor ids', async () => {
+		const cursor = encodeFileCursor({
+			v: 1,
+			kind: 'files',
+			modified_at: '2026-01-01T00:00:00.000Z',
+			id: 0,
+		});
+		const res = await app.app.handle(req(`/api/files?cursor=${cursor}`));
 		expect(res.status).toBe(400);
 		expect(await json(res)).toEqual({ error: 'Invalid cursor' });
 	});

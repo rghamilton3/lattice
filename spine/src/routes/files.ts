@@ -19,7 +19,8 @@ function encodeCursor(row: Pick<FileIndexRow, 'modified_at' | 'id'>): string {
 }
 
 function parseCursor(value: string | undefined): FileCursor | null | undefined {
-	if (!value) return undefined;
+	if (value === undefined) return undefined;
+	if (!value) return null;
 	try {
 		const parsed = JSON.parse(
 			Buffer.from(value, 'base64url').toString('utf8'),
@@ -29,7 +30,8 @@ function parseCursor(value: string | undefined): FileCursor | null | undefined {
 			parsed.kind !== 'files' ||
 			typeof parsed.modified_at !== 'string' ||
 			typeof parsed.id !== 'number' ||
-			!Number.isInteger(parsed.id)
+			!Number.isInteger(parsed.id) ||
+			parsed.id <= 0
 		) {
 			return null;
 		}

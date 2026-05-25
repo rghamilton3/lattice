@@ -100,7 +100,6 @@
 
 		/* Completeness */
 		// "skipDefaultLibCheck": true,                      /* Skip type checking .d.ts files that are included with TypeScript. */
-		"skipLibCheck": true /* Skip type checking all .d.ts files. */,
-		"ignoreDeprecations": "6.0" /* Required for current TypeScript check compatibility; see features/spine-api/implementation-log.md. */
+		"skipLibCheck": true /* Skip type checking all .d.ts files. */
 	}
 }

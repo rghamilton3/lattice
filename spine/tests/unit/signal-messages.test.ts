@@ -122,6 +122,21 @@ describe('parseSignalMessage', () => {
 		expect(parsed?.attachments.length).toBe(1);
 	});
 
+	it('parses direct data-message attachments', () => {
+		const msg = envelope(
+			{},
+			{
+				message: 'see file',
+				attachments: [{ id: 'att-1', contentType: 'application/pdf', filename: 'doc.pdf' }],
+			},
+		);
+		const parsed = parseSignalMessage(msg, SELF);
+		expect(parsed?.captureText).toBe('see file');
+		expect(parsed?.attachments).toEqual([
+			{ id: 'att-1', contentType: 'application/pdf', filename: 'doc.pdf' },
+		]);
+	});
+
 	it('returns null for sync sent to someone else', () => {
 		const msg = {
 			method: 'receive',
@@ -189,6 +204,16 @@ describe('parseSignalMessage', () => {
 		const msg = envelope({ timestamp: undefined }, { message: 'hi' });
 		const parsed = parseSignalMessage(msg, SELF, () => fixed);
 		expect(parsed?.sourceTimestamp).toBe(fixed.getTime());
+	});
+
+	it('uses payload timestamp before envelope timestamp', () => {
+		const msg = envelope(
+			{ timestamp: 1_700_000_000_000 },
+			{ message: 'hi', timestamp: 1_800_000_000_000 },
+		);
+		const parsed = parseSignalMessage(msg, SELF);
+		expect(parsed?.capturedAt).toBe(new Date(1_800_000_000_000).toISOString());
+		expect(parsed?.sourceTimestamp).toBe(1_800_000_000_000);
 	});
 
 	it('uses placeholder text when message is empty but attachments are present', () => {

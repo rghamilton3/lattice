@@ -1,11 +1,13 @@
-# Optional: Signal → Lattice relay bridge.
-# Requires signal-cli to be running and listening on 127.0.0.1:7583.
-# Uses host networking so it can reach both signal-cli and spine on localhost.
+# Optional: Signal -> Lattice relay bridge.
+# Requires signal-cli JSON-RPC to be running and listening on 127.0.0.1:7583
+# by default. Uses host networking so it can reach both signal-cli and spine
+# on localhost.
 #
 # Attachment storage (voice notes, files):
 # Replace the host-side path in the volumes block with wherever signal-cli
 # writes its attachments (check your signal-cli data directory), then set
-# SIGNAL_ATTACHMENTS_DIR=/signal-cli-attachments in your .env file.
+# SIGNAL_ATTACHMENTS_DIR=/signal-cli-attachments in your .env file. If unset,
+# text captures still work, but attachment uploads are skipped.
 services:
   signal-relay:
     image: ghcr.io/rghamilton3/lattice-spine:latest
@@ -19,5 +21,6 @@ services:
       SIGNAL_RPC_HOST: ${SIGNAL_RPC_HOST:-127.0.0.1:7583}
       SPINE_URL: ${SPINE_URL:-http://127.0.0.1:3000/api/agent/capture}
       SIGNAL_ATTACHMENTS_DIR: ${SIGNAL_ATTACHMENTS_DIR:-}
+      SIGNAL_RELAY_DEBUG: ${SIGNAL_RELAY_DEBUG:-0}
     volumes:
       - /path/to/signal-cli/attachments:/signal-cli-attachments:ro

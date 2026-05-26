@@ -46,20 +46,17 @@ monitoring, no ADRs.
 
 1. **Add unit tests** for `config.rs`, `extract.rs`, and `cache.rs` — these are the most
    testable modules and have no coverage.
-   Command: `/speckit-product-forge-test-plan --feature=agent`
 
 2. **Add pdftotext timeout** to `extract.rs` — use `Command` with `tokio::time::timeout` or
    `std::process::Command` with a thread + kill after N seconds.
 
 3. **Evaluate `notify-rs`** for filesystem event watching to reduce index latency from 15m to
    near-instant. File a research task.
-   Command: `/speckit-product-forge-research --feature=agent`
 
 4. **Verify Windows tray status** — document whether `lattice-tray-windows.rs` is production-ready
    or a stub. If stub, mark it as such in README.
 
 5. **Run tracking plan** to instrument files-indexed and error-rate metrics.
-   Command: `/speckit-product-forge-tracking-plan --feature=agent`
 
 6. **Confirm `max_file_bytes` enforcement** is wired into `scan.rs` (the config field is present
    but the skip path needs verification).

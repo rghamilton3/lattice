@@ -43,7 +43,6 @@ state. No tracking plan, no monitoring setup, no ADRs.
 
 1. **Add component tests** for ResultRow (open, promote, similar actions) and ResultList
    (loading/error/empty states) using Vitest + @testing-library/svelte.
-   Command: `/speckit-product-forge-test-plan --feature=search-ui`
 
 2. **Implement or remove cluster facets stub** — either wire to `GET /api/search/clusters` when
    the endpoint ships, or remove the placeholder section to reduce UX noise.
@@ -54,6 +53,5 @@ state. No tracking plan, no monitoring setup, no ADRs.
 4. **Fix the "Recency-broken" label** to a real sort label (e.g. "Recency").
 
 5. **Run tracking plan** to measure search engagement and empty-result rate.
-   Command: `/speckit-product-forge-tracking-plan --feature=search-ui`
 
 6. **Clear promoteError** state when pane navigates away from the result context.

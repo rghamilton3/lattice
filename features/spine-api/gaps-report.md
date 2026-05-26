@@ -42,15 +42,12 @@ DEV_USER bypass is only warn-guarded).
 ## 4. Recommended Next Actions
 
 1. **Add cursor pagination** to `/api/captures` and `/api/files` before inbox grows large.
-   Command: `/speckit-product-forge-plan --feature=spine-api` (change request)
 
 2. **Run tracking plan** to define API-level observability.
-   Command: `/speckit-product-forge-tracking-plan --feature=spine-api`
 
 3. **Add ADRs** for SQLite + WAL choice, ETag approach, and DEV_USER policy.
 
 4. **Run release-readiness** to establish DB backup and alert runbook.
-   Command: `/speckit-product-forge-release-readiness --feature=spine-api`
 
 5. **Consider rate limiting** on `/api/agent/capture` and `/api/agent/file` to prevent runaway
    indexer from saturating spine.

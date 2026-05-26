@@ -1,4 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { buildTestApp, json, req, type TestApp } from '../helpers/app';
 
 let app: TestApp;
@@ -44,7 +47,141 @@ describe('GET /api/status', () => {
 		const res = await app.app.handle(req('/api/status'));
 		expect(res.status).toBe(200);
 		const body = await json(res);
-		expect(body).toEqual({ agents: [], active_agent_count: 0 });
+		expect(body).toMatchObject({
+			ready: true,
+			state: 'ready',
+			agents: [],
+			active_agent_count: 0,
+		});
+		expect(body.checks.storage).toMatchObject({
+			ok: true,
+			message: 'Storage is initialized',
+			applied_migrations: expect.any(Number),
+		});
+	});
+
+	it('reports starting when storage is not initialized yet', async () => {
+		app.db.exec('DROP TABLE schema_migrations');
+
+		const res = await app.app.handle(req('/api/status'));
+		const body = await json(res);
+
+		expect(body.ready).toBe(false);
+		expect(body.state).toBe('starting');
+		expect(body.checks.storage).toEqual({
+			ok: false,
+			message: 'Storage is not initialized',
+			applied_migrations: 0,
+		});
+	});
+
+	it('returns the platform status contract shape', async () => {
+		const res = await app.app.handle(req('/api/status'));
+		const body = await json(res);
+
+		expect(Object.keys(body).sort()).toEqual([
+			'active_agent_count',
+			'agents',
+			'checks',
+			'ready',
+			'state',
+		]);
+		expect(Object.keys(body.checks).sort()).toEqual([
+			'access_boundary',
+			'configuration',
+			'static_assets',
+			'storage',
+		]);
+		expect(Object.keys(body.checks.configuration).sort()).toEqual(['message', 'ok']);
+		expect(Object.keys(body.checks.storage).sort()).toEqual([
+			'applied_migrations',
+			'message',
+			'ok',
+		]);
+	});
+
+	it('reports unhealthy when configured static assets are unavailable', async () => {
+		await app.cleanup();
+		app = await buildTestApp({
+			agentToken: TOKEN,
+			surfaceBuild: '/tmp/lattice-missing-surface-build',
+		});
+
+		const res = await app.app.handle(req('/api/status'));
+		const body = await json(res);
+
+		expect(body.ready).toBe(false);
+		expect(body.state).toBe('unhealthy');
+		expect(body.checks.static_assets).toEqual({
+			ok: false,
+			message: 'Configured static asset path is unavailable',
+		});
+	});
+
+	it('reports healthy when configured static assets are available', async () => {
+		const surfaceBuild = mkdtempSync(join(tmpdir(), 'surface-build-'));
+		await app.cleanup();
+		app = await buildTestApp({ agentToken: TOKEN, surfaceBuild });
+
+		try {
+			const res = await app.app.handle(req('/api/status'));
+			const body = await json(res);
+
+			expect(body.ready).toBe(true);
+			expect(body.checks.static_assets).toEqual({
+				ok: true,
+				message: 'Static assets are available',
+			});
+		} finally {
+			rmSync(surfaceBuild, { recursive: true, force: true });
+		}
+	});
+
+	it('reports unhealthy when agent token is missing', async () => {
+		await app.cleanup();
+		app = await buildTestApp({ agentToken: undefined });
+
+		const res = await app.app.handle(req('/api/status'));
+		const body = await json(res);
+
+		expect(body.ready).toBe(false);
+		expect(body.state).toBe('unhealthy');
+		expect(body.checks.configuration).toEqual({
+			ok: false,
+			message: 'Agent token is not configured; agent routes will reject requests',
+		});
+		expect(body.checks.access_boundary).toEqual({
+			ok: false,
+			message: 'Protected access cannot be fully enforced without an agent token',
+		});
+	});
+
+	it('reports unhealthy when HTTP is allowed without a development user', async () => {
+		await app.cleanup();
+		app = await buildTestApp({ agentToken: TOKEN, allowHttp: true, devUser: undefined });
+
+		const res = await app.app.handle(
+			req('/api/status', { headers: { 'x-authentik-username': 'operator' } }),
+		);
+		const body = await json(res);
+
+		expect(body.ready).toBe(false);
+		expect(body.state).toBe('unhealthy');
+		expect(body.checks.configuration.ok).toBe(true);
+		expect(body.checks.access_boundary).toEqual({
+			ok: false,
+			message: 'Protected access cannot be fully enforced while HTTP is allowed',
+		});
+	});
+
+	it('rejects unauthenticated status requests without exposing readiness details', async () => {
+		await app.cleanup();
+		app = await buildTestApp({ allowHttp: true, devUser: undefined });
+
+		const res = await app.app.handle(req('/api/status'));
+
+		expect(res.status).toBe(401);
+		expect(await res.text()).toBe('Unauthorized');
 	});
 
 	it('returns agent fields and active count for a recently reported agent', async () => {
@@ -54,6 +191,7 @@ describe('GET /api/status', () => {
 		expect(res.status).toBe(200);
 		const body = await json(res);
 
+		expect(body.ready).toBe(true);
 		expect(body.active_agent_count).toBe(1);
 		expect(body.agents).toHaveLength(1);
 		expect(body.agents[0]).toMatchObject({

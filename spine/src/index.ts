@@ -1,10 +1,10 @@
 import { dirname, join, resolve } from 'node:path';
 import { initDb } from './db';
 import { initSearch } from './search';
-import { getAgentToken } from './config';
+import { getAgentToken, getDatabasePath } from './config';
 import { buildApp } from './app';
 
-const DB_PATH = resolve(process.env.DATABASE_PATH ?? './lattice.dev.db');
+const DB_PATH = resolve(getDatabasePath());
 const ATTACHMENTS_DIR = join(dirname(DB_PATH), 'attachments');
 const SURFACE_BUILD = process.env.SURFACE_BUILD ?? join(import.meta.dir, '../../surface/build');
 

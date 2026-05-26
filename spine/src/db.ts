@@ -35,6 +35,17 @@ export function getDb(): Database {
 	return _db;
 }
 
+export function getMigrationStatus(db: Database): { ready: boolean; applied: number } {
+	try {
+		const row = db.query('SELECT COUNT(*) AS count FROM schema_migrations').get() as
+			| { count: number }
+			| undefined;
+		return { ready: true, applied: row?.count ?? 0 };
+	} catch {
+		return { ready: false, applied: 0 };
+	}
+}
+
 /** @internal test-only — do not use from production code. */
 export function __resetDbForTests(): void {
 	if (_db) {

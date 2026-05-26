@@ -17,12 +17,17 @@ function seedCapture(
 	text: string,
 	source = 'agent',
 	capturedAt = '2026-01-01T00:00:00Z',
+	ingestedAt = new Date().toISOString(),
 ) {
 	return app.db
 		.prepare(
 			'INSERT INTO captures (text, source, captured_at, ingested_at) VALUES (?, ?, ?, ?) RETURNING id',
 		)
-		.get(text, source, capturedAt, new Date().toISOString()) as { id: number };
+		.get(text, source, capturedAt, ingestedAt) as { id: number };
+}
+
+function encodeCaptureCursor(cursor: unknown): string {
+	return Buffer.from(JSON.stringify(cursor)).toString('base64url');
 }
 
 describe('GET /api/captures', () => {
@@ -37,38 +42,45 @@ describe('GET /api/captures', () => {
 		const res = await app.app.handle(req('/api/captures'));
 		expect(res.status).toBe(200);
 		const body = await json(res);
-		expect(body.map((c: any) => c.text)).toEqual(['third', 'second', 'first']);
+		expect(body.items.map((c: any) => c.text)).toEqual(['third', 'second', 'first']);
+		expect(body.next_cursor).toBeNull();
 	});
 
-	it('returns an empty array when there are no captures', async () => {
+	it('returns an empty page when there are no captures', async () => {
 		const res = await app.app.handle(req('/api/captures'));
 		expect(res.status).toBe(200);
-		expect(await json(res)).toEqual([]);
+		expect(await json(res)).toEqual({ items: [], next_cursor: null });
 	});
 
 	it('respects ?limit and caps it at 200', async () => {
 		for (let i = 0; i < 5; i++) seedCapture(app, `c${i}`);
 		const res = await app.app.handle(req('/api/captures?limit=2'));
-		expect((await json(res)).length).toBe(2);
+		const body = await json(res);
+		expect(body.items.length).toBe(2);
+		expect(typeof body.next_cursor).toBe('string');
 
 		const big = await app.app.handle(req('/api/captures?limit=500'));
-		// We only seeded 5 — so "cap" can't be observed directly without inserting
-		// 200+ rows. But the query should still return successfully.
 		expect(big.status).toBe(200);
-		expect((await json(big)).length).toBe(5);
+		expect((await json(big)).items.length).toBe(5);
+
+		for (let i = 5; i < 205; i++) seedCapture(app, `c${i}`);
+		const capped = await app.app.handle(req('/api/captures?limit=500'));
+		expect(capped.status).toBe(200);
+		expect((await json(capped)).items.length).toBe(200);
 	});
 
 	it('falls back to default limit 50 when ?limit is not a number', async () => {
 		for (let i = 0; i < 3; i++) seedCapture(app, `c${i}`);
 		const res = await app.app.handle(req('/api/captures?limit=garbage'));
 		expect(res.status).toBe(200);
-		expect((await json(res)).length).toBe(3);
+		expect((await json(res)).items.length).toBe(3);
 	});
 
 	it('rows include the canonical capture columns', async () => {
 		seedCapture(app, 'body text');
 		const res = await app.app.handle(req('/api/captures'));
-		const [row] = await json(res);
+		const { items } = await json(res);
+		const [row] = items;
 		expect(Object.keys(row).sort()).toEqual([
 			'captured_at',
 			'first_image_id',
@@ -84,7 +96,8 @@ describe('GET /api/captures', () => {
 	it('first_image_id is null when capture has no attachments', async () => {
 		seedCapture(app, 'no attachments');
 		const res = await app.app.handle(req('/api/captures'));
-		const [row] = await json(res);
+		const { items } = await json(res);
+		const [row] = items;
 		expect(row.first_image_id).toBeNull();
 	});
 
@@ -98,7 +111,8 @@ describe('GET /api/captures', () => {
 			.get(id) as { id: number };
 
 		const res = await app.app.handle(req('/api/captures'));
-		const [row] = await json(res);
+		const { items } = await json(res);
+		const [row] = items;
 		expect(row.first_image_id).toBe(attachRow.id);
 	});
 
@@ -112,7 +126,7 @@ describe('GET /api/captures', () => {
 		const res = await app.app.handle(req('/api/captures'));
 		expect(res.status).toBe(200);
 		const body = await json(res);
-		expect(body.map((c: any) => c.text)).toEqual(['untriaged']);
+		expect(body.items.map((c: any) => c.text)).toEqual(['untriaged']);
 	});
 
 	it('includes triaged captures when ?all=1', async () => {
@@ -125,8 +139,98 @@ describe('GET /api/captures', () => {
 		const res = await app.app.handle(req('/api/captures?all=1'));
 		expect(res.status).toBe(200);
 		const body = await json(res);
-		expect(body.map((c: any) => c.text)).toContain('archived');
-		expect(body.map((c: any) => c.text)).toContain('inbox');
+		expect(body.items.map((c: any) => c.text)).toContain('archived');
+		expect(body.items.map((c: any) => c.text)).toContain('inbox');
+	});
+
+	it('returns the next captures page with no duplicates', async () => {
+		seedCapture(app, 'oldest', 'agent', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00.000Z');
+		seedCapture(app, 'middle', 'agent', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00.000Z');
+		seedCapture(app, 'newest', 'agent', '2026-01-01T00:00:00Z', '2026-01-03T00:00:00.000Z');
+
+		const first = await app.app.handle(req('/api/captures?limit=2'));
+		const firstBody = await json(first);
+		expect(firstBody.items.map((c: any) => c.text)).toEqual(['newest', 'middle']);
+		expect(typeof firstBody.next_cursor).toBe('string');
+
+		const second = await app.app.handle(
+			req(`/api/captures?limit=2&cursor=${firstBody.next_cursor}`),
+		);
+		const secondBody = await json(second);
+		expect(secondBody.items.map((c: any) => c.text)).toEqual(['oldest']);
+		expect(secondBody.next_cursor).toBeNull();
+	});
+
+	it('uses id as a cursor tie-breaker when capture timestamps match', async () => {
+		seedCapture(app, 'first', 'agent', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00.000Z');
+		seedCapture(app, 'second', 'agent', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00.000Z');
+		seedCapture(app, 'third', 'agent', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00.000Z');
+
+		const first = await app.app.handle(req('/api/captures?limit=2'));
+		const firstBody = await json(first);
+		const second = await app.app.handle(
+			req(`/api/captures?limit=2&cursor=${firstBody.next_cursor}`),
+		);
+		const secondBody = await json(second);
+
+		expect([...firstBody.items, ...secondBody.items].map((c: any) => c.text)).toEqual([
+			'third',
+			'second',
+			'first',
+		]);
+		expect(secondBody.next_cursor).toBeNull();
+	});
+
+	it('preserves all=1 when paginating captures', async () => {
+		const { id } = seedCapture(
+			app,
+			'archived',
+			'agent',
+			'2026-01-01T00:00:00Z',
+			'2026-01-01T00:00:00.000Z',
+		);
+		seedCapture(app, 'middle', 'agent', '2026-01-01T00:00:00Z', '2026-01-02T00:00:00.000Z');
+		seedCapture(app, 'newest', 'agent', '2026-01-01T00:00:00Z', '2026-01-03T00:00:00.000Z');
+		app.db
+			.prepare('UPDATE captures SET triaged_at = ?, triage_action = ? WHERE id = ?')
+			.run('2026-01-02T00:00:00Z', 'archive', id);
+
+		const first = await app.app.handle(req('/api/captures?limit=2&all=1'));
+		const firstBody = await json(first);
+		const second = await app.app.handle(
+			req(`/api/captures?limit=2&all=1&cursor=${firstBody.next_cursor}`),
+		);
+		const secondBody = await json(second);
+
+		expect([...firstBody.items, ...secondBody.items].map((c: any) => c.text)).toEqual([
+			'newest',
+			'middle',
+			'archived',
+		]);
+	});
+
+	it('returns 400 for malformed capture cursors', async () => {
+		const res = await app.app.handle(req('/api/captures?cursor=not-a-cursor'));
+		expect(res.status).toBe(400);
+		expect(await json(res)).toEqual({ error: 'Invalid cursor' });
+	});
+
+	it('returns 400 for empty capture cursors', async () => {
+		const res = await app.app.handle(req('/api/captures?cursor='));
+		expect(res.status).toBe(400);
+		expect(await json(res)).toEqual({ error: 'Invalid cursor' });
+	});
+
+	it('returns 400 for non-positive capture cursor ids', async () => {
+		const cursor = encodeCaptureCursor({
+			v: 1,
+			kind: 'captures',
+			ingested_at: '2026-01-01T00:00:00.000Z',
+			id: 0,
+		});
+		const res = await app.app.handle(req(`/api/captures?cursor=${cursor}`));
+		expect(res.status).toBe(400);
+		expect(await json(res)).toEqual({ error: 'Invalid cursor' });
 	});
 });
 
@@ -265,7 +369,7 @@ describe('POST /api/captures', () => {
 			const { id } = await json(res);
 			const inbox = await app.app.handle(req('/api/captures'));
 			const inboxBody = await json(inbox);
-			expect(inboxBody.find((c: any) => c.id === id)).toBeUndefined();
+			expect(inboxBody.items.find((c: any) => c.id === id)).toBeUndefined();
 		});
 	});
 
@@ -355,7 +459,7 @@ describe('POST /api/captures/:id/triage', () => {
 		);
 		const res = await app.app.handle(req('/api/captures'));
 		const body = await json(res);
-		expect(body.find((c: any) => c.id === id)).toBeUndefined();
+		expect(body.items.find((c: any) => c.id === id)).toBeUndefined();
 	});
 });
 

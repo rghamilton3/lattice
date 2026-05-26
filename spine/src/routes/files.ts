@@ -3,22 +3,73 @@ import type { Database } from 'bun:sqlite';
 import { realpath } from 'node:fs/promises';
 import type { FileIndexRow } from '../db/rows';
 
+type FileListRow = Pick<FileIndexRow, 'id' | 'machine_id' | 'path' | 'mime_type' | 'modified_at'>;
+
+interface FileCursor {
+	v: 1;
+	kind: 'files';
+	modified_at: string;
+	id: number;
+}
+
+function encodeCursor(row: Pick<FileIndexRow, 'modified_at' | 'id'>): string {
+	return Buffer.from(
+		JSON.stringify({ v: 1, kind: 'files', modified_at: row.modified_at, id: row.id }),
+	).toString('base64url');
+}
+
+function parseCursor(value: string | undefined): FileCursor | null | undefined {
+	if (value === undefined) return undefined;
+	if (!value) return null;
+	try {
+		const parsed = JSON.parse(
+			Buffer.from(value, 'base64url').toString('utf8'),
+		) as Partial<FileCursor>;
+		if (
+			parsed.v !== 1 ||
+			parsed.kind !== 'files' ||
+			typeof parsed.modified_at !== 'string' ||
+			typeof parsed.id !== 'number' ||
+			!Number.isInteger(parsed.id) ||
+			parsed.id <= 0
+		) {
+			return null;
+		}
+		return parsed as FileCursor;
+	} catch {
+		return null;
+	}
+}
+
 export const filesRoutes = (db: Database) =>
 	new Elysia()
 		.get(
 			'/api/files',
-			({ query }) => {
+			({ query, set }) => {
 				const raw = query.limit ? Number(query.limit) : 100;
 				const limit = Math.min(Number.isFinite(raw) && raw > 0 ? raw : 100, 500);
-				return db
+				const cursor = parseCursor(query.cursor);
+				if (cursor === null) {
+					set.status = 400;
+					return { error: 'Invalid cursor' };
+				}
+
+				const params: Array<string | number> = [];
+				const where = cursor ? 'WHERE (modified_at < ? OR (modified_at = ? AND id < ?))' : '';
+				if (cursor) params.push(cursor.modified_at, cursor.modified_at, cursor.id);
+				params.push(limit + 1);
+				const rows = db
 					.query(
-						'SELECT id, machine_id, path, mime_type, modified_at FROM file_index ORDER BY modified_at DESC LIMIT ?',
+						`SELECT id, machine_id, path, mime_type, modified_at FROM file_index ${where} ORDER BY modified_at DESC, id DESC LIMIT ?`,
 					)
-					.all(limit) as Array<
-					Pick<FileIndexRow, 'id' | 'machine_id' | 'path' | 'mime_type' | 'modified_at'>
-				>;
+					.all(...params) as FileListRow[];
+				const items = rows.slice(0, limit);
+				return {
+					items,
+					next_cursor: rows.length > limit ? encodeCursor(items[items.length - 1]) : null,
+				};
 			},
-			{ query: t.Object({ limit: t.Optional(t.String()) }) },
+			{ query: t.Object({ limit: t.Optional(t.String()), cursor: t.Optional(t.String()) }) },
 		)
 		.get(
 			'/api/files/:id',

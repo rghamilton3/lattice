@@ -53,6 +53,38 @@ Relay diagnostics are printed as plain text. Startup fails fast when `LATTICE_AG
 
 ## Install the agent
 
+The local agent indexes files from configured watch directories. It polls each
+directory, extracts supported text, skips unchanged files with a local SQLite
+cache, and sends changed content to the spine with the `/api/agent/index` bearer
+token route.
+
+Supported extraction is intentionally small: `text/*` files are read directly and
+PDFs use the local `pdftotext` command from poppler-utils. Other MIME types,
+hidden paths, symlinks, and files over the configured size limit are skipped with
+plain text diagnostics in the foreground log or systemd user journal.
+
+Configuration lives at `~/.config/lattice/config.toml` on Linux:
+
+```toml
+[spine]
+url = "https://lattice.example.com"
+agent_token = "replace-me"
+
+[agent]
+machine_id = "laptop"
+poll_interval_minutes = 15
+max_file_bytes = 10485760
+
+[[agent.watch]]
+path = "~/Documents"
+patterns = ["**/*.md", "**/*.txt", "**/*.pdf"]
+```
+
+Run `lattice-agent --force` to rebuild known watch-path state without deleting
+source files. To diagnose a service install, run
+`journalctl --user -u lattice-agent -f`; set `RUST_LOG=lattice_agent=debug` for
+verbose scan decisions.
+
 ### Linux
 
 On any Linux machine you want to index:
@@ -63,6 +95,25 @@ bash <(curl -fsSL https://raw.githubusercontent.com/rghamilton3/lattice/main/ins
 
 The installer prompts for your spine URL, agent token, and watch directories, then installs
 `lattice-agent` and enables it as a systemd user service.
+
+Optional prompts install `lattice-capture`, `lattice-tray`, and `lattice-config` when release
+assets are available. The tray runs as a user service and exposes text-labeled status, capture,
+configuration, start, stop, and restart actions.
+
+Useful desktop companion checks:
+
+```bash
+systemctl --user status lattice-agent
+systemctl --user status lattice-tray
+journalctl --user -u lattice-agent -f
+lattice-capture "remember the invoice"
+echo "captured from pipe" | lattice-capture
+lattice-capture --prompt
+```
+
+`lattice-capture` queues retryable failures in the local Lattice data directory and drains the
+queue on later runs. If both the spine POST and queue write fail, it prints the capture text to
+stderr so it can be recovered from the terminal or service logs.
 
 ### Windows
 
@@ -85,6 +136,14 @@ installed, add to your script:
 ```ahk
 ; AutoHotkey v2
 ^!l::Run('"' A_LocalAppData '\lattice\lattice-capture.exe" --prompt')
+```
+
+Windows diagnostics:
+
+```powershell
+schtasks /Run /TN LatticeAgent
+schtasks /Run /TN LatticeTray
+Get-ScheduledTask -TaskName LatticeAgent,LatticeTray
 ```
 
 ## Quickstart

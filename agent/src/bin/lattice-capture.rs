@@ -156,6 +156,11 @@ fn open_queue() -> Result<Connection> {
         std::fs::create_dir_all(parent)?;
     }
     let conn = Connection::open(&path)?;
+    init_queue_schema(&conn)?;
+    Ok(conn)
+}
+
+fn init_queue_schema(conn: &Connection) -> Result<()> {
     // Schema is unchanged from the legacy lattice-capture.sh, so an existing
     // queue.db from the bash version carries over without migration.
     conn.execute(
@@ -168,7 +173,7 @@ fn open_queue() -> Result<Connection> {
          )",
         [],
     )?;
-    Ok(conn)
+    Ok(())
 }
 
 fn enqueue(conn: &Connection, text: &str, source: &str, captured_at: &str) -> Result<()> {
@@ -312,4 +317,48 @@ fn classify_post_error(err: &anyhow::Error) -> String {
         return "spine redirected (auth proxy in front of /api/agent?)".into();
     }
     re.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn queue_schema_preserves_legacy_columns() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_queue_schema(&conn).unwrap();
+
+        let columns: Vec<String> = conn
+            .prepare("PRAGMA table_info(queue)")
+            .unwrap()
+            .query_map([], |row| row.get(1))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+
+        assert_eq!(
+            columns,
+            ["id", "text", "source", "captured_at", "queued_at"]
+        );
+    }
+
+    #[test]
+    fn enqueue_stores_rows_in_delivery_order() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_queue_schema(&conn).unwrap();
+
+        enqueue(&conn, "first", "desktop-hotkey", "2026-05-26T19:00:00Z").unwrap();
+        enqueue(&conn, "second", "desktop-hotkey", "2026-05-26T19:01:00Z").unwrap();
+
+        let rows: Vec<(i64, String, String)> = conn
+            .prepare("SELECT id, text, source FROM queue ORDER BY id")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+
+        assert_eq!(rows[0], (1, "first".into(), "desktop-hotkey".into()));
+        assert_eq!(rows[1], (2, "second".into(), "desktop-hotkey".into()));
+    }
 }

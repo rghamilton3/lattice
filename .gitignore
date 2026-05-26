@@ -6,9 +6,27 @@
 # Local helper / state
 .spine-snapshot/
 spine/working/
+*.log
+.env
+.env.*
+!.env.example
+
+# Rust build output
+target/
+debug/
+release/
+*.rs.bk
+*.rlib
+
+# Local Lattice config/state
+config.toml
+queue.db
+agent.db
 
 # Per-tool agent caches at root (component-specific ignores live in their dirs)
 **/.serena/
 .claude/local-settings.json
 
 **/node_modules/
+dist/
+build/

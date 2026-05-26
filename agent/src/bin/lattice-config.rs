@@ -361,9 +361,14 @@ impl eframe::App for ConfigApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
         if save_clicked {
-            config_edit::apply(doc, form);
-            match config_edit::save(doc, config_path) {
-                Ok(()) => *modal = ModalState::AskRestart,
+            match config_edit::validate(form) {
+                Ok(()) => {
+                    config_edit::apply(doc, form);
+                    match config_edit::save(doc, config_path) {
+                        Ok(()) => *modal = ModalState::AskRestart,
+                        Err(e) => *modal = ModalState::Error(e),
+                    }
+                }
                 Err(e) => *modal = ModalState::Error(e),
             }
         }

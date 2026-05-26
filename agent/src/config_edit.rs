@@ -19,8 +19,11 @@ pub struct ConfigForm {
 
 /// Reads the config file and returns the parsed document alongside a populated form.
 pub fn load(path: &Path) -> Result<(DocumentMut, ConfigForm), String> {
-    let content = std::fs::read_to_string(path)
-        .map_err(|e| format!("Cannot read config at {}:\n{e}", path.display()))?;
+    let content = match std::fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(format!("Cannot read config at {}:\n{e}", path.display())),
+    };
     let doc: DocumentMut = content
         .parse()
         .map_err(|e| format!("Cannot parse config:\n{e}"))?;
@@ -90,6 +93,32 @@ pub fn load(path: &Path) -> Result<(DocumentMut, ConfigForm), String> {
     Ok((doc, form))
 }
 
+pub fn validate(form: &ConfigForm) -> Result<(), String> {
+    let mut errors = Vec::new();
+
+    if form.spine_url.trim().is_empty() {
+        errors.push("Spine URL is required.");
+    } else if !(form.spine_url.starts_with("http://") || form.spine_url.starts_with("https://")) {
+        errors.push("Spine URL must start with http:// or https://.");
+    }
+
+    if form.spine_token.trim().is_empty() {
+        errors.push("Agent token is required.");
+    }
+    if form.poll_minutes < 1 {
+        errors.push("Poll interval must be at least 1 minute.");
+    }
+    if form.max_file_mb <= 0.0 {
+        errors.push("Max file size must be greater than 0 MB.");
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("\n"))
+    }
+}
+
 /// Writes form values back into the document, preserving all existing comments and formatting.
 pub fn apply(doc: &mut DocumentMut, form: &ConfigForm) {
     if !doc.contains_key("spine") {
@@ -129,6 +158,7 @@ pub fn apply(doc: &mut DocumentMut, form: &ConfigForm) {
                 .collect();
             (row.path.trim().to_owned(), pats)
         })
+        .filter(|(path, _)| !path.is_empty())
         .collect();
 
     if !watches.is_empty() {
@@ -317,5 +347,53 @@ max_file_bytes = 10485760
             .map(str::to_owned)
             .collect();
         assert!(pats.is_empty());
+    }
+
+    #[test]
+    fn validation_reports_required_fields() {
+        let form = ConfigForm {
+            spine_url: "".into(),
+            spine_token: "".into(),
+            machine_id: String::new(),
+            poll_minutes: 0,
+            max_file_mb: 0.0,
+            watch_rows: vec![],
+        };
+
+        let err = validate(&form).unwrap_err();
+        assert!(err.contains("Spine URL is required"));
+        assert!(err.contains("Agent token is required"));
+        assert!(err.contains("Poll interval"));
+        assert!(err.contains("Max file size"));
+    }
+
+    #[test]
+    fn apply_skips_empty_watch_paths_and_blank_patterns() {
+        let mut doc: DocumentMut = "".parse().unwrap();
+        let form = ConfigForm {
+            spine_url: "https://example.com".into(),
+            spine_token: "tok".into(),
+            machine_id: String::new(),
+            poll_minutes: 15,
+            max_file_mb: 10.0,
+            watch_rows: vec![
+                WatchRow {
+                    path: "   ".into(),
+                    patterns: "**/*.md".into(),
+                },
+                WatchRow {
+                    path: r#"C:\Users\Riley\Notes"#.into(),
+                    patterns: "**/*.md\n\n  \n**/*.txt".into(),
+                },
+            ],
+        };
+
+        apply(&mut doc, &form);
+        let output = doc.to_string();
+        assert!(!output.contains("path = \"   \""));
+        assert!(output.contains("Riley"));
+        assert!(output.contains("Notes"));
+        assert!(output.contains("**/*.md"));
+        assert!(output.contains("**/*.txt"));
     }
 }

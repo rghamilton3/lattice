@@ -96,6 +96,25 @@ bash <(curl -fsSL https://raw.githubusercontent.com/rghamilton3/lattice/main/ins
 The installer prompts for your spine URL, agent token, and watch directories, then installs
 `lattice-agent` and enables it as a systemd user service.
 
+Optional prompts install `lattice-capture`, `lattice-tray`, and `lattice-config` when release
+assets are available. The tray runs as a user service and exposes text-labeled status, capture,
+configuration, start, stop, and restart actions.
+
+Useful desktop companion checks:
+
+```bash
+systemctl --user status lattice-agent
+systemctl --user status lattice-tray
+journalctl --user -u lattice-agent -f
+lattice-capture "remember the invoice"
+echo "captured from pipe" | lattice-capture
+lattice-capture --prompt
+```
+
+`lattice-capture` queues retryable failures in the local Lattice data directory and drains the
+queue on later runs. If both the spine POST and queue write fail, it prints the capture text to
+stderr so it can be recovered from the terminal or service logs.
+
 ### Windows
 
 In PowerShell:
@@ -117,6 +136,14 @@ installed, add to your script:
 ```ahk
 ; AutoHotkey v2
 ^!l::Run('"' A_LocalAppData '\lattice\lattice-capture.exe" --prompt')
+```
+
+Windows diagnostics:
+
+```powershell
+schtasks /Run /TN LatticeAgent
+schtasks /Run /TN LatticeTray
+Get-ScheduledTask -TaskName LatticeAgent,LatticeTray
 ```
 
 ## Quickstart

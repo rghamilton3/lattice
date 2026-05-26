@@ -53,6 +53,38 @@ Relay diagnostics are printed as plain text. Startup fails fast when `LATTICE_AG
 
 ## Install the agent
 
+The local agent indexes files from configured watch directories. It polls each
+directory, extracts supported text, skips unchanged files with a local SQLite
+cache, and sends changed content to the spine with the `/api/agent/index` bearer
+token route.
+
+Supported extraction is intentionally small: `text/*` files are read directly and
+PDFs use the local `pdftotext` command from poppler-utils. Other MIME types,
+hidden paths, symlinks, and files over the configured size limit are skipped with
+plain text diagnostics in the foreground log or systemd user journal.
+
+Configuration lives at `~/.config/lattice/config.toml` on Linux:
+
+```toml
+[spine]
+url = "https://lattice.example.com"
+agent_token = "replace-me"
+
+[agent]
+machine_id = "laptop"
+poll_interval_minutes = 15
+max_file_bytes = 10485760
+
+[[agent.watch]]
+path = "~/Documents"
+patterns = ["**/*.md", "**/*.txt", "**/*.pdf"]
+```
+
+Run `lattice-agent --force` to rebuild known watch-path state without deleting
+source files. To diagnose a service install, run
+`journalctl --user -u lattice-agent -f`; set `RUST_LOG=lattice_agent=debug` for
+verbose scan decisions.
+
 ### Linux
 
 On any Linux machine you want to index:

@@ -64,15 +64,20 @@ curl -sS -X POST http://localhost:3000/api/tracks/queries/1/open \
 
 ### HA Voice
 
-- Configure one Atom Echo in the Printing Room.
-- Test `track drill is on the top shelf`.
-- Test `check out drill working on the deck`.
+- Configure one Atom Echo in the Printing Room to POST to `/api/agent/track` with `authorization: Bearer <token>`.
+- Normal sentence trigger: `track {item/location phrase}`.
+- Checkout sentence trigger: `check out {item/displacement phrase}` or `checkout {item/displacement phrase}`.
+- Normal payload fields: `text` from the spoken phrase, `captured_at` from HA timestamp, `source: ha-voice:printing-room`, `displaced: false`.
+- Checkout payload fields: same shape with `displaced: true`.
+- Fallback phrase if intent parsing fails: `track manual smoke test printing room`.
 - Confirm both records are searchable within 5 seconds and show `source: ha-voice:printing-room` with correct displaced state.
 
 ### Tasker Phone Voice
 
 - Test `OK Google, run track in Tasker with drill is on the top shelf`.
 - Test `OK Google, run checkout in Tasker with drill working on the deck`.
+- Configure Tasker HTTP POST actions to `/api/agent/track` with `source: tasker-voice` and explicit `displaced` booleans.
+- Assistant-interception failure criteria: TV, speaker, or another shared device consumes the phrase, or Tasker receives an empty phrase body.
 - Confirm both records are searchable within 10 seconds and show `source: tasker-voice`.
 - Confirm TV/other assistant devices do not intercept the accepted flow.
 
@@ -80,8 +85,17 @@ curl -sS -X POST http://localhost:3000/api/tracks/queries/1/open \
 
 - Send `/track test from signal`.
 - Send `/checkout test displacement from signal`.
+- Keep `/capture ...`, `/task ...`, `/note ...`, and unknown commands on the existing capture route.
 - Confirm both records are searchable and show `source: signal-text` with correct displaced state.
 - If testing photo support, send a photo with `/track caption text` and confirm the caption is searchable and a photo reference is preserved.
+
+## Curl Transcript Placeholders
+
+- Normal track response: `{"id":<track_id>}`; record observed status/time here after local smoke test.
+- Checkout track response: `{"id":<track_id>}`; record observed status/time here after local smoke test.
+- Search response: `{"query_id":<query_id>,"results":[...]}`; confirm newest-first ordering here.
+- Result-open response: `{"ok":true}`; record query id and opened track id here.
+- Final quickstart smoke result: automated API coverage passed via `just test`; type/Svelte checks passed via `just check`; physical HA Voice, Tasker, and live Signal relay checks remain not run in this coding environment and are recorded in the verification checklists.
 
 ## Accessibility And Language Checks
 

@@ -62,3 +62,52 @@ export interface CaptureAttachmentRow {
 	upload_source: string;
 	created_at: string;
 }
+
+export interface TrackRow {
+	id: number;
+	text: string;
+	captured_at: string;
+	ingested_at: string;
+	source: string;
+	displaced: number;
+	photo_ref: string | null;
+	supersedes: number | null;
+}
+
+export interface TrackQueryRow {
+	id: number;
+	query: string;
+	queried_at: string;
+	opened_track_id: number | null;
+	loop_closed_at: string | null;
+	loop_outcome: string | null;
+}
+
+export interface TrackCreateRequest {
+	text: string;
+	captured_at: string;
+	source: string;
+	displaced: boolean;
+	photo_ref?: string | null;
+	supersedes?: number | null;
+}
+
+export interface TrackCreateResponse {
+	id: number;
+}
+
+export interface TrackSearchResult {
+	id: number;
+	text: string;
+	captured_at: string;
+	ingested_at: string;
+	source: string;
+	displaced: boolean;
+	photo_ref: string | null;
+	supersedes: number | null;
+}
+
+export interface TrackSearchResponse {
+	query_id: number;
+	results: TrackSearchResult[];
+}

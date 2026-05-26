@@ -91,7 +91,10 @@ describe('parseSignalMessage', () => {
 		};
 		const parsed = parseSignalMessage(msg, SELF);
 		expect(parsed).toEqual({
+			action: 'capture',
 			captureText: 'note to self',
+			trackText: null,
+			displaced: false,
 			// sentMessage.timestamp takes precedence over envelope.timestamp.
 			capturedAt: new Date(1_700_000_000_500).toISOString(),
 			attachments: [],
@@ -184,7 +187,10 @@ describe('parseSignalMessage', () => {
 		const msg = envelope({}, { message: '  hello world  ' });
 		const parsed = parseSignalMessage(msg, SELF);
 		expect(parsed).toEqual({
+			action: 'capture',
 			captureText: 'hello world',
+			trackText: null,
+			displaced: false,
 			capturedAt: new Date(1_700_000_000_000).toISOString(),
 			attachments: [],
 			sourceNumber: SELF,

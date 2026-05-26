@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildTestApp, json, req, type TestApp } from '../helpers/app';
 import { attachmentsMdDir } from '../../src/search';
@@ -126,6 +126,41 @@ describe('POST /api/captures/:id/attachments', () => {
 		);
 		expect(res.status).toBe(400);
 	});
+
+	it('returns 400 when multipart body is invalid', async () => {
+		const captureId = insertCapture();
+		const res = await app.app.handle(
+			new Request(`http://localhost/api/captures/${captureId}/attachments`, {
+				method: 'POST',
+				headers: {
+					'x-forwarded-proto': 'https',
+					'x-authentik-username': 'test@local',
+					'content-type': 'multipart/form-data; boundary=missing',
+				},
+				body: 'not multipart',
+			}),
+		);
+		expect(res.status).toBe(400);
+		expect((await json(res)).error).toBe('Invalid multipart body');
+	});
+
+	it('returns 400 when file field is missing', async () => {
+		const captureId = insertCapture();
+		const fd = new FormData();
+		fd.append('note', 'no file here');
+		const res = await app.app.handle(
+			new Request(`http://localhost/api/captures/${captureId}/attachments`, {
+				method: 'POST',
+				headers: {
+					'x-forwarded-proto': 'https',
+					'x-authentik-username': 'test@local',
+				},
+				body: fd,
+			}),
+		);
+		expect(res.status).toBe(400);
+		expect((await json(res)).error).toBe('Missing file field');
+	});
 });
 
 describe('GET /api/captures/:id/attachments', () => {
@@ -224,6 +259,64 @@ describe('GET /api/captures/:id/attachments/:attId/raw', () => {
 		const res = await app.app.handle(authGet(`/api/captures/${captureId2}/attachments/${id}/raw`));
 		expect(res.status).toBe(404);
 	});
+
+	it('returns 404 when attachment binary is missing from disk', async () => {
+		const captureId = insertCapture();
+		const row = app.db
+			.prepare(
+				`INSERT INTO capture_attachments
+				 (capture_id, signal_id, content_type, filename, size_bytes, stored_path, upload_source, created_at)
+				 VALUES (?, '', 'text/plain', 'missing.txt', 7, ?, 'browser', '2026-01-01T00:00:00Z') RETURNING id`,
+			)
+			.get(captureId, `${captureId}/missing`) as { id: number };
+
+		const res = await app.app.handle(
+			authGet(`/api/captures/${captureId}/attachments/${row.id}/raw`),
+		);
+		expect(res.status).toBe(404);
+		expect(await res.text()).toBe('File not found on disk');
+	});
+
+	it('returns 403 when stored path resolves outside attachments dir', async () => {
+		const captureId = insertCapture();
+		const outsidePath = join(app.env.dir, 'outside.txt');
+		writeFileSync(outsidePath, 'outside');
+		const row = app.db
+			.prepare(
+				`INSERT INTO capture_attachments
+				 (capture_id, signal_id, content_type, filename, size_bytes, stored_path, upload_source, created_at)
+				 VALUES (?, '', 'text/plain', 'outside.txt', 7, '../outside.txt', 'browser', '2026-01-01T00:00:00Z') RETURNING id`,
+			)
+			.get(captureId) as { id: number };
+
+		const res = await app.app.handle(
+			authGet(`/api/captures/${captureId}/attachments/${row.id}/raw`),
+		);
+		expect(res.status).toBe(403);
+	});
+
+	it('sanitizes filenames in Content-Disposition', async () => {
+		const captureId = insertCapture();
+		const row = app.db
+			.prepare(
+				`INSERT INTO capture_attachments
+				 (capture_id, signal_id, content_type, filename, size_bytes, stored_path, upload_source, created_at)
+				 VALUES (?, '', 'text/plain', 'bad "name".txt', 7, '', 'browser', '2026-01-01T00:00:00Z') RETURNING id`,
+			)
+			.get(captureId) as { id: number };
+		const dir = join(app.env.attachmentsDir, String(captureId));
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(join(dir, String(row.id)), 'content');
+		app.db
+			.prepare('UPDATE capture_attachments SET stored_path = ? WHERE id = ?')
+			.run(`${captureId}/${row.id}`, row.id);
+
+		const res = await app.app.handle(
+			authGet(`/api/captures/${captureId}/attachments/${row.id}/raw`),
+		);
+		expect(res.status).toBe(200);
+		expect(res.headers.get('Content-Disposition')).toContain('bad__name_.txt');
+	});
 });
 
 describe('DELETE /api/captures/:id/attachments/:attId', () => {
@@ -242,6 +335,10 @@ describe('DELETE /api/captures/:id/attachments/:attId', () => {
 			}),
 		);
 		const { id } = await json(uploadRes);
+		const diskPath = join(app.env.attachmentsDir, String(captureId), String(id));
+		const mdPath = join(attachmentsMdDir(), `${id}.md`);
+		expect(existsSync(diskPath)).toBe(true);
+		expect(existsSync(mdPath)).toBe(true);
 
 		const delRes = await app.app.handle(
 			new Request(`http://localhost/api/captures/${captureId}/attachments/${id}`, {
@@ -256,6 +353,8 @@ describe('DELETE /api/captures/:id/attachments/:attId', () => {
 
 		const row = app.db.query('SELECT id FROM capture_attachments WHERE id = ?').get(id);
 		expect(row).toBeNull();
+		expect(existsSync(diskPath)).toBe(false);
+		expect(existsSync(mdPath)).toBe(false);
 	});
 
 	it('returns 404 for unknown attachment', async () => {

@@ -112,6 +112,7 @@
 				<span class="faint" style="font-size:12px">{formatBytes(selectedFile.size)}</span>
 				<button
 					class="btn btn-ghost"
+					aria-label="Remove selected file"
 					onclick={() => {
 						selectedFile = null;
 						if (fileInput) fileInput.value = '';
@@ -131,12 +132,15 @@
 			bind:value={note}
 			class="qcap-area"
 			style="min-height:60px"
+			aria-label="Optional note for attached file"
 			placeholder="Optional note (defaults to filename if blank)"
 		></textarea>
 
 		<div class="qcap-foot">
 			<span
 				class="faint"
+				role="status"
+				aria-live="polite"
 				style="font-size:12px"
 				style:color={failed ? 'var(--c-alarm)' : undefined}
 			>

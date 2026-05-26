@@ -359,6 +359,7 @@ function mapResults(
 			const attRow = _db
 				?.query('SELECT capture_id, filename, created_at FROM capture_attachments WHERE id = ?')
 				.get(id) as { capture_id: number; filename: string; created_at: string } | null;
+			if (!attRow) return [];
 			return [
 				{
 					id,
@@ -367,9 +368,9 @@ function mapResults(
 					body: r.body,
 					path: r.displayPath,
 					kind: 'capture-attachment' as const,
-					capture_id: attRow?.capture_id,
-					filename: attRow?.filename,
-					modified_at: attRow?.created_at ?? '',
+					capture_id: attRow.capture_id,
+					filename: attRow.filename,
+					modified_at: attRow.created_at,
 				},
 			];
 		}
@@ -379,6 +380,7 @@ function mapResults(
 			const attRow = _db
 				?.query('SELECT slug, filename, created_at FROM working_attachments WHERE id = ?')
 				.get(id) as { slug: string; filename: string; created_at: string } | null;
+			if (!attRow) return [];
 			return [
 				{
 					id,
@@ -387,9 +389,9 @@ function mapResults(
 					body: r.body,
 					path: r.displayPath,
 					kind: 'working-attachment' as const,
-					slug: attRow?.slug,
-					filename: attRow?.filename,
-					modified_at: attRow?.created_at ?? '',
+					slug: attRow.slug,
+					filename: attRow.filename,
+					modified_at: attRow.created_at,
 				},
 			];
 		}

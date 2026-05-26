@@ -187,6 +187,7 @@
 				<button
 					class="btn btn-ghost"
 					title="Attach a file to this document"
+					aria-label="Attach a file to this {chipLabel}"
 					disabled={attachUploading}
 					onclick={() => attachFileInput?.click()}
 				>
@@ -212,6 +213,12 @@
 			</button>
 		</div>
 	</div>
+
+	{#if attachUploading}
+		<div class="px-3 py-1 text-xs" role="status" aria-live="polite" style="color:var(--text-mute)">
+			Uploading attachment…
+		</div>
+	{/if}
 
 	<input
 		bind:this={attachFileInput}

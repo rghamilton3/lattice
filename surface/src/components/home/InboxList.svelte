@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { InboxItem } from '$lib/types';
+	import type { ArchiveAction, InboxAction, InboxItem } from '$lib/types';
 	import type { TriageAction } from '$lib/api/captures';
 	import { attachmentRawUrl } from '$lib/api/attachments';
 	import { archiveRawUrl } from '$lib/api/archives';
@@ -13,11 +13,20 @@
 		onOpenCapture: (id: number) => void;
 		onOpenArchive: (id: number) => void;
 		onTriage: (id: number, action: TriageAction) => void;
-		onArchiveAction: (id: number, action: string) => void;
+		onArchiveAction: (id: number, action: ArchiveAction) => void;
 	};
 	const { items, now, onOpenCapture, onOpenArchive, onTriage, onArchiveAction }: Props = $props();
 
 	let active = $state(0);
+	const triageActions = new Set<InboxAction>(['keep', 'archive', 'promote', 'task', 'skip']);
+	const archiveActions = new Set<InboxAction>([
+		'keep',
+		'archive',
+		'recapture',
+		'delete',
+		'skip',
+		'auto-kept'
+	]);
 
 	function openItem(item: InboxItem) {
 		if (item.item_type === 'capture') {
@@ -30,6 +39,22 @@
 	function openExternal(event: MouseEvent, url: string) {
 		event.stopPropagation();
 		window.open(url, '_blank', 'noopener,noreferrer');
+	}
+
+	function isTriageAction(action: InboxAction): action is TriageAction {
+		return triageActions.has(action);
+	}
+
+	function isArchiveAction(action: InboxAction): action is ArchiveAction {
+		return archiveActions.has(action);
+	}
+
+	function onItemAction(item: InboxItem, action: InboxAction) {
+		if (item.item_type === 'capture') {
+			if (isTriageAction(action)) onTriage(item.capture_id, action);
+			return;
+		}
+		if (isArchiveAction(action)) onArchiveAction(item.archive_id, action);
 	}
 </script>
 
@@ -90,10 +115,7 @@
 					<ActionRow
 						actions={item.actions}
 						active={i === active}
-						onAction={(action) =>
-							item.item_type === 'capture'
-								? onTriage(item.capture_id, action as TriageAction)
-								: onArchiveAction(item.archive_id, action)}
+						onAction={(action) => onItemAction(item, action)}
 					/>
 				</div>
 				{#if item.item_type === 'capture' && item.capture.first_image_id != null}

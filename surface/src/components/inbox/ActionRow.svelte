@@ -1,10 +1,10 @@
 <script lang="ts">
-	import type { InboxActionDescriptor } from '$lib/types';
+	import type { InboxAction, InboxActionDescriptor } from '$lib/types';
 
 	interface Props {
 		actions: InboxActionDescriptor[];
 		active: boolean;
-		onAction: (action: string) => void;
+		onAction: (action: InboxAction) => void;
 	}
 
 	const { actions, active, onAction }: Props = $props();

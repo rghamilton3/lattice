@@ -1,6 +1,6 @@
 import { apiFetch } from './client';
 import { logError } from '$lib/utils/logError';
-import type { Capture } from '$lib/types';
+import type { Capture, TriageAction } from '$lib/types';
 
 export const MAX_CAPTURE_TEXT_LENGTH = 10_000;
 
@@ -46,7 +46,7 @@ export function createCapture(params: CreateCaptureParams): Promise<CaptureCreat
 	return apiFetch('/api/captures', { method: 'POST', body: JSON.stringify(params) });
 }
 
-export type TriageAction = 'keep' | 'archive' | 'promote' | 'task' | 'skip';
+export type { TriageAction };
 
 export const TRIAGE_ACTION_LABEL: Record<TriageAction, string> = {
 	keep: 'Kept',

@@ -5,7 +5,7 @@ import { basename, join } from 'node:path';
 import { writeCaptureFile, writeLocalFile, writeAttachmentIndex, refreshIndex } from '../search';
 import { emitCapture } from '../captureEvents';
 import { parseCommand } from '../commands';
-import { createArchive, normalizeArchiveUrl } from '../archives';
+import { ArchiveValidationError, createArchive, normalizeArchiveUrl } from '../archives';
 import { enqueueArchiveUrlJob } from '../archiveJobs';
 
 export interface AgentRoutesOptions {
@@ -18,12 +18,9 @@ export const agentRoutes = (db: Database, { attachmentsDir, archiveDir }: AgentR
 		.post(
 			'/archive-page',
 			async ({ body, set }) => {
-				const html = await body.file.text();
-				if (html.trim().length === 0) {
-					set.status = 422;
-					return { error: 'archive file is empty' };
-				}
 				try {
+					const html = await body.file.text();
+					if (html.trim().length === 0) throw new ArchiveValidationError('archive file is empty');
 					const row = createArchive(db, {
 						url: body.url,
 						title: body.title,
@@ -44,8 +41,13 @@ export const agentRoutes = (db: Database, { attachmentsDir, archiveDir }: AgentR
 						superseded: row.superseded,
 					};
 				} catch (error) {
-					set.status = 422;
-					return { error: error instanceof Error ? error.message : 'archive failed' };
+					if (error instanceof ArchiveValidationError) {
+						set.status = 422;
+						return { error: error.message };
+					}
+					console.error('[archive] archive-page failed:', error);
+					set.status = 500;
+					return { error: 'archive failed' };
 				}
 			},
 			{

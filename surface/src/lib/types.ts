@@ -79,10 +79,12 @@ export interface Capture {
 }
 
 export type ArchiveQuality = 'good' | 'degraded' | 'failed';
+export type TriageAction = 'keep' | 'archive' | 'promote' | 'task' | 'skip';
 export type ArchiveAction = 'keep' | 'archive' | 'recapture' | 'delete' | 'skip' | 'auto-kept';
+export type InboxAction = TriageAction | ArchiveAction;
 
 export interface InboxActionDescriptor {
-	action: string;
+	action: InboxAction;
 	label: string;
 	shortcut: string;
 	tone?: 'primary' | 'neutral' | 'destructive';

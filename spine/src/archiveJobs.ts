@@ -1,5 +1,6 @@
 import type { Database } from 'bun:sqlite';
 import { createArchive, type ArchiveRow } from './archives';
+import { archiveNotificationPosture, emitArchiveAttention } from './archiveEvents';
 import { classifyArchive } from './archiveQuality';
 import { refreshIndex } from './search';
 
@@ -86,6 +87,15 @@ async function runJob(db: Database, archiveDir: string, job: ArchiveJob): Promis
 		job.archive_id = row.id;
 		job.status = 'stored';
 		refreshIndex();
+		if (row.quality !== 'good') {
+			emitArchiveAttention(archiveNotificationPosture(), {
+				type: 'archive_recapture',
+				title: row.title ?? row.url,
+				url: row.url,
+				archive_id: row.id,
+				quality: row.quality,
+			});
+		}
 	} catch (error) {
 		job.error = error instanceof Error ? error.message : String(error);
 		try {
@@ -99,6 +109,13 @@ async function runJob(db: Database, archiveDir: string, job: ArchiveJob): Promis
 				archiveDir,
 			});
 			job.archive_id = row.id;
+			emitArchiveAttention(archiveNotificationPosture(), {
+				type: 'archive_recapture',
+				title: row.title ?? row.url,
+				url: row.url,
+				archive_id: row.id,
+				quality: row.quality,
+			});
 		} catch {
 			// The job record still carries the failure if even the failure row cannot be stored.
 		}

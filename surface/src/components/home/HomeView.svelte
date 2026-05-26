@@ -9,6 +9,7 @@
 	import { taskKeys, fetchTasks } from '$lib/api/tasks';
 	import { useCompleteTask } from '$lib/state/useCompleteTask.svelte';
 	import type { ArchiveAction, Capture, DocRef, InboxItem, Task } from '$lib/types';
+	import { captureToInboxItem } from '$lib/utils/inbox';
 	import Icon from '$components/icons/Icon.svelte';
 	import NowCard from './NowCard.svelte';
 	import InboxList from './InboxList.svelte';
@@ -33,23 +34,7 @@
 				const capture = JSON.parse(e.data) as Capture;
 				if (capture.triaged_at !== null) return; // pre-triaged: bypass inbox
 				queryClient.setQueryData(inboxKeys.list(20), (old: { items: InboxItem[] } | undefined) => {
-					const item: InboxItem = {
-						item_type: 'capture',
-						id: `capture:${capture.id}`,
-						capture_id: capture.id,
-						title: capture.text,
-						summary: capture.text,
-						source: capture.source,
-						created_at: capture.ingested_at,
-						capture,
-						actions: [
-							{ action: 'keep', label: 'Keep', shortcut: 'k', tone: 'primary' },
-							{ action: 'archive', label: 'Archive', shortcut: 'a', tone: 'neutral' },
-							{ action: 'promote', label: 'Promote', shortcut: 'p', tone: 'neutral' },
-							{ action: 'task', label: 'Task', shortcut: 't', tone: 'neutral' },
-							{ action: 'skip', label: 'Skip', shortcut: 'Space', tone: 'neutral' }
-						]
-					};
+					const item = captureToInboxItem(capture);
 					if (!old) return { items: [item], next_cursor: null };
 					if (old.items.some((i) => i.id === item.id)) return old;
 					return { ...old, items: [item, ...old.items].slice(0, 20) };
@@ -143,12 +128,12 @@
 		}
 	}
 
-	async function onArchiveInboxAction(id: number, action: string) {
+	async function onArchiveInboxAction(id: number, action: ArchiveAction) {
 		queryClient.setQueryData(inboxKeys.list(20), (old: { items: InboxItem[] } | undefined) =>
 			old ? { ...old, items: old.items.filter((item) => item.id !== `archive:${id}`) } : old
 		);
 		try {
-			const result = await applyArchiveAction(id, action as ArchiveAction);
+			const result = await applyArchiveAction(id, action);
 			if (action === 'recapture') {
 				window.open(result.url, '_blank', 'noopener,noreferrer');
 				queryClient.invalidateQueries({ queryKey: inboxKeys.list(20) });

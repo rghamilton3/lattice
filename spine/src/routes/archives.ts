@@ -8,6 +8,8 @@ import {
 } from '../archives';
 
 const VALID_ACTIONS = new Set(['keep', 'archive', 'recapture', 'delete', 'skip', 'auto-kept']);
+const RAW_ARCHIVE_CSP =
+	"sandbox; default-src 'none'; img-src data: blob: https: http:; style-src 'unsafe-inline'";
 
 export const archivesRoutes = (db: Database, { archiveDir }: { archiveDir: string }) =>
 	new Elysia()
@@ -43,7 +45,12 @@ export const archivesRoutes = (db: Database, { archiveDir }: { archiveDir: strin
 				}
 				try {
 					return new Response(readArchiveArtifact(row, archiveDir), {
-						headers: { 'Content-Type': 'text/html; charset=utf-8' },
+						headers: {
+							'Content-Type': 'text/html; charset=utf-8',
+							'Content-Security-Policy': RAW_ARCHIVE_CSP,
+							'X-Content-Type-Options': 'nosniff',
+							'Referrer-Policy': 'no-referrer',
+						},
 					});
 				} catch {
 					set.status = 404;

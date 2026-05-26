@@ -39,6 +39,13 @@ export interface CreateArchiveInput {
 	archiveDir: string;
 }
 
+export class ArchiveValidationError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'ArchiveValidationError';
+	}
+}
+
 function defaultArchiveDir(): string {
 	return join(dirname(resolve(getDatabasePath())), 'web');
 }
@@ -48,9 +55,14 @@ export function archiveStorageDir(configured?: string): string {
 }
 
 export function normalizeArchiveUrl(value: string): string {
-	const parsed = new URL(value.trim());
+	let parsed: URL;
+	try {
+		parsed = new URL(value.trim());
+	} catch {
+		throw new ArchiveValidationError('invalid archive URL');
+	}
 	if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')
-		throw new Error('URL must be http(s)');
+		throw new ArchiveValidationError('URL must be http(s)');
 	parsed.hash = '';
 	return parsed.toString();
 }
@@ -89,7 +101,7 @@ export function assertArchivePath(baseDir: string, filePath: string): string {
 	const resolved = resolve(filePath);
 	const baseWithSep = base.endsWith(sep) ? base : `${base}${sep}`;
 	if (resolved !== base && !resolved.startsWith(baseWithSep))
-		throw new Error('archive path escapes storage dir');
+		throw new ArchiveValidationError('archive path escapes storage dir');
 	return resolved;
 }
 
@@ -99,7 +111,7 @@ export function createArchive(
 ): ArchiveRow & { superseded: number[] } {
 	const url = normalizeArchiveUrl(input.url);
 	if (input.html.length === 0 && input.quality !== 'failed')
-		throw new Error('archive html is required');
+		throw new ArchiveValidationError('archive html is required');
 	const archivedAt = new Date().toISOString();
 	const archiveDir = archiveStorageDir(input.archiveDir);
 	mkdirSync(archiveDir, { recursive: true });

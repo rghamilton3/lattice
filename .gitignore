@@ -27,6 +27,11 @@ agent.db
 **/.serena/
 .claude/local-settings.json
 
+# Speckit extension cache / generated artifacts
+.specify/extensions/.cache/
+.specify/extensions/.registry
+.specify/extensions/review/
+
 **/node_modules/
 dist/
 build/

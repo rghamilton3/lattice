@@ -7,7 +7,10 @@ export type PlatformState = 'ready' | 'starting' | 'unhealthy';
 export interface PlatformCheck {
 	ok: boolean;
 	message: string;
-	[key: string]: boolean | number | string;
+}
+
+export interface StorageCheck extends PlatformCheck {
+	applied_migrations: number;
 }
 
 export interface PlatformStatusOptions {
@@ -23,7 +26,7 @@ export interface PlatformStatus {
 	state: PlatformState;
 	checks: {
 		configuration: PlatformCheck;
-		storage: PlatformCheck;
+		storage: StorageCheck;
 		access_boundary: PlatformCheck;
 		static_assets: PlatformCheck;
 	};
@@ -38,6 +41,7 @@ export function buildPlatformStatus({
 }: PlatformStatusOptions): PlatformStatus {
 	const migrations = getMigrationStatus(db);
 	const configurationOk = Boolean(agentToken);
+	const accessBoundaryOk = configurationOk && (!allowHttp || Boolean(devUser));
 	const checks = {
 		configuration: {
 			ok: configurationOk,
@@ -51,20 +55,38 @@ export function buildPlatformStatus({
 			applied_migrations: migrations.applied,
 		},
 		access_boundary: {
-			ok: configurationOk,
-			message: configurationOk
+			ok: accessBoundaryOk,
+			message: accessBoundaryOk
 				? accessBoundaryMessage({ allowHttp, devUser })
-				: 'Protected access cannot be fully enforced without an agent token',
+				: accessBoundaryFailureMessage({ agentToken, allowHttp, devUser }),
 		},
 		static_assets: staticAssetsCheck(surfaceBuild),
 	};
 	const ready = Object.values(checks).every((check) => check.ok);
+	const state = ready ? 'ready' : platformState({ checks, migrations });
 
 	return {
 		ready,
-		state: ready ? 'ready' : 'unhealthy',
+		state,
 		checks,
 	};
+}
+
+function platformState({
+	checks,
+	migrations,
+}: Pick<PlatformStatus, 'checks'> & {
+	migrations: ReturnType<typeof getMigrationStatus>;
+}): PlatformState {
+	if (
+		!migrations.ready &&
+		checks.configuration.ok &&
+		checks.access_boundary.ok &&
+		checks.static_assets.ok
+	) {
+		return 'starting';
+	}
+	return 'unhealthy';
 }
 
 function accessBoundaryMessage({
@@ -73,6 +95,17 @@ function accessBoundaryMessage({
 }: Pick<PlatformStatusOptions, 'allowHttp' | 'devUser'>) {
 	if (allowHttp || devUser) return 'Protected access can be enforced with development overrides';
 	return 'Protected access can be enforced';
+}
+
+function accessBoundaryFailureMessage({
+	agentToken,
+	allowHttp,
+	devUser,
+}: Pick<PlatformStatusOptions, 'agentToken' | 'allowHttp' | 'devUser'>) {
+	if (!agentToken) return 'Protected access cannot be fully enforced without an agent token';
+	if (allowHttp && !devUser)
+		return 'Protected access cannot be fully enforced while HTTP is allowed';
+	return 'Protected access cannot be fully enforced';
 }
 
 function staticAssetsCheck(surfaceBuild: string | undefined): PlatformCheck {

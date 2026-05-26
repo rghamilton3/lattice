@@ -12,8 +12,11 @@ export const statusRoutes = (db: Database, platformStatus: () => PlatformStatus)
 			.all() as AgentStatusRow[];
 		const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
 		const active_agent_count = agents.filter((a) => a.reported_at > fiveMinAgo).length;
+		const { ready, state, checks } = platformStatus();
 		return {
-			...platformStatus(),
+			ready,
+			state,
+			checks,
 			agents: agents.map((a) => ({
 				machine_id: a.machine_id,
 				state: a.state,

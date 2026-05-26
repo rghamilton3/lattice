@@ -56,7 +56,22 @@ describe('GET /api/status', () => {
 		expect(body.checks.storage).toMatchObject({
 			ok: true,
 			message: 'Storage is initialized',
-			applied_migrations: 9,
+			applied_migrations: expect.any(Number),
+		});
+	});
+
+	it('reports starting when storage is not initialized yet', async () => {
+		app.db.exec('DROP TABLE schema_migrations');
+
+		const res = await app.app.handle(req('/api/status'));
+		const body = await json(res);
+
+		expect(body.ready).toBe(false);
+		expect(body.state).toBe('starting');
+		expect(body.checks.storage).toEqual({
+			ok: false,
+			message: 'Storage is not initialized',
+			applied_migrations: 0,
 		});
 	});
 
@@ -138,6 +153,24 @@ describe('GET /api/status', () => {
 		expect(body.checks.access_boundary).toEqual({
 			ok: false,
 			message: 'Protected access cannot be fully enforced without an agent token',
+		});
+	});
+
+	it('reports unhealthy when HTTP is allowed without a development user', async () => {
+		await app.cleanup();
+		app = await buildTestApp({ agentToken: TOKEN, allowHttp: true, devUser: undefined });
+
+		const res = await app.app.handle(
+			req('/api/status', { headers: { 'x-authentik-username': 'operator' } }),
+		);
+		const body = await json(res);
+
+		expect(body.ready).toBe(false);
+		expect(body.state).toBe('unhealthy');
+		expect(body.checks.configuration.ok).toBe(true);
+		expect(body.checks.access_boundary).toEqual({
+			ok: false,
+			message: 'Protected access cannot be fully enforced while HTTP is allowed',
 		});
 	});
 

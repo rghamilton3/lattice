@@ -137,6 +137,14 @@ describe('GET /api/files/:id', () => {
 		expect(res.status).toBe(400);
 	});
 
+	it('returns 400 on partially numeric and non-positive ids', async () => {
+		const partial = await app.app.handle(req('/api/files/1abc'));
+		expect(partial.status).toBe(400);
+
+		const zero = await app.app.handle(req('/api/files/0'));
+		expect(zero.status).toBe(400);
+	});
+
 	it('returns 404 when id is unknown', async () => {
 		const res = await app.app.handle(req('/api/files/99999'));
 		expect(res.status).toBe(404);
@@ -191,6 +199,14 @@ describe('GET /api/files/:id/raw', () => {
 	it('returns 400 on non-numeric id', async () => {
 		const res = await app.app.handle(req('/api/files/abc/raw'));
 		expect(res.status).toBe(400);
+	});
+
+	it('returns 400 on partially numeric and non-positive raw ids', async () => {
+		const partial = await app.app.handle(req('/api/files/1abc/raw'));
+		expect(partial.status).toBe(400);
+
+		const zero = await app.app.handle(req('/api/files/0/raw'));
+		expect(zero.status).toBe(400);
 	});
 
 	it('returns 404 when row is unknown', async () => {

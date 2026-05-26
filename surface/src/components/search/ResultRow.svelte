@@ -70,7 +70,7 @@
 	}
 </script>
 
-<article class="result">
+<article class="result" aria-label={`${result.kind} result: ${title}`}>
 	<div class="result-head">
 		<span class={chipClass}>{result.kind}</span>
 		{#if result.kind === 'local-file'}
@@ -82,7 +82,15 @@
 		{/if}
 		{#if result.score > 0}
 			<span class="row" style="margin-left:auto">
-				<span class="score-bar" title={`score ${result.score.toFixed(2)}`}>
+				<span
+					class="score-bar"
+					title={`score ${result.score.toFixed(2)}`}
+					role="meter"
+					aria-label={`relevance score ${result.score.toFixed(2)}`}
+					aria-valuemin="0"
+					aria-valuemax="1"
+					aria-valuenow={result.score}
+				>
 					<span class="score-fill" style={`width:${Math.round(result.score * 100)}%`}></span>
 				</span>
 				<span
@@ -98,18 +106,24 @@
 	<div class="result-actions">
 		<button
 			class="btn"
+			aria-label={`Open ${title}`}
 			onclick={() => wb.openInPane(paneIndex, { kind: 'doc', ref: refToDocRef(result) })}
 		>
 			<Icon name="arrow-right" size={13} /> Open
 		</button>
 		<button
 			class="btn btn-ghost"
+			aria-label={`Open ${title} in split pane`}
 			onclick={() => wb.openInOther(paneIndex, { kind: 'doc', ref: refToDocRef(result) })}
 		>
 			<Icon name="split" size={13} /> Open in split
 		</button>
 		{#if result.kind !== 'working'}
-			<button class="btn btn-ghost" onclick={promote}>
+			<button
+				class="btn btn-ghost"
+				aria-label={`Promote ${title} to working document`}
+				onclick={promote}
+			>
 				<Icon name="promote" size={13} /> Promote
 			</button>
 			{#if promoteError}
@@ -118,6 +132,7 @@
 		{/if}
 		<button
 			class="btn btn-ghost"
+			aria-label={`Find results similar to ${title}`}
 			onclick={() => wb.openInOther(paneIndex, { kind: 'results', source: similarSource(result) })}
 		>
 			<Icon name="sim" size={13} /> Similar

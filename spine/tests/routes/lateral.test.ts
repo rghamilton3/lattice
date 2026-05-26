@@ -51,6 +51,14 @@ describe('GET /api/similar', () => {
 		expect(res.status).toBe(400);
 	});
 
+	it('returns 400 on partially numeric and non-positive ids', async () => {
+		const partial = await app.app.handle(req('/api/similar?id=1abc&kind=local-file'));
+		expect(partial.status).toBe(400);
+
+		const zero = await app.app.handle(req('/api/similar?id=0&kind=capture'));
+		expect(zero.status).toBe(400);
+	});
+
 	it('returns 404 when capture id is unknown', async () => {
 		const res = await app.app.handle(req('/api/similar?id=999&kind=capture'));
 		expect(res.status).toBe(404);
@@ -120,6 +128,32 @@ describe('GET /api/similar', () => {
 		const res = await app.app.handle(req('/api/similar?id=source&kind=working'));
 		const { results } = await json(res);
 		expect(results.map((r: any) => r.slug)).toEqual(['other']);
+	});
+
+	it('filters the source local file out of the results', async () => {
+		const { id } = seedFile(app, 'source-file');
+		seedFile(app, 'other-file', '2026-05-02T00:00:00Z');
+		app.qmd.setHits([
+			{
+				file: 'qmd://local-files/m1/h-source-file.md',
+				score: 0.9,
+				bestChunk: 'source-file',
+				body: 'source-file',
+				displayPath: 'local-files/m1/h-source-file.md',
+			},
+			{
+				file: 'qmd://local-files/m1/h-other-file.md',
+				score: 0.8,
+				bestChunk: 'other-file',
+				body: 'other-file',
+				displayPath: 'local-files/m1/h-other-file.md',
+			},
+		]);
+
+		const res = await app.app.handle(req(`/api/similar?id=${id}&kind=local-file`));
+		const { results } = await json(res);
+		expect(results.map((r: any) => r.id)).not.toContain(id);
+		expect(results.map((r: any) => r.snippet)).toEqual(['other-file']);
 	});
 
 	it('caps results at 10', async () => {

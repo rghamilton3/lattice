@@ -41,6 +41,12 @@ function parseCursor(value: string | undefined): FileCursor | null | undefined {
 	}
 }
 
+function parsePositiveId(value: string): number | null {
+	if (!/^\d+$/.test(value)) return null;
+	const id = Number(value);
+	return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
 export const filesRoutes = (db: Database) =>
 	new Elysia()
 		.get(
@@ -74,8 +80,8 @@ export const filesRoutes = (db: Database) =>
 		.get(
 			'/api/files/:id',
 			({ params, set }) => {
-				const id = parseInt(params.id, 10);
-				if (isNaN(id)) {
+				const id = parsePositiveId(params.id);
+				if (id === null) {
 					set.status = 400;
 					return { error: 'Invalid id' };
 				}
@@ -93,8 +99,8 @@ export const filesRoutes = (db: Database) =>
 		.get(
 			'/api/files/:id/raw',
 			async ({ params, set }) => {
-				const id = parseInt(params.id, 10);
-				if (isNaN(id)) {
+				const id = parsePositiveId(params.id);
+				if (id === null) {
 					set.status = 400;
 					return 'Invalid id';
 				}

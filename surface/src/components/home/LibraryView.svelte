@@ -227,6 +227,7 @@
 			autofocus
 			type="text"
 			class="search-input"
+			aria-label="Search or filter your library"
 			value={input}
 			oninput={onInput}
 			placeholder="Filter your library…"
@@ -265,9 +266,12 @@
 			<div class="lib-scroll">
 				<div class="lib-container">
 					{#if libraryIsLoading}
-						<div class="lib-empty soft">loading…</div>
+						<div class="lib-empty soft" role="status">Loading library items...</div>
 					{:else if libraryIsError}
-						<div class="lib-empty soft" style="color:var(--c-alarm)">couldn't load library</div>
+						<div class="lib-empty soft" style="color:var(--c-alarm)" role="alert">
+							Couldn't load captures or working documents. Local file results may still appear in
+							search.
+						</div>
 					{:else if filteredLibraryItems.length === 0}
 						<div class="lib-empty soft">
 							{libraryItems.length === 0
@@ -285,6 +289,7 @@
 								<button
 									class="lib-row"
 									class:lib-row--triaged={item.triaged}
+									aria-label={`Open ${item.chipLabel} ${item.text}`}
 									onclick={item.onclick}
 								>
 									<div class="lib-row-dot">
@@ -314,10 +319,10 @@
 			<!-- Search narrowing state -->
 			<section class="results">
 				{#if searchQuery.isLoading}
-					<div class="results-empty soft">searching…</div>
+					<div class="results-empty soft" role="status">Searching indexed knowledge...</div>
 				{:else if searchQuery.isError}
-					<div class="results-empty soft" style="color:var(--c-alarm)">
-						error: {searchQuery.error?.message}
+					<div class="results-empty soft" style="color:var(--c-alarm)" role="alert">
+						Couldn't load search results: {searchQuery.error?.message}
 					</div>
 				{:else if rawResults.length === 0}
 					<div class="results-empty soft">

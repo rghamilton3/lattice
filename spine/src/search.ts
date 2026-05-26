@@ -291,7 +291,7 @@ function mapResults(
 ): SearchResult[] {
 	const captureStmt = _db?.query('SELECT captured_at FROM captures WHERE id = ?');
 	const fileStmt = _db?.query(
-		'SELECT modified_at FROM file_index WHERE machine_id = ? AND hash = ?',
+		'SELECT id, modified_at FROM file_index WHERE machine_id = ? AND hash = ?',
 	);
 	return hits.flatMap((r): SearchResult[] => {
 		const m = VIRTUAL_PATH.exec(r.file);
@@ -338,17 +338,18 @@ function mapResults(
 			const parts = relPath.split('/');
 			const machine_id = parts[0];
 			const hash = basename(parts[1] ?? '', '.md');
-			const fileRow = fileStmt?.get(machine_id, hash) as { modified_at: string } | null;
+			const fileRow = fileStmt?.get(machine_id, hash) as { id: number; modified_at: string } | null;
+			if (!fileRow) return [];
 			return [
 				{
-					id: 0,
+					id: fileRow.id,
 					score: r.score,
 					snippet: r.bestChunk,
 					body: r.body,
 					path: r.displayPath,
 					kind: 'local-file' as const,
 					machine_id,
-					modified_at: fileRow?.modified_at ?? '',
+					modified_at: fileRow.modified_at,
 				},
 			];
 		}

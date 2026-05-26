@@ -39,13 +39,13 @@
 </script>
 
 {#if !open}
-	<aside class="facets facets--min">
+	<aside class="facets facets--min" aria-label="Search filters">
 		<button class="btn btn-ghost facets-toggle" onclick={onToggle} aria-label="Expand filters">
 			<Icon name="maximize" size={13} />
 		</button>
 	</aside>
 {:else}
-	<aside class="facets">
+	<aside class="facets" aria-label="Search filters">
 		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div
 			class="facets-resize-handle"
@@ -71,7 +71,12 @@
 					<!-- TODO(spine): query GET /api/search/clusters?q=… once the endpoint ships;
 					     then render coloured-dot facets driven by SearchResult.cluster.
 					     For now we show a single "All results" pseudo-facet. -->
-					<button class="facet" aria-pressed="true" disabled>
+					<button
+						class="facet"
+						aria-pressed="true"
+						aria-label="All result clusters selected"
+						disabled
+					>
 						<span class="facet-dot" style="background:var(--c-accent)"></span>
 						<span class="facet-label">All results</span>
 					</button>
@@ -82,7 +87,12 @@
 				<div class="facets-head"><span>Kind</span></div>
 				<div class="facets-list">
 					{#each kinds as k (k)}
-						<button class="facet" aria-pressed={kindFilter.has(k)} onclick={() => toggleKind(k)}>
+						<button
+							class="facet"
+							aria-pressed={kindFilter.has(k)}
+							aria-label={`${kindFilter.has(k) ? 'Hide' : 'Show'} ${k} results`}
+							onclick={() => toggleKind(k)}
+						>
 							<span class={kindChip[k]}>{k}</span>
 						</button>
 					{/each}
@@ -96,12 +106,18 @@
 						<button
 							class="facet"
 							aria-pressed={sort === 'recency'}
+							aria-label="Sort by recency when relevance scores are close"
 							onclick={() => setSort('recency')}
 						>
 							<Icon name="clock" size={13} />
 							<span class="facet-label">Recency-broken</span>
 						</button>
-						<button class="facet" aria-pressed={sort === 'score'} onclick={() => setSort('score')}>
+						<button
+							class="facet"
+							aria-pressed={sort === 'score'}
+							aria-label="Sort by relevance score only"
+							onclick={() => setSort('score')}
+						>
 							<Icon name="sim" size={13} />
 							<span class="facet-label">Score-only</span>
 						</button>

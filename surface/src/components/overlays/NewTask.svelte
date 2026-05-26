@@ -96,6 +96,7 @@
 			bind:this={textEl}
 			bind:value={text}
 			class="ntask-area"
+			aria-label="Task text"
 			placeholder="What needs doing?"
 			onkeydown={(e) => {
 				if (e.key === 'Escape') close();
@@ -149,8 +150,14 @@
 				class="faint"
 				style="font-size:12px"
 				style:color={failed ? 'var(--c-alarm)' : undefined}
+				role={failed || submitting ? 'status' : undefined}
+				aria-live="polite"
 			>
-				{failed ? 'Save failed — try again' : ''}
+				{#if submitting}
+					Saving task…
+				{:else if failed}
+					Save failed — try again
+				{/if}
 			</span>
 			<div class="row" style="gap:8px">
 				<span class="faint" style="font-size:12px">save with</span>

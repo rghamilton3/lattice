@@ -20,15 +20,14 @@ export function parseCommand(text: string): ParsedCommand | null {
 	const trimmed = text.trimStart();
 	if (!trimmed.startsWith('/')) return null;
 
-	const spaceIdx = trimmed.indexOf(' ', 1);
-	if (spaceIdx === -1) return null; // e.g. "/task" alone — treat as plain text
+	const match = trimmed.match(/^\/(\S+)\s+([\s\S]*\S)\s*$/);
+	if (!match) return null; // e.g. "/task" alone — treat as plain text
 
-	const command = trimmed.slice(1, spaceIdx).toLowerCase();
+	const command = match[1].toLowerCase();
 	const action = COMMAND_MAP.get(command);
 	if (!action) return null; // unknown command — plain text
 
-	const strippedText = trimmed.slice(spaceIdx + 1).trim();
-	if (!strippedText) return null; // command with blank body — plain text
+	const strippedText = match[2].trim();
 
 	return { action, strippedText };
 }

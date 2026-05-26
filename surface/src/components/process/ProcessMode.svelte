@@ -8,6 +8,7 @@
 		TRIAGE_ACTION_LABEL,
 		type TriageAction
 	} from '$lib/api/captures';
+	import { taskKeys } from '$lib/api/tasks';
 	import { relTime } from '$lib/utils/relTime';
 	import Icon from '$components/icons/Icon.svelte';
 
@@ -86,6 +87,9 @@
 	function exit() {
 		wb.exitTriage(session.decisions).then(() => {
 			queryClient.invalidateQueries({ queryKey: captureKeys.list(20) });
+			if (session.decisions.some((d) => d.action === 'task')) {
+				queryClient.invalidateQueries({ queryKey: taskKeys.list() });
+			}
 		});
 	}
 
@@ -147,30 +151,38 @@
 				class="btn btn-ghost"
 				onclick={() => (session.paused = !session.paused)}
 				title="Pause timer"
+				aria-label={session.paused ? 'Resume process timer' : 'Pause process timer'}
 			>
 				<span aria-hidden="true">{session.paused ? '▶' : '⏸'}</span>
 				<span class="mono" style="width:40px; text-align:right">
 					{mm}:{ss}
 				</span>
 			</button>
-			<button class="btn btn-ghost" onclick={exit}>
+			<button class="btn btn-ghost" onclick={exit} aria-label="Stop processing captures">
 				<Icon name="x" size={14} />
 				<span>Stop</span>
 			</button>
 		</div>
 	</header>
 
-	<div class="process-bar">
+	<div
+		class="process-bar"
+		role="progressbar"
+		aria-label="Triage progress"
+		aria-valuemin="0"
+		aria-valuemax={queue.length}
+		aria-valuenow={done}
+	>
 		<div class="process-fill" style:width="{pct}%"></div>
 	</div>
 
 	<div class="process-body">
 		{#if capturesQuery.isLoading}
 			<div class="cap-card" style="text-align:center">
-				<p class="faint" style="margin:0">loading inbox…</p>
+				<p class="faint" style="margin:0" role="status" aria-live="polite">Loading inbox…</p>
 			</div>
 		{:else if hasError}
-			<div class="cap-card done-card">
+			<div class="cap-card done-card" role="alert">
 				<div aria-hidden="true">⚠</div>
 				<h2 style="font-size:22px; margin:6px 0 6px">Couldn't load inbox.</h2>
 				<p class="faint" style="font-size:14px; margin:0">
@@ -241,7 +253,7 @@
 				</div>
 				<p class="cap-card-body">{current.text}</p>
 				<div class="cap-card-actions">
-					<button class="cap-action" onclick={() => advance('keep')}>
+					<button class="cap-action" onclick={() => advance('keep')} aria-label="Keep capture">
 						<div class="cap-action-key"><span class="kbd">k</span></div>
 						<div class="cap-action-label">
 							<Icon name="check" size={15} />
@@ -249,7 +261,11 @@
 						</div>
 						<div class="cap-action-hint faint">leave it where it is</div>
 					</button>
-					<button class="cap-action" onclick={() => advance('archive')}>
+					<button
+						class="cap-action"
+						onclick={() => advance('archive')}
+						aria-label="Archive capture"
+					>
 						<div class="cap-action-key"><span class="kbd">a</span></div>
 						<div class="cap-action-label">
 							<Icon name="archive" size={15} />
@@ -257,7 +273,11 @@
 						</div>
 						<div class="cap-action-hint faint">out of sight, still searchable</div>
 					</button>
-					<button class="cap-action" onclick={() => advance('promote')}>
+					<button
+						class="cap-action"
+						onclick={() => advance('promote')}
+						aria-label="Promote capture"
+					>
 						<div class="cap-action-key"><span class="kbd">p</span></div>
 						<div class="cap-action-label">
 							<Icon name="promote" size={15} />
@@ -265,7 +285,11 @@
 						</div>
 						<div class="cap-action-hint faint">become a working doc</div>
 					</button>
-					<button class="cap-action" onclick={() => advance('task')}>
+					<button
+						class="cap-action"
+						onclick={() => advance('task')}
+						aria-label="Turn capture into task"
+					>
 						<div class="cap-action-key"><span class="kbd">t</span></div>
 						<div class="cap-action-label">
 							<Icon name="task" size={15} />
@@ -273,7 +297,7 @@
 						</div>
 						<div class="cap-action-hint faint">route to your task channel</div>
 					</button>
-					<button class="cap-action" onclick={() => advance('skip')}>
+					<button class="cap-action" onclick={() => advance('skip')} aria-label="Skip capture">
 						<div class="cap-action-key"><span class="kbd">␣</span></div>
 						<div class="cap-action-label">
 							<Icon name="skip" size={15} />

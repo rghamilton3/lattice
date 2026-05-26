@@ -108,6 +108,13 @@ describe('parseCommand', () => {
 			});
 		});
 
+		it('handles tabs between command and body', () => {
+			expect(parseCommand('/task\tbuy milk'))?.toEqual({
+				action: 'task',
+				strippedText: 'buy milk',
+			});
+		});
+
 		it('preserves slashes in body text', () => {
 			expect(parseCommand('/note see /etc/hosts'))?.toEqual({
 				action: 'keep',

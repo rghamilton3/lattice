@@ -101,7 +101,7 @@ describe('attachment upload helpers', () => {
 		const dir = tempDir();
 		writeFileSync(join(dir, 'att-1'), 'hello');
 		const requests: Array<{ url: string; init: RequestInit }> = [];
-		const fetchImpl: typeof fetch = async (url, init) => {
+		const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
 			requests.push({ url: String(url), init: init ?? {} });
 			return new Response(JSON.stringify({ id: 99 }), { status: 200 });
 		};
@@ -134,7 +134,7 @@ describe('attachment upload helpers', () => {
 
 	it('skips attachments that are missing an id', async () => {
 		let calls = 0;
-		const fetchImpl: typeof fetch = async () => {
+		const fetchImpl = async () => {
 			calls += 1;
 			return new Response(JSON.stringify({ id: 1 }), { status: 200 });
 		};

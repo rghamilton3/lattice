@@ -318,7 +318,7 @@ export interface PostAttachmentOptions {
 	attachmentsDir?: string;
 	spineBase?: string;
 	agentToken?: string;
-	fetchImpl?: typeof fetch;
+	fetchImpl?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 }
 
 export async function postAttachment(

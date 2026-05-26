@@ -39,5 +39,6 @@ just install       # install all dependencies + git hooks (run once after clone)
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan
+shell commands, and other important information, read the current plan:
+`specs/011-tracking-phase0/plan.md`
 <!-- SPECKIT END -->

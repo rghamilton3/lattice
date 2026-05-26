@@ -94,7 +94,7 @@
 - [X] T018 Run spine working-doc tests: `cd spine && bun test tests/unit/working.test.ts tests/routes/working-route.test.ts`
 - [X] T019 Run surface validation: `cd surface && bun run check`
 - [X] T020 Validate quickstart scenarios in `specs/004-working-docs/quickstart.md`
-- [ ] T021 Update Time Machine queue completion metadata in `.specify/extensions/time-machine/features-queue.yml`
+- [X] T021 Update Time Machine queue completion metadata in `.specify/extensions/time-machine/features-queue.yml`
 
 ---
 

@@ -86,11 +86,11 @@ describe('GET /api/search', () => {
 	});
 
 	it('returns mapped local-file hits with machine_id', async () => {
-		app.db
+		const row = app.db
 			.query(
-				'INSERT INTO file_index (machine_id, path, hash, mime_type, text, modified_at, size_bytes, indexed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+				'INSERT INTO file_index (machine_id, path, hash, mime_type, text, modified_at, size_bytes, indexed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
 			)
-			.run(
+			.get(
 				'laptop-1',
 				'/docs/file.md',
 				'abc',
@@ -99,7 +99,7 @@ describe('GET /api/search', () => {
 				'2024-03-20T08:00:00.000Z',
 				100,
 				'2024-03-20T08:00:00.000Z',
-			);
+			) as { id: number };
 		app.qmd.setHits([
 			{
 				file: 'qmd://local-files/laptop-1/abc.md',
@@ -112,11 +112,34 @@ describe('GET /api/search', () => {
 		const res = await app.app.handle(req('/api/search?q=hello'));
 		const { results } = await json(res);
 		expect(results[0]).toMatchObject({
+			id: row.id,
 			kind: 'local-file',
 			machine_id: 'laptop-1',
 			score: 0.5,
 			modified_at: '2024-03-20T08:00:00.000Z',
 		});
+	});
+
+	it('drops local-file hits without a backing file_index row', async () => {
+		app.qmd.setHits([
+			{
+				file: 'qmd://local-files/laptop-1/missing-hash.md',
+				score: 0.5,
+				bestChunk: 'lf snippet',
+				body: 'lf body',
+				displayPath: 'local-files/laptop-1/missing-hash.md',
+			},
+		]);
+		const res = await app.app.handle(req('/api/search?q=hello'));
+		expect((await json(res)).results).toEqual([]);
+	});
+
+	it('returns a safe empty result list when search is unavailable', async () => {
+		const { __resetSearchForTests } = await import('../../src/search');
+		__resetSearchForTests();
+		const res = await app.app.handle(req('/api/search?q=hello'));
+		expect(res.status).toBe(200);
+		expect(await json(res)).toEqual({ results: [] });
 	});
 
 	it("drops hits that don't live in a known collection root", async () => {

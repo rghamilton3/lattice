@@ -15,8 +15,9 @@ function parseLateralSource(
 	raw: string,
 ): LateralSource | { error: string } {
 	if (kind === 'working') return { kind, slug: raw };
-	const id = parseInt(raw, 10);
-	if (isNaN(id)) return { error: 'Invalid id' };
+	if (!/^\d+$/.test(raw)) return { error: 'Invalid id' };
+	const id = Number(raw);
+	if (!Number.isSafeInteger(id) || id <= 0) return { error: 'Invalid id' };
 	return { kind, id };
 }
 
@@ -73,6 +74,8 @@ export const lateralRoutes = (db: Database) =>
 				const filtered = raw
 					.filter((r) => {
 						if (source.kind === 'capture' && r.kind === 'capture' && r.id === source.id)
+							return false;
+						if (source.kind === 'local-file' && r.kind === 'local-file' && r.id === source.id)
 							return false;
 						if (source.kind === 'working' && r.kind === 'working' && r.slug === source.slug)
 							return false;

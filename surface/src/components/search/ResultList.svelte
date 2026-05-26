@@ -54,7 +54,7 @@
 							snippet: r.snippet,
 							body: r.snippet,
 							path: `capture/${r.id}`,
-							modified_at: ''
+							modified_at: r.ts
 						}
 					];
 				if (r.kind === 'local-file')
@@ -67,7 +67,7 @@
 							body: r.snippet,
 							path: `local-file/${r.id}`,
 							machine_id: r.machine_id ?? '',
-							modified_at: ''
+							modified_at: r.ts
 						}
 					];
 				return [];
@@ -97,11 +97,13 @@
 
 <div class="results" style="height:100%">
 	{#if isLoading}
-		<div class="results-empty soft">loading…</div>
+		<div class="results-empty soft" role="status">Loading related results...</div>
 	{:else if loadError}
-		<div class="results-empty soft" style="color:var(--c-alarm)">{loadError}</div>
+		<div class="results-empty soft" style="color:var(--c-alarm)" role="alert">
+			Couldn't load related results: {loadError}
+		</div>
 	{:else if displayItems.length === 0}
-		<div class="results-empty soft">no results</div>
+		<div class="results-empty soft">No related results found.</div>
 	{:else}
 		{#each displayItems as result (`${result.kind}:${result.id}`)}
 			<ResultRow {paneIndex} {result} />

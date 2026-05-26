@@ -41,7 +41,6 @@ setup.
 
 1. **Add integration tests** for `signal-relay.ts`: mock a TCP JSON-RPC stream + mock spine
    endpoint; verify reaction sequencing and attachment upload.
-   Command: `/speckit-product-forge-test-plan --feature=signal`
 
 2. **Add structured logging** — replace `console.error/warn` with `tracing` or `pino` so relay
    failures are observable without tailing stdout.
@@ -50,7 +49,5 @@ setup.
    a user can see what was lost.
 
 4. **Run tracking plan** to decide which metrics to emit.
-   Command: `/speckit-product-forge-tracking-plan --feature=signal`
 
 5. **Run release-readiness** to set up a crash alert on the relay process.
-   Command: `/speckit-product-forge-release-readiness --feature=signal`

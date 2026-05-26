@@ -49,8 +49,8 @@ before implementation may proceed.
 | II. Component Boundaries | Does this feature introduce cross-component coupling beyond REST API contracts? | [ ] |
 | III. Local-First Data | Does this feature store user data outside user-controlled SQLite/local files? | [ ] |
 | IV. Security by Design | Does this feature add a new route group without a declared auth model? | [ ] |
-| V. Simplicity | Does this feature introduce an abstraction with fewer than 3 concrete callsites? | [ ] |
-| V. Simplicity | Does this feature introduce an ORM, feature flag, or backwards-compat shim? | [ ] |
+| V. Simplicity over Abstraction | Does this feature introduce an abstraction with fewer than 3 concrete callsites? | [ ] |
+| V. Simplicity over Abstraction | Does this feature introduce an ORM, feature flag, or backwards-compat shim without a shipped external dependency or persisted-data migration requiring it? | [ ] |
 | Tech Stack | Does this feature add a runtime dependency outside the approved technology stack? | [ ] |
 
 ## Project Structure

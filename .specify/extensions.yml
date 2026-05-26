@@ -1,6 +1,6 @@
 installed:
 - git
-- product-forge
+- time-machine
 settings:
   auto_execute_hooks: true
 hooks:
@@ -123,6 +123,13 @@ hooks:
     optional: true
     prompt: Commit implementation changes?
     description: Auto-commit after implementation
+    condition: null
+  - extension: time-machine
+    command: speckit.time-machine.next
+    enabled: true
+    optional: true
+    prompt: Feature implemented. Continue to the next feature in the queue?
+    description: ''
     condition: null
   after_checklist:
   - extension: git

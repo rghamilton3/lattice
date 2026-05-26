@@ -10,3 +10,5 @@ spine/working/
 # Per-tool agent caches at root (component-specific ignores live in their dirs)
 **/.serena/
 .claude/local-settings.json
+
+**/node_modules/

@@ -15,7 +15,7 @@
 	import { oneDark } from '@codemirror/theme-one-dark';
 	import { vim, Vim } from '@replit/codemirror-vim';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
-	import { workingKeys, fetchWorking, updateWorking } from '$lib/api/working';
+	import { workingKeys, fetchWorking, updateWorking, deleteWorking } from '$lib/api/working';
 	import Icon from '$components/icons/Icon.svelte';
 	import VimToggle from './VimToggle.svelte';
 
@@ -29,7 +29,7 @@
 	const vimCompartment = new Compartment();
 	let isDirty = $state(false);
 	let saveTimer: ReturnType<typeof setTimeout> | null = null;
-	let saveStatus = $state<'' | 'saved' | 'error'>('');
+	let saveStatus = $state<'' | 'saved' | 'error' | 'deleting'>('');
 	let saveErrorMsg = $state('');
 	let statusTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -57,6 +57,23 @@
 		}
 	}));
 
+	const deleteMutation = createMutation(() => ({
+		mutationFn: () => deleteWorking(slug),
+		onMutate: () => {
+			saveStatus = 'deleting';
+		},
+		onSuccess: () => {
+			qc.invalidateQueries({ queryKey: workingKeys.list() });
+			qc.removeQueries({ queryKey: workingKeys.detail(slug) });
+			goBack();
+		},
+		onError: (err) => {
+			console.error('[editor] delete failed:', err);
+			saveStatus = 'error';
+			saveErrorMsg = err instanceof Error ? err.message : 'unknown error';
+		}
+	}));
+
 	function saveNow(content?: string) {
 		const doc = content ?? view?.state.doc.toString();
 		if (doc === undefined) return;
@@ -76,6 +93,11 @@
 
 	function goBack() {
 		wb.openInPane(paneIndex, { kind: 'library', query: '' });
+	}
+
+	function deleteDoc() {
+		if (!window.confirm(`Delete ${slug}.md? This cannot be undone.`)) return;
+		deleteMutation.mutate();
 	}
 
 	// Wire vim ex commands (global registry — last-mounted editor wins when two are open simultaneously)
@@ -159,19 +181,45 @@
 
 <div class="editor-shell">
 	<div class="editor-status">
-		<button class="btn btn-ghost" title="Back to library" onclick={goBack}>
+		<button
+			class="btn btn-ghost"
+			title="Back to library"
+			aria-label="Back to library"
+			onclick={goBack}
+		>
 			<Icon name="arrow-right" size={14} class="rotate-180" /> Back
 		</button>
 		<span class="mono faint truncate" style="font-size:12px">{slug}.md</span>
-		{#if isDirty}
-			<span class="mute" style="font-size:12px">· unsaved</span>
-		{:else if saveStatus === 'saved'}
-			<span style="font-size:12px; color:var(--c-ok)">· saved</span>
-		{:else if saveStatus === 'error'}
-			<span style="font-size:12px; color:var(--c-alarm)" title={saveErrorMsg}>· save failed</span>
-		{/if}
+		<span role="status" aria-live="polite" class="editor-save-status">
+			{#if isDirty}
+				<span class="mute">· unsaved</span>
+			{:else if saveStatus === 'saved'}
+				<span style="color:var(--c-ok)">· saved</span>
+			{:else if saveStatus === 'error'}
+				<span style="color:var(--c-alarm)" title={saveErrorMsg}>· action failed</span>
+			{:else if saveStatus === 'deleting'}
+				<span class="mute">· deleting</span>
+			{/if}
+		</span>
 		<span class="row" style="margin-left:auto; gap:6px">
-			<span class="kbd">:w</span>
+			<button
+				class="btn btn-ghost"
+				title="Save working document"
+				aria-label="Save working document"
+				disabled={saveMutation.isPending || deleteMutation.isPending}
+				onclick={() => saveNow()}
+			>
+				Save
+			</button>
+			<button
+				class="btn btn-ghost"
+				title="Delete working document"
+				aria-label="Delete working document"
+				disabled={deleteMutation.isPending}
+				onclick={deleteDoc}
+			>
+				Delete
+			</button>
 			<VimToggle />
 		</span>
 	</div>
@@ -180,11 +228,24 @@
 		{#if docQuery.isLoading}
 			<p class="p-3 text-sm" style="color:var(--text-mute)">loading…</p>
 		{:else if docQuery.isError}
-			<p class="p-3 text-xs" style="color:var(--c-alarm)">
-				{docQuery.error?.message ?? 'error loading doc'}
-			</p>
+			<div class="p-3 text-xs" style="color:var(--c-alarm)" role="alert">
+				<p>{docQuery.error?.message ?? 'error loading doc'}</p>
+				<button class="btn btn-ghost" style="margin-top:8px" onclick={goBack}
+					>Back to library</button
+				>
+			</div>
 		{:else}
-			<div bind:this={editorContainer} class="h-full"></div>
+			<div
+				bind:this={editorContainer}
+				class="h-full"
+				aria-label={`Markdown editor for ${slug}.md`}
+			></div>
 		{/if}
 	</div>
 </div>
+
+<style>
+	.editor-save-status {
+		font-size: 12px;
+	}
+</style>

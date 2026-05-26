@@ -59,7 +59,7 @@
 - [X] T025 [P] Document WCAG 2.2 AA evidence and bilingual N/A rationale in `docs/accessibility/attachments.md`
 - [X] T026 Run `cd spine && bun test tests/routes/attachments.test.ts tests/routes/working-attachments.test.ts tests/routes/search.test.ts`
 - [X] T027 Run `cd surface && bun run check`
-- [ ] T028 Mark completed tasks in `specs/005-attachments/tasks.md` after verification and queue metadata updates
+- [X] T028 Mark completed tasks in `specs/005-attachments/tasks.md` after verification and queue metadata updates
 
 ## Dependencies
 

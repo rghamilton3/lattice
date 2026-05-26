@@ -50,6 +50,7 @@
 	let editPriority = $state<TaskPriority | ''>('');
 	let editNotes = $state('');
 	let saving = $state(false);
+	let status = $state('');
 
 	function expand(task: Task) {
 		if (expandedId === task.id) {
@@ -64,6 +65,7 @@
 
 	async function saveEdit(task: Task) {
 		saving = true;
+		status = 'Saving task…';
 		try {
 			await updateTaskMeta(task.id, {
 				due_date: editDueDate || null,
@@ -72,9 +74,11 @@
 			});
 			queryClient.invalidateQueries({ queryKey: taskKeys.list() });
 			expandedId = null;
+			status = 'Task updated';
 			wb.showToast('Task updated');
 		} catch (err) {
 			logError('updateTaskMeta', err);
+			status = 'Save failed';
 			wb.showToast('Save failed');
 		} finally {
 			saving = false;
@@ -82,15 +86,19 @@
 	}
 
 	async function undone(task: Task) {
+		status = 'Restoring task…';
 		queryClient.setQueryData(taskKeys.done(), (old: Task[] | undefined) =>
 			old ? old.filter((t) => t.id !== task.id) : []
 		);
 		try {
 			await uncompleteTask(task.id);
 			queryClient.invalidateQueries({ queryKey: taskKeys.list() });
+			status = 'Task restored';
+			wb.showToast('Task restored');
 		} catch (err) {
 			logError('uncompleteTask', err);
 			queryClient.invalidateQueries({ queryKey: taskKeys.done() });
+			status = 'Restore failed';
 			wb.showToast('Restore failed');
 		}
 	}
@@ -113,10 +121,16 @@
 			</button>
 		</div>
 
+		{#if status}
+			<p class="faint" style="font-size:12px" role="status" aria-live="polite">{status}</p>
+		{/if}
+
 		{#if query.isLoading}
-			<div class="tasks-empty soft">loading…</div>
+			<div class="tasks-empty soft" role="status" aria-live="polite">Loading tasks…</div>
 		{:else if query.isError}
-			<div class="tasks-empty soft" style="color:var(--c-alarm)">couldn't load tasks</div>
+			<div class="tasks-empty soft" style="color:var(--c-alarm)" role="alert">
+				Couldn't load tasks.
+			</div>
 		{:else if tasks.length === 0}
 			<div class="tasks-empty">
 				<p class="soft" style="margin:0">No active tasks.</p>
@@ -137,14 +151,19 @@
 							<button
 								class="task-check"
 								title="Mark done"
-								aria-label="Mark done"
+								aria-label="Mark done: {task.text}"
 								onclick={() => done(task)}
 							>
 								<Icon name="checkbox" size={16} class="task-check-empty" />
 								<Icon name="task" size={16} class="task-check-done" />
 							</button>
 
-							<button class="task-body" onclick={() => expand(task)}>
+							<button
+								class="task-body"
+								onclick={() => expand(task)}
+								aria-expanded={expandedId === task.id}
+								aria-label="Edit task: {task.text}"
+							>
 								<span class="task-text">{task.text}</span>
 								<span class="task-chips">
 									{#if task.task_due_date}
@@ -214,6 +233,7 @@
 										class="btn btn-primary btn-mini"
 										disabled={saving}
 										onclick={() => saveEdit(task)}
+										aria-label="Save task metadata"
 									>
 										save
 									</button>
@@ -231,6 +251,7 @@
 					class="completed-toggle"
 					onclick={() => (showCompleted = !showCompleted)}
 					aria-expanded={showCompleted}
+					aria-controls="completed-tasks"
 				>
 					<Icon
 						name="chev-right"
@@ -241,14 +262,14 @@
 				</button>
 
 				{#if showCompleted}
-					<div class="task-list">
+					<div class="task-list" id="completed-tasks">
 						{#each completedTasks as task (task.id)}
 							<div class="task-row task-row--done">
 								<div class="task-row-main">
 									<button
 										class="task-check task-check--done"
 										title="Mark active"
-										aria-label="Mark active"
+										aria-label="Restore task: {task.text}"
 										onclick={() => undone(task)}
 									>
 										<Icon name="task" size={16} class="task-check-filled" />

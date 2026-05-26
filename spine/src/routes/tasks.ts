@@ -4,6 +4,7 @@ import type { CaptureRow } from '../db/rows';
 import { writeCaptureFile, refreshIndex } from '../search';
 
 const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
+const MAX_TASK_TEXT_LENGTH = 10_000;
 
 const TASK_SELECT =
 	'SELECT id, text, source, captured_at, ingested_at, triaged_at, triage_action, task_due_date, task_priority, task_notes, task_completed_at FROM captures';
@@ -18,7 +19,8 @@ function sortActive(rows: CaptureRow[]): CaptureRow[] {
 		const pa = a.task_priority != null ? (PRIORITY_ORDER[a.task_priority] ?? 3) : 3;
 		const pb = b.task_priority != null ? (PRIORITY_ORDER[b.task_priority] ?? 3) : 3;
 		if (pa !== pb) return pa - pb;
-		return b.captured_at < a.captured_at ? -1 : 1;
+		if (a.captured_at !== b.captured_at) return b.captured_at < a.captured_at ? -1 : 1;
+		return b.id - a.id;
 	});
 }
 
@@ -41,7 +43,16 @@ export const tasksRoutes = (db: Database) =>
 		})
 		.post(
 			'/api/tasks',
-			({ body }) => {
+			({ body, set }) => {
+				const text = body.text.trim();
+				if (text.length === 0) {
+					set.status = 422;
+					return { error: 'Task text is required' };
+				}
+				if (text.length > MAX_TASK_TEXT_LENGTH) {
+					set.status = 422;
+					return { error: 'Task text must be 10,000 characters or fewer' };
+				}
 				const now = new Date().toISOString();
 				const row = db.transaction(() => {
 					const inserted = db
@@ -52,15 +63,15 @@ export const tasksRoutes = (db: Database) =>
 							RETURNING id`,
 						)
 						.get(
-							body.text,
+							text,
 							now,
 							now,
 							now,
 							body.due_date ?? null,
 							body.priority ?? null,
-							body.notes ?? null,
+							body.notes?.trim() || null,
 						) as { id: number };
-					writeCaptureFile(inserted.id, body.text, 'task', now);
+					writeCaptureFile(inserted.id, text, 'task', now);
 					return inserted;
 				})();
 				refreshIndex();

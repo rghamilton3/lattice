@@ -69,6 +69,15 @@ describe('db.initDb', () => {
 		db.close();
 	});
 
+	it('reports migration readiness after initialization', async () => {
+		env = mkTestEnv();
+		const { initDb, getMigrationStatus } = await import('../../src/db');
+		const db = initDb();
+
+		expect(getMigrationStatus(db)).toEqual({ ready: true, applied: 9 });
+		db.close();
+	});
+
 	it('getDb throws when initDb has not run in this process', async () => {
 		const { getDb, __resetDbForTests } = await import('../../src/db');
 		__resetDbForTests();

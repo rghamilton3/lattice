@@ -13,6 +13,7 @@ export interface BuildTestAppOptions {
 	agentToken?: string | undefined;
 	allowHttp?: boolean;
 	devUser?: string | undefined;
+	surfaceBuild?: string | undefined;
 }
 
 // Sets up a complete test environment:
@@ -41,7 +42,7 @@ export async function buildTestApp(opts: BuildTestAppOptions = {}): Promise<Test
 		agentToken: 'agentToken' in opts ? opts.agentToken : 'test-token',
 		allowHttp: opts.allowHttp ?? true,
 		devUser: 'devUser' in opts ? opts.devUser : 'dev@local',
-		surfaceBuild: undefined,
+		surfaceBuild: opts.surfaceBuild,
 		attachmentsDir: env.attachmentsDir,
 	});
 

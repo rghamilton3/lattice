@@ -12,12 +12,7 @@ import {
 	updateWorking,
 	deleteWorking,
 } from '../working';
-import {
-	refreshIndex,
-	writeWorkingAttachmentIndex,
-	deleteWorkingAttachmentIndex,
-	workingAttachmentsMdDir,
-} from '../search';
+import { refreshIndex, writeWorkingAttachmentIndex, deleteWorkingAttachmentIndex } from '../search';
 import type { CaptureRow, FileIndexRow, WorkingAttachmentRow } from '../db/rows';
 
 type SeedCaptureRow = Pick<CaptureRow, 'text' | 'captured_at'>;

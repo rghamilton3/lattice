@@ -54,7 +54,7 @@
 			if (sse.readyState === EventSource.CLOSED) {
 				liveDisconnected = true;
 				logError('sse:captures', e);
-				wb.showToast('Live updates disconnected — refresh to reconnect');
+				wb.showToast('Live updates disconnected — refresh to reconnect', { background: true });
 			}
 		});
 		return () => {

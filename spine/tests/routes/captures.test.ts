@@ -444,6 +444,25 @@ describe('POST /api/captures', () => {
 });
 
 describe('POST /api/captures/:id/triage', () => {
+	it('accepts all supported triage actions', async () => {
+		for (const action of ['keep', 'archive', 'promote', 'task', 'skip']) {
+			const { id } = seedCapture(app, `${action} capture`);
+			const res = await app.app.handle(
+				req(`/api/captures/${id}/triage`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ action }),
+				}),
+			);
+			expect(res.status).toBe(200);
+			const row = app.db
+				.query('SELECT triaged_at, triage_action FROM captures WHERE id = ?')
+				.get(id) as any;
+			expect(row.triage_action).toBe(action);
+			expect(typeof row.triaged_at).toBe('string');
+		}
+	});
+
 	it('sets triaged_at and triage_action on the capture', async () => {
 		const { id } = seedCapture(app, 'to triage');
 		const res = await app.app.handle(

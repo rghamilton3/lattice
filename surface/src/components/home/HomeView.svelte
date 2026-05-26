@@ -235,9 +235,11 @@
 					</button>
 				</div>
 				{#if tasksQuery.isLoading}
-					<div class="inbox-empty soft">loading…</div>
+					<div class="inbox-empty soft" role="status" aria-live="polite">Loading tasks…</div>
 				{:else if tasksQuery.isError}
-					<div class="inbox-empty soft" style="color:var(--c-alarm)">couldn't load tasks</div>
+					<div class="inbox-empty soft" style="color:var(--c-alarm)" role="alert">
+						Couldn't load tasks.
+					</div>
 				{:else if allTasks.length === 0}
 					<div class="inbox-empty soft">no active tasks</div>
 				{:else}
@@ -247,7 +249,7 @@
 								<button
 									class="home-task-check"
 									title="Mark done"
-									aria-label="Mark done"
+									aria-label="Mark done: {task.text}"
 									onclick={() => doneTask(task)}
 								>
 									<Icon name="checkbox" size={15} class="home-task-check-empty" />

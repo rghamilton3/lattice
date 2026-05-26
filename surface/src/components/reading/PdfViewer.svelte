@@ -37,6 +37,8 @@
 					canvas.width = viewport.width;
 					canvas.height = viewport.height;
 					canvas.className = 'mb-2 max-w-full';
+					canvas.setAttribute('role', 'img');
+					canvas.setAttribute('aria-label', `PDF page ${i} of ${pdf.numPages}`);
 					// eslint-disable-next-line svelte/no-dom-manipulating
 					container.appendChild(canvas);
 					const ctx = canvas.getContext('2d')!;
@@ -53,10 +55,10 @@
 
 <div class="h-full overflow-y-auto p-4">
 	{#if loading}
-		<p class="text-xs text-text-muted">loading pdf…</p>
+		<p class="text-xs text-text-muted" role="status" aria-live="polite">loading pdf…</p>
 	{/if}
 	{#if error}
-		<p class="text-xs text-red-400">{error}</p>
+		<p class="text-xs text-red-400" role="alert">{error}</p>
 	{/if}
-	<div bind:this={container}></div>
+	<div bind:this={container} aria-label="PDF preview pages"></div>
 </div>

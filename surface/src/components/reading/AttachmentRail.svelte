@@ -36,9 +36,12 @@
 				: fetchWorkingAttachments(props.slug),
 		enabled: browser
 	}));
+	const attachmentCount = $derived(query.data?.length ?? 0);
 
 	let width = $state(browser ? parseInt(localStorage.getItem('lattice:att-rail-w') ?? '200') : 200);
 	let minimized = $state(browser ? localStorage.getItem('lattice:att-rail-min') === 'true' : false);
+	let deletingId = $state<number | null>(null);
+	let status = $state('');
 
 	function toggleMinimized() {
 		minimized = !minimized;
@@ -61,6 +64,21 @@
 		window.addEventListener('mouseup', onUp);
 	}
 
+	function resizeBy(delta: number) {
+		width = Math.max(150, Math.min(480, width + delta));
+		localStorage.setItem('lattice:att-rail-w', String(width));
+	}
+
+	function onResizeKey(e: KeyboardEvent) {
+		if (e.key === 'ArrowLeft') {
+			e.preventDefault();
+			resizeBy(20);
+		} else if (e.key === 'ArrowRight') {
+			e.preventDefault();
+			resizeBy(-20);
+		}
+	}
+
 	function rawUrl(id: number): string {
 		return props.kind === 'capture'
 			? attachmentRawUrl(props.captureId, id)
@@ -68,6 +86,9 @@
 	}
 
 	async function remove(id: number, filename: string) {
+		if (!window.confirm(`Delete ${filename}? This cannot be undone.`)) return;
+		deletingId = id;
+		status = `Deleting ${filename}`;
 		try {
 			if (props.kind === 'capture') {
 				await deleteAttachment(props.captureId, id);
@@ -75,9 +96,13 @@
 				await deleteWorkingAttachment(props.slug, id);
 			}
 			qc.invalidateQueries({ queryKey });
+			status = `Deleted ${filename}`;
 		} catch (err) {
 			logError('deleteAttachment', err);
+			status = `Failed to delete ${filename}`;
 			wb.showToast(`Failed to delete ${filename}`);
+		} finally {
+			deletingId = null;
 		}
 	}
 
@@ -88,11 +113,11 @@
 	}
 </script>
 
-{#if query.data && query.data.length > 0}
+{#if query.isLoading || query.isError || (query.data && query.data.length > 0)}
 	{#if minimized}
 		<div
 			class="att-rail att-rail--min"
-			title="Attachments ({query.data.length} file{query.data.length === 1 ? '' : 's'})"
+			title="Attachments ({attachmentCount} file{attachmentCount === 1 ? '' : 's'})"
 		>
 			<button
 				class="btn btn-ghost att-toggle"
@@ -101,23 +126,30 @@
 			>
 				<Icon name="maximize" size={13} />
 			</button>
-			<span class="att-min-badge">{query.data.length}</span>
+			<span class="att-min-badge">{attachmentCount}</span>
 		</div>
 	{:else}
-		<div class="att-rail" style="width:{width}px">
+		<aside class="att-rail" style="width:{width}px" aria-label="Attachments">
 			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 			<div
 				class="att-resize-handle"
 				role="separator"
 				aria-orientation="vertical"
+				aria-label="Resize attachments rail"
+				aria-valuemin="150"
+				aria-valuemax="480"
+				aria-valuenow={width}
+				tabindex="0"
 				onmousedown={startResize}
+				onkeydown={onResizeKey}
 			></div>
 			<div class="att-rail-head">
 				<span class="att-rail-title">Attachments</span>
 				<div class="row" style="gap:4px">
-					<span class="faint" style="font-size:11px"
-						>{query.data.length} file{query.data.length === 1 ? '' : 's'}</span
-					>
+					<span class="faint" style="font-size:11px">
+						{attachmentCount} file{attachmentCount === 1 ? '' : 's'}
+					</span>
 					<button
 						class="btn btn-ghost att-toggle"
 						onclick={toggleMinimized}
@@ -127,30 +159,40 @@
 					</button>
 				</div>
 			</div>
-			<div class="att-list">
-				{#each query.data as att (att.id)}
-					<div class="att-item">
-						<a
-							href={rawUrl(att.id)}
-							target="_blank"
-							rel="external noopener noreferrer"
-							class="att-name mono"
-							title={att.filename}
-						>
-							{att.filename}
-						</a>
-						<span class="att-size faint">{formatBytes(att.size_bytes)}</span>
-						<button
-							class="btn btn-ghost att-del"
-							onclick={() => remove(att.id, att.filename)}
-							aria-label="Delete {att.filename}"
-						>
-							×
-						</button>
-					</div>
-				{/each}
+			<div class="att-status" role="status" aria-live="polite">
+				{#if status}{status}{/if}
 			</div>
-		</div>
+			{#if query.isLoading}
+				<p class="att-message" role="status">Loading attachments…</p>
+			{:else if query.isError}
+				<p class="att-message att-message--error" role="alert">Failed to load attachments.</p>
+			{:else}
+				<div class="att-list" aria-label="Attachment files">
+					{#each query.data ?? [] as att (att.id)}
+						<div class="att-item">
+							<a
+								href={rawUrl(att.id)}
+								target="_blank"
+								rel="external noopener noreferrer"
+								class="att-name mono"
+								title={att.filename}
+							>
+								{att.filename}
+							</a>
+							<span class="att-size faint">{formatBytes(att.size_bytes)}</span>
+							<button
+								class="btn btn-ghost att-del"
+								onclick={() => remove(att.id, att.filename)}
+								disabled={deletingId !== null}
+								aria-label="Delete {att.filename}"
+							>
+								{deletingId === att.id ? '…' : '×'}
+							</button>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</aside>
 	{/if}
 {/if}
 
@@ -182,6 +224,11 @@
 	.att-resize-handle:hover {
 		background: var(--line-strong, var(--accent, var(--line)));
 	}
+	.att-resize-handle:focus-visible {
+		outline: 2px solid var(--accent, currentColor);
+		outline-offset: -2px;
+		background: var(--line-strong, var(--accent, var(--line)));
+	}
 	.att-rail-head {
 		display: flex;
 		align-items: center;
@@ -200,6 +247,20 @@
 		flex-direction: column;
 		gap: 2px;
 		padding: 0 10px 10px 16px;
+	}
+	.att-status {
+		min-height: 1rem;
+		padding: 0 10px 2px 16px;
+		font-size: 11px;
+		color: var(--text-mute);
+	}
+	.att-message {
+		padding: 0 10px 10px 16px;
+		font-size: 12px;
+		color: var(--text-mute);
+	}
+	.att-message--error {
+		color: var(--c-alarm);
 	}
 	.att-item {
 		display: flex;

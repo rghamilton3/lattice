@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildTestApp, json, req, type TestApp } from '../helpers/app';
 import { workingAttachmentsMdDir } from '../../src/search';
@@ -76,6 +76,32 @@ describe('POST /api/working/:slug/attachments', () => {
 		const res = await upload('no-such-slug', makeFormData('x.txt', 'x'));
 		expect(res.status).toBe(404);
 	});
+
+	it('returns 400 when multipart body is invalid', async () => {
+		const slug = insertWorking();
+		const res = await app.app.handle(
+			new Request(`http://localhost/api/working/${slug}/attachments`, {
+				method: 'POST',
+				headers: {
+					'x-forwarded-proto': 'https',
+					'x-authentik-username': 'test@local',
+					'content-type': 'multipart/form-data; boundary=missing',
+				},
+				body: 'not multipart',
+			}),
+		);
+		expect(res.status).toBe(400);
+		expect((await json(res)).error).toBe('Invalid multipart body');
+	});
+
+	it('returns 400 when file field is missing', async () => {
+		const slug = insertWorking();
+		const fd = new FormData();
+		fd.append('note', 'no file here');
+		const res = await upload(slug, fd);
+		expect(res.status).toBe(400);
+		expect((await json(res)).error).toBe('Missing file field');
+	});
 });
 
 describe('GET /api/working/:slug/attachments', () => {
@@ -125,6 +151,59 @@ describe('GET /api/working/:slug/attachments/:attId/raw', () => {
 		const { id } = await json(uploadRes);
 		const res = await app.app.handle(authGet(`/api/working/${slug2}/attachments/${id}/raw`));
 		expect(res.status).toBe(404);
+	});
+
+	it('returns 404 when attachment binary is missing from disk', async () => {
+		const slug = insertWorking();
+		const row = app.db
+			.prepare(
+				`INSERT INTO working_attachments
+				 (slug, content_type, filename, size_bytes, stored_path, created_at)
+				 VALUES (?, 'text/plain', 'missing.txt', 7, ?, '2026-01-01T00:00:00Z') RETURNING id`,
+			)
+			.get(slug, `working/${slug}/missing`) as { id: number };
+
+		const res = await app.app.handle(authGet(`/api/working/${slug}/attachments/${row.id}/raw`));
+		expect(res.status).toBe(404);
+		expect(await res.text()).toBe('File not found on disk');
+	});
+
+	it('returns 403 when stored path resolves outside working attachments dir', async () => {
+		const slug = insertWorking();
+		const outsidePath = join(app.env.attachmentsDir, 'outside.txt');
+		mkdirSync(app.env.attachmentsDir, { recursive: true });
+		writeFileSync(outsidePath, 'outside');
+		const row = app.db
+			.prepare(
+				`INSERT INTO working_attachments
+				 (slug, content_type, filename, size_bytes, stored_path, created_at)
+				 VALUES (?, 'text/plain', 'outside.txt', 7, 'outside.txt', '2026-01-01T00:00:00Z') RETURNING id`,
+			)
+			.get(slug) as { id: number };
+
+		const res = await app.app.handle(authGet(`/api/working/${slug}/attachments/${row.id}/raw`));
+		expect(res.status).toBe(403);
+	});
+
+	it('sanitizes filenames in Content-Disposition', async () => {
+		const slug = insertWorking();
+		const row = app.db
+			.prepare(
+				`INSERT INTO working_attachments
+				 (slug, content_type, filename, size_bytes, stored_path, created_at)
+				 VALUES (?, 'text/plain', 'bad "name".txt', 7, '', '2026-01-01T00:00:00Z') RETURNING id`,
+			)
+			.get(slug) as { id: number };
+		const dir = join(app.env.attachmentsDir, 'working', slug);
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(join(dir, String(row.id)), 'content');
+		app.db
+			.prepare('UPDATE working_attachments SET stored_path = ? WHERE id = ?')
+			.run(`working/${slug}/${row.id}`, row.id);
+
+		const res = await app.app.handle(authGet(`/api/working/${slug}/attachments/${row.id}/raw`));
+		expect(res.status).toBe(200);
+		expect(res.headers.get('Content-Disposition')).toContain('bad__name_.txt');
 	});
 });
 

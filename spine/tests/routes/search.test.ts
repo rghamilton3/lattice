@@ -134,6 +134,34 @@ describe('GET /api/search', () => {
 		expect((await json(res)).results).toEqual([]);
 	});
 
+	it('drops capture attachment hits without a backing metadata row', async () => {
+		app.qmd.setHits([
+			{
+				file: 'qmd://capture-attachments/9999.md',
+				score: 0.5,
+				bestChunk: 'missing attachment',
+				body: 'missing attachment',
+				displayPath: 'capture-attachments/9999.md',
+			},
+		]);
+		const res = await app.app.handle(req('/api/search?q=attachment'));
+		expect((await json(res)).results).toEqual([]);
+	});
+
+	it('drops working attachment hits without a backing metadata row', async () => {
+		app.qmd.setHits([
+			{
+				file: 'qmd://working-attachments/9999.md',
+				score: 0.5,
+				bestChunk: 'missing attachment',
+				body: 'missing attachment',
+				displayPath: 'working-attachments/9999.md',
+			},
+		]);
+		const res = await app.app.handle(req('/api/search?q=attachment'));
+		expect((await json(res)).results).toEqual([]);
+	});
+
 	it('returns a safe empty result list when search is unavailable', async () => {
 		const { __resetSearchForTests } = await import('../../src/search');
 		__resetSearchForTests();

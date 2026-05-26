@@ -19,47 +19,26 @@
       "registered_skills": [],
       "installed_at": "2026-05-24T02:57:50.455514+00:00"
     },
-    "product-forge": {
-      "version": "1.5.1",
+    "time-machine": {
+      "version": "1.0.0",
       "source": "local",
-      "manifest_hash": "sha256:3556b7ea53b5d2bf6d282e09dea46563f136437a0b6e1039507218d9c8abdf80",
+      "manifest_hash": "sha256:8ad282a27149aa67765dbebd4031a0175394de5eb1578649f563e651c9eb5a92",
       "enabled": true,
       "priority": 10,
       "registered_commands": {
         "claude": [
-          "speckit.product-forge.forge",
-          "speckit.product-forge.research",
-          "speckit.product-forge.product-spec",
-          "speckit.product-forge.revalidate",
-          "speckit.product-forge.bridge",
-          "speckit.product-forge.plan",
-          "speckit.product-forge.tasks",
-          "speckit.product-forge.implement",
-          "speckit.product-forge.verify-full",
-          "speckit.product-forge.test-plan",
-          "speckit.product-forge.test-run",
-          "speckit.product-forge.status",
-          "speckit.product-forge.problem-discovery",
-          "speckit.product-forge.api-docs",
-          "speckit.product-forge.security-check",
-          "speckit.product-forge.tracking-plan",
-          "speckit.product-forge.pre-impl-review",
-          "speckit.product-forge.code-review",
-          "speckit.product-forge.release-readiness",
-          "speckit.product-forge.sync-verify",
-          "speckit.product-forge.change-request",
-          "speckit.product-forge.portfolio",
-          "speckit.product-forge.backfill",
-          "speckit.product-forge.monitoring-setup",
-          "speckit.product-forge.migration-plan",
-          "speckit.product-forge.i18n-harvest",
-          "speckit.product-forge.experiment-design",
-          "speckit.product-forge.feature-flag-cleanup",
-          "speckit.product-forge.retrospective"
+          "speckit.time-machine.analyze",
+          "speckit.time-machine.next",
+          "speckit.time-machine.status"
+        ],
+        "opencode": [
+          "speckit.time-machine.analyze",
+          "speckit.time-machine.next",
+          "speckit.time-machine.status"
         ]
       },
       "registered_skills": [],
-      "installed_at": "2026-05-24T03:29:57.744406+00:00"
+      "installed_at": "2026-05-25T23:38:14.810770+00:00"
     }
   }
 }

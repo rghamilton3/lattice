@@ -90,7 +90,10 @@ test('process mode: k / a / space advances queue and renders done card', async (
 	];
 	await page.route('**/api/captures**', (route) => {
 		if (route.request().method() === 'GET')
-			return route.fulfill({ status: 200, body: JSON.stringify(captures) });
+			return route.fulfill({
+				status: 200,
+				body: JSON.stringify({ items: captures, next_cursor: null })
+			});
 		return route.fulfill({ status: 200, body: '{}' });
 	});
 

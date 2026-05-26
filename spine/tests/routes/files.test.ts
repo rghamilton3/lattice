@@ -13,17 +13,114 @@ afterEach(async () => {
 	await app?.cleanup();
 });
 
-function seedFile(app: TestApp, path: string, text = 'body', machine = 'm1', hash = 'h1') {
+function seedFile(
+	app: TestApp,
+	path: string,
+	text = 'body',
+	machine = 'm1',
+	hash = 'h1',
+	modifiedAt = '2026-01-01T00:00:00.000Z',
+) {
 	return app.db
 		.prepare(
 			`INSERT INTO file_index
          (machine_id, path, hash, mime_type, text, modified_at, size_bytes, indexed_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
 		)
-		.get(machine, path, hash, 'text/plain', text, '2026-01-01', text.length, '2026-01-01') as {
+		.get(machine, path, hash, 'text/plain', text, modifiedAt, text.length, '2026-01-01') as {
 		id: number;
 	};
 }
+
+function encodeFileCursor(cursor: unknown): string {
+	return Buffer.from(JSON.stringify(cursor)).toString('base64url');
+}
+
+describe('GET /api/files', () => {
+	it('returns a paginated first page ordered by modified_at and id descending', async () => {
+		seedFile(app, '/data/old.txt', 'old', 'm1', 'h1', '2026-01-01T00:00:00.000Z');
+		seedFile(app, '/data/middle.txt', 'middle', 'm1', 'h2', '2026-01-02T00:00:00.000Z');
+		seedFile(app, '/data/new.txt', 'new', 'm1', 'h3', '2026-01-03T00:00:00.000Z');
+
+		const res = await app.app.handle(req('/api/files?limit=2'));
+		expect(res.status).toBe(200);
+		const body = await json(res);
+		expect(body.items.map((f: any) => f.path)).toEqual(['/data/new.txt', '/data/middle.txt']);
+		expect(typeof body.next_cursor).toBe('string');
+	});
+
+	it('returns the next files page with no duplicates', async () => {
+		seedFile(app, '/data/old.txt', 'old', 'm1', 'h1', '2026-01-01T00:00:00.000Z');
+		seedFile(app, '/data/middle.txt', 'middle', 'm1', 'h2', '2026-01-02T00:00:00.000Z');
+		seedFile(app, '/data/new.txt', 'new', 'm1', 'h3', '2026-01-03T00:00:00.000Z');
+
+		const first = await app.app.handle(req('/api/files?limit=2'));
+		const firstBody = await json(first);
+		const second = await app.app.handle(req(`/api/files?limit=2&cursor=${firstBody.next_cursor}`));
+		const secondBody = await json(second);
+
+		expect(secondBody.items.map((f: any) => f.path)).toEqual(['/data/old.txt']);
+		expect(secondBody.next_cursor).toBeNull();
+	});
+
+	it('uses id as a cursor tie-breaker when file timestamps match', async () => {
+		seedFile(app, '/data/first.txt', 'first', 'm1', 'h1', '2026-01-01T00:00:00.000Z');
+		seedFile(app, '/data/second.txt', 'second', 'm1', 'h2', '2026-01-01T00:00:00.000Z');
+		seedFile(app, '/data/third.txt', 'third', 'm1', 'h3', '2026-01-01T00:00:00.000Z');
+
+		const first = await app.app.handle(req('/api/files?limit=2'));
+		const firstBody = await json(first);
+		const second = await app.app.handle(req(`/api/files?limit=2&cursor=${firstBody.next_cursor}`));
+		const secondBody = await json(second);
+
+		expect([...firstBody.items, ...secondBody.items].map((f: any) => f.path)).toEqual([
+			'/data/third.txt',
+			'/data/second.txt',
+			'/data/first.txt',
+		]);
+		expect(secondBody.next_cursor).toBeNull();
+	});
+
+	it('respects the file limit cap', async () => {
+		for (let i = 0; i < 5; i++) seedFile(app, `/data/${i}.txt`, `${i}`, 'm1', `h${i}`);
+
+		const res = await app.app.handle(req('/api/files?limit=2'));
+		expect((await json(res)).items.length).toBe(2);
+
+		const big = await app.app.handle(req('/api/files?limit=900'));
+		expect(big.status).toBe(200);
+		expect((await json(big)).items.length).toBe(5);
+
+		for (let i = 5; i < 505; i++) seedFile(app, `/data/${i}.txt`, `${i}`, 'm1', `h${i}`);
+		const capped = await app.app.handle(req('/api/files?limit=900'));
+		expect(capped.status).toBe(200);
+		expect((await json(capped)).items.length).toBe(500);
+	});
+
+	it('returns 400 for malformed file cursors', async () => {
+		const res = await app.app.handle(req('/api/files?cursor=not-a-cursor'));
+		expect(res.status).toBe(400);
+		expect(await json(res)).toEqual({ error: 'Invalid cursor' });
+	});
+
+	it('returns 400 for empty file cursors', async () => {
+		const res = await app.app.handle(req('/api/files?cursor='));
+		expect(res.status).toBe(400);
+		expect(await json(res)).toEqual({ error: 'Invalid cursor' });
+	});
+
+	it('returns 400 for non-positive file cursor ids', async () => {
+		const cursor = encodeFileCursor({
+			v: 1,
+			kind: 'files',
+			modified_at: '2026-01-01T00:00:00.000Z',
+			id: 0,
+		});
+		const res = await app.app.handle(req(`/api/files?cursor=${cursor}`));
+		expect(res.status).toBe(400);
+		expect(await json(res)).toEqual({ error: 'Invalid cursor' });
+	});
+});
 
 describe('GET /api/files/:id', () => {
 	it('returns the row when id exists', async () => {

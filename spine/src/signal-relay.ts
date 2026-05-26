@@ -4,31 +4,48 @@ import {
 	parseSignalMessage,
 	isRpcError,
 } from './signal/messages';
+import { realpath } from 'node:fs/promises';
+import { resolve, sep } from 'node:path';
 
-const AGENT_TOKEN = process.env.LATTICE_AGENT_TOKEN ?? '';
-const SIGNAL_PHONE = process.env.SIGNAL_PHONE_NUMBER ?? '';
-const RPC_HOST = process.env.SIGNAL_RPC_HOST ?? '127.0.0.1:7583';
-const SPINE_URL = process.env.SPINE_URL ?? 'http://127.0.0.1:3000/api/agent/capture';
-const SIGNAL_ATTACHMENTS_DIR = process.env.SIGNAL_ATTACHMENTS_DIR ?? '';
+export interface RelayConfig {
+	agentToken: string;
+	signalPhone: string;
+	rpcHost: string;
+	spineUrl: string;
+	signalAttachmentsDir: string;
+}
 
-if (!AGENT_TOKEN) {
-	console.error('[signal-relay] LATTICE_AGENT_TOKEN is required');
-	process.exit(1);
+export function loadRelayConfig(env: NodeJS.ProcessEnv = process.env): RelayConfig {
+	return {
+		agentToken: env.LATTICE_AGENT_TOKEN ?? '',
+		signalPhone: env.SIGNAL_PHONE_NUMBER ?? '',
+		rpcHost: env.SIGNAL_RPC_HOST ?? '127.0.0.1:7583',
+		spineUrl: env.SPINE_URL ?? 'http://127.0.0.1:3000/api/agent/capture',
+		signalAttachmentsDir: env.SIGNAL_ATTACHMENTS_DIR ?? '',
+	};
 }
-if (!SIGNAL_PHONE) {
-	console.error('[signal-relay] SIGNAL_PHONE_NUMBER is required');
-	process.exit(1);
-}
-if (!SIGNAL_ATTACHMENTS_DIR) {
-	console.warn('[signal-relay] SIGNAL_ATTACHMENTS_DIR not set — attachments will not be stored');
+
+export function validateRelayConfig(config: RelayConfig): string[] {
+	const errors: string[] = [];
+	if (!config.agentToken) errors.push('LATTICE_AGENT_TOKEN is required');
+	if (!config.signalPhone) errors.push('SIGNAL_PHONE_NUMBER is required');
+	return errors;
 }
 
 // Derive base URL from SPINE_URL for constructing attachment endpoint paths.
-const SPINE_BASE = SPINE_URL.replace(/\/api\/agent\/capture$/, '');
+export function spineBaseFromCaptureUrl(spineUrl: string): string {
+	return spineUrl.replace(/\/api\/agent\/capture$/, '');
+}
 
-const colonIdx = RPC_HOST.lastIndexOf(':');
-const hostname = RPC_HOST.slice(0, colonIdx);
-const port = parseInt(RPC_HOST.slice(colonIdx + 1), 10);
+let config = loadRelayConfig();
+
+function parseRpcHost(rpcHost: string): { hostname: string; port: number } {
+	const colonIdx = rpcHost.lastIndexOf(':');
+	return {
+		hostname: rpcHost.slice(0, colonIdx),
+		port: parseInt(rpcHost.slice(colonIdx + 1), 10),
+	};
+}
 
 // State machine invariant: at most one of {activeSocket, connecting,
 // reconnectTimer} is set. The trio together prevents the runaway socket
@@ -48,7 +65,7 @@ function sendReply(message: string): void {
 			jsonrpc: '2.0',
 			method: 'send',
 			id: Date.now(),
-			params: { recipient: [SIGNAL_PHONE], message },
+			params: { recipient: [config.signalPhone], message },
 		}) + '\n';
 	try {
 		const wrote = activeSocket.write(payload);
@@ -71,7 +88,7 @@ function sendReaction(emoji: string, targetAuthor: string, targetTimestamp: numb
 			method: 'sendReaction',
 			id: Date.now(),
 			params: {
-				recipient: [SIGNAL_PHONE],
+				recipient: [config.signalPhone],
 				emoji,
 				targetAuthor,
 				targetTimestamp,
@@ -107,13 +124,14 @@ function connect(): void {
 	if (connecting || activeSocket) return;
 	connecting = true;
 	let buffer = '';
+	const { hostname, port } = parseRpcHost(config.rpcHost);
 
 	Bun.connect({
 		hostname,
 		port,
 		socket: {
 			open(socket) {
-				console.log(`[signal-relay] connected to ${RPC_HOST}`);
+				console.log(`[signal-relay] connected to ${config.rpcHost}`);
 				backoff = 1_000;
 				connecting = false;
 				// Defensive: if somehow a stale socket survived, end it before
@@ -188,7 +206,7 @@ const debugHook: ParseDebugHook | undefined =
 		: undefined;
 
 function handleMessage(msg: unknown): void {
-	const parsed = parseSignalMessage(msg, SIGNAL_PHONE, undefined, debugHook);
+	const parsed = parseSignalMessage(msg, config.signalPhone, undefined, debugHook);
 	if (!parsed) {
 		if (isRpcError(msg)) {
 			console.error(
@@ -204,7 +222,7 @@ function handleMessage(msg: unknown): void {
 	postCapture(parsed.captureText, parsed.capturedAt)
 		.then((result) => {
 			sendReaction('✅', parsed.sourceNumber, parsed.sourceTimestamp);
-			if (parsed.attachments.length === 0 || !SIGNAL_ATTACHMENTS_DIR) return;
+			if (parsed.attachments.length === 0 || !config.signalAttachmentsDir) return;
 			for (const att of parsed.attachments) {
 				postAttachment(result.id, att).catch((err: Error) =>
 					console.error(`[signal-relay] failed to store attachment ${att.id}:`, err.message),
@@ -226,18 +244,19 @@ interface CaptureResult {
 }
 
 async function postCapture(text: string, captured_at: string): Promise<CaptureResult> {
-	const res = await fetch(SPINE_URL, {
+	const res = await fetch(config.spineUrl, {
 		method: 'POST',
 		headers: {
 			'content-type': 'application/json',
-			authorization: `Bearer ${AGENT_TOKEN}`,
+			authorization: `Bearer ${config.agentToken}`,
 			'x-forwarded-proto': 'https',
 		},
 		body: JSON.stringify({ text, source: 'signal', captured_at }),
 	});
 
 	if (!res.ok) {
-		throw new Error(`POST /api/agent/capture returned ${res.status}`);
+		const body = await res.text().catch(() => '');
+		throw new Error(`POST /api/agent/capture returned ${res.status}${body ? `: ${body}` : ''}`);
 	}
 
 	const result = (await res.json()) as CaptureResult;
@@ -256,41 +275,91 @@ async function postCapture(text: string, captured_at: string): Promise<CaptureRe
 	return result;
 }
 
-async function postAttachment(captureId: number, att: SignalAttachment): Promise<void> {
+export async function resolveAttachmentPath(
+	attachmentsDir: string,
+	attachmentId: string,
+): Promise<string> {
+	if (!attachmentsDir) throw new Error('SIGNAL_ATTACHMENTS_DIR is not configured');
+	if (!attachmentId || attachmentId.includes('\0')) throw new Error('attachment id is invalid');
+
+	const base = await realpath(attachmentsDir);
+	const candidate = resolve(base, attachmentId);
+	const resolved = await realpath(candidate);
+	const baseWithSep = base.endsWith(sep) ? base : `${base}${sep}`;
+	if (resolved !== base && !resolved.startsWith(baseWithSep)) {
+		throw new Error(`attachment path escapes configured directory: ${attachmentId}`);
+	}
+	return resolved;
+}
+
+export interface AttachmentUploadBody {
+	signal_id: string;
+	content_type: string;
+	filename: string;
+	data: string;
+	size_bytes: number;
+}
+
+export async function buildAttachmentUploadBody(
+	att: SignalAttachment & { id: string },
+	filePath: string,
+): Promise<AttachmentUploadBody> {
+	const bytes = await Bun.file(filePath).arrayBuffer();
+	return {
+		signal_id: att.id,
+		content_type: att.contentType ?? 'application/octet-stream',
+		filename: att.filename ?? '',
+		data: Buffer.from(bytes).toString('base64'),
+		size_bytes: att.size ?? bytes.byteLength,
+	};
+}
+
+export interface PostAttachmentOptions {
+	attachmentsDir?: string;
+	spineBase?: string;
+	agentToken?: string;
+	fetchImpl?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+}
+
+export async function postAttachment(
+	captureId: number,
+	att: SignalAttachment,
+	options: PostAttachmentOptions = {},
+): Promise<void> {
 	if (!att.id) {
 		console.warn('[signal-relay] attachment missing id, skipping');
 		return;
 	}
 
-	const filePath = `${SIGNAL_ATTACHMENTS_DIR}/${att.id}`;
-	let bytes: ArrayBuffer;
+	const attachmentsDir = options.attachmentsDir ?? config.signalAttachmentsDir;
+	const spineBase = options.spineBase ?? spineBaseFromCaptureUrl(config.spineUrl);
+	const agentToken = options.agentToken ?? config.agentToken;
+	const fetchImpl = options.fetchImpl ?? fetch;
+	let body: AttachmentUploadBody;
 	try {
-		bytes = await Bun.file(filePath).arrayBuffer();
+		const filePath = await resolveAttachmentPath(attachmentsDir, att.id);
+		body = await buildAttachmentUploadBody(att as SignalAttachment & { id: string }, filePath);
 	} catch (err) {
-		throw new Error(`could not read ${filePath}: ${(err as Error).message}`);
+		throw new Error(`could not read attachment ${att.id}: ${(err as Error).message}`);
 	}
 
-	const data = Buffer.from(bytes).toString('base64');
-	const url = `${SPINE_BASE}/api/agent/capture/${captureId}/attachments`;
+	const url = `${spineBase}/api/agent/capture/${captureId}/attachments`;
 
-	const res = await fetch(url, {
+	const res = await fetchImpl(url, {
 		method: 'POST',
 		headers: {
 			'content-type': 'application/json',
-			authorization: `Bearer ${AGENT_TOKEN}`,
+			authorization: `Bearer ${agentToken}`,
 			'x-forwarded-proto': 'https',
 		},
-		body: JSON.stringify({
-			signal_id: att.id,
-			content_type: att.contentType ?? 'application/octet-stream',
-			filename: att.filename ?? '',
-			data,
-			size_bytes: att.size ?? bytes.byteLength,
-		}),
+		body: JSON.stringify(body),
 	});
 
 	if (!res.ok) {
-		throw new Error(`POST /api/agent/capture/${captureId}/attachments returned ${res.status}`);
+		const responseBody = await res.text().catch(() => '');
+		throw new Error(
+			`POST /api/agent/capture/${captureId}/attachments returned ${res.status}${responseBody ? `: ${responseBody}` : ''}`,
+		);
 	}
 
 	const { id } = (await res.json()) as { id: number };
@@ -299,4 +368,19 @@ async function postAttachment(captureId: number, att: SignalAttachment): Promise
 	);
 }
 
-connect();
+export function main(): void {
+	config = loadRelayConfig();
+	const errors = validateRelayConfig(config);
+	for (const error of errors) {
+		console.error(`[signal-relay] ${error}`);
+	}
+	if (errors.length > 0) process.exit(1);
+	if (!config.signalAttachmentsDir) {
+		console.warn('[signal-relay] SIGNAL_ATTACHMENTS_DIR not set - attachments will not be stored');
+	}
+	connect();
+}
+
+if (import.meta.main) {
+	main();
+}

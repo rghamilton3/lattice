@@ -12,37 +12,44 @@ Personal knowledge management substrate, designed around ADHD-aware constraints:
 
 ## Components
 
-| Directory | Language | Role |
-|-----------|----------|------|
-| [`spine/`](./spine) | TypeScript (Bun, Elysia) | Central server on the VPS. Owns SQLite, hosts QMD search, serves the API and surface. |
-| [`agent/`](./agent) | Rust | Per-machine local file indexer. Polls watched directories, POSTs text to spine. |
-| [`surface/`](./surface) | TypeScript (SvelteKit) | SPA workbench: search, reading panes, working docs, file attachments. Served as static files by spine. |
+| Directory               | Language                 | Role                                                                                                   |
+| ----------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------ |
+| [`spine/`](./spine)     | TypeScript (Bun, Elysia) | Central server on the VPS. Owns SQLite, hosts QMD search, serves the API and surface.                  |
+| [`agent/`](./agent)     | Rust                     | Per-machine local file indexer. Polls watched directories, POSTs text to spine.                        |
+| [`surface/`](./surface) | TypeScript (SvelteKit)   | SPA workbench: search, reading panes, working docs, file attachments. Served as static files by spine. |
 
 See [`plan.md`](./plan.md) for the full architecture and phased build plan.
 
-## Signal relay
+## Signal Relay
 
-The relay bridges Signal messages to the spine. It runs as a Docker container alongside signal-cli.
+The relay bridges Signal Note-to-Self messages to the spine. It runs as a Docker container alongside signal-cli and posts accepted messages to `/api/agent/capture` with source `signal`.
+
+The relay only captures messages from your configured Signal number to the same number. Normal conversations, group messages, malformed frames, and empty messages are skipped.
 
 ```bash
 cd spine
 docker compose -f docker-compose.relay.yml up -d
 ```
 
-**Required env vars** (set in `spine/.env` or injected via your environment):
+**Environment variables** (set in `spine/.env` or injected via your environment):
 
-| Variable | Description |
-|---|---|
-| `LATTICE_AGENT_TOKEN` | Bearer token for `/api/agent/*` routes |
-| `SIGNAL_PHONE_NUMBER` | Your Signal number in E.164 format (e.g. `+15551234567`) |
-| `SIGNAL_ATTACHMENTS_DIR` | **Required for voice notes and file attachments.** Path *inside the container* where signal-cli attachment files are readable. Set to `/signal-cli-attachments` and bind-mount your signal-cli attachments directory to that path in `docker-compose.relay.yml`. Without this, the relay captures text only. |
+| Variable                 | Description                                                                                                                                                                                                                                               |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LATTICE_AGENT_TOKEN`    | Bearer token for `/api/agent/*` routes                                                                                                                                                                                                                    |
+| `SIGNAL_PHONE_NUMBER`    | Your Signal number in E.164 format (e.g. `+15551234567`)                                                                                                                                                                                                  |
+| `SIGNAL_RPC_HOST`        | Signal JSON-RPC host and port. Defaults to `127.0.0.1:7583` when omitted.                                                                                                                                                                                 |
+| `SPINE_URL`              | Capture endpoint. Defaults to `http://127.0.0.1:3000/api/agent/capture` for same-host deployments.                                                                                                                                                        |
+| `SIGNAL_ATTACHMENTS_DIR` | Path _inside the container_ where signal-cli attachment files are readable. Set to `/signal-cli-attachments` and bind-mount your signal-cli attachments directory to that path in `docker-compose.relay.yml`. Without this, the relay captures text only. |
+| `SIGNAL_RELAY_DEBUG`     | Set to `1` to log parser skip reasons while troubleshooting Signal frame shapes.                                                                                                                                                                          |
 
-To configure attachment storage, edit the `volumes:` block in `docker-compose.relay.yml` to point to your signal-cli attachments directory (check your signal-cli data directory — commonly `/var/lib/signal-cli/data/attachments`):
+To configure voice note and file attachment storage, edit the `volumes:` block in `docker-compose.relay.yml` to point to your signal-cli attachments directory (check your signal-cli data directory, commonly `/var/lib/signal-cli/data/attachments`):
 
 ```yaml
 volumes:
   - /var/lib/signal-cli/data/attachments:/signal-cli-attachments:ro
 ```
+
+Relay diagnostics are printed as plain text. Startup fails fast when `LATTICE_AGENT_TOKEN` or `SIGNAL_PHONE_NUMBER` is missing; missing `SIGNAL_ATTACHMENTS_DIR` is only a warning because text capture still works.
 
 ## Install the agent
 

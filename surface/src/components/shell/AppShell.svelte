@@ -32,6 +32,10 @@
 	});
 
 	const agentCount = $derived(statusQuery.data?.active_agent_count ?? null);
+	const statusState = $derived(statusQuery.isError ? 'warn' : 'ok');
+	const agentLabel = $derived(
+		statusQuery.isError ? 'unavailable' : agentCount !== null ? String(agentCount) : 'unknown'
+	);
 	const latestScan = $derived(
 		(statusQuery.data?.agents ?? [])
 			.map((a) => a.last_scan_at)
@@ -164,7 +168,12 @@
 		</div>
 
 		<div class="row" style="gap:6px">
-			<button class="capture-button" title="Quick capture (c)" onclick={oncapture}>
+			<button
+				class="capture-button"
+				title="Quick capture (c)"
+				aria-label="Quick capture"
+				onclick={oncapture}
+			>
 				<Icon name="plus" size={14} />
 				<span>Capture</span>
 				<span class="kbd" style="margin-left:6px">c</span>
@@ -201,12 +210,12 @@
 	<!-- BOTTOM STATUS BAR -->
 	<footer class="statusbar">
 		<div class="row" style="gap:14px">
-			<span class="status-dot" data-state="ok"></span>
+			<span class="status-dot" data-state={statusState} aria-hidden="true"></span>
 			<span class="faint" style="font-size:12px">
 				spine&nbsp;·&nbsp;<span class="mono">lattice.rghsoftware.com</span>
 			</span>
 			<span class="faint" style="font-size:12px">
-				agents&nbsp;·&nbsp;{agentCount !== null ? agentCount : '—'}
+				agents&nbsp;·&nbsp;{agentLabel}
 			</span>
 			<span class="faint" style="font-size:12px">
 				sync&nbsp;·&nbsp;{latestScan ? relTime(latestScan, now) : 'never'}

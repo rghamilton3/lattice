@@ -56,6 +56,36 @@ describe('WorkbenchStore', () => {
 		expect(b.vimMode).toBe(false);
 	});
 
+	it('ignores corrupted persisted session data', () => {
+		localStorage.setItem('lattice.session', '{not json');
+		const wb = new WorkbenchStore();
+		expect(wb.theme).toBe('light');
+		expect(wb.density).toBe('comfortable');
+		expect(wb.posture).toBe('quiet');
+		expect(wb.focusMode).toBe(false);
+	});
+
+	it('ignores invalid persisted enum values while keeping valid booleans', () => {
+		localStorage.setItem(
+			'lattice.session',
+			JSON.stringify({
+				theme: 'neon',
+				density: 'microscopic',
+				font: '',
+				posture: 'urgent',
+				focusMode: true,
+				vimMode: false
+			})
+		);
+		const wb = new WorkbenchStore();
+		expect(wb.theme).toBe('light');
+		expect(wb.density).toBe('comfortable');
+		expect(wb.font).toBe('Inter');
+		expect(wb.posture).toBe('quiet');
+		expect(wb.focusMode).toBe(true);
+		expect(wb.vimMode).toBe(false);
+	});
+
 	it('view is derived from panes[0].kind, not persisted', () => {
 		const a = new WorkbenchStore();
 		expect(a.view).toBe('home');

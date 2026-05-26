@@ -9,6 +9,7 @@
 	let html = $state('');
 	let mermaidInitialized = false;
 	let uid = 0;
+	let renderSeq = 0;
 
 	onMount(() => {
 		if (document.getElementById('katex-css')) return;
@@ -60,12 +61,30 @@
 		return (await instance.parse(md)) as string;
 	}
 
+	function escapeHtml(value: string): string {
+		return value
+			.replaceAll('&', '&amp;')
+			.replaceAll('<', '&lt;')
+			.replaceAll('>', '&gt;')
+			.replaceAll('"', '&quot;')
+			.replaceAll("'", '&#39;');
+	}
+
 	$effect(() => {
 		const md = content;
-		renderMarkdown(md).then((result) => {
-			// Allow SVG (mermaid) and MathML (KaTeX) in addition to HTML
-			html = DOMPurify.sanitize(result, { USE_PROFILES: { html: true, svg: true, mathMl: true } });
-		});
+		const seq = ++renderSeq;
+		renderMarkdown(md)
+			.then((result) => {
+				if (seq !== renderSeq) return;
+				// Allow SVG (mermaid) and MathML (KaTeX) in addition to HTML.
+				html = DOMPurify.sanitize(result, {
+					USE_PROFILES: { html: true, svg: true, mathMl: true }
+				});
+			})
+			.catch(() => {
+				if (seq !== renderSeq) return;
+				html = `<pre><code>${escapeHtml(md)}</code></pre>`;
+			});
 	});
 </script>
 

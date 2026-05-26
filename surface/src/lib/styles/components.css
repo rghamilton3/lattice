@@ -282,6 +282,33 @@
 	background: var(--c-alarm);
 }
 
+@media (max-width: 760px) {
+	.shell {
+		grid-template-rows: auto 1fr auto;
+	}
+	.toolbar,
+	.statusbar {
+		flex-wrap: wrap;
+		height: auto;
+		min-height: 48px;
+		padding-block: 8px;
+	}
+	.toolbar-center {
+		order: 3;
+		flex-basis: 100%;
+	}
+	.brand-name,
+	.palette-button-label,
+	.palette-kbd,
+	.statusbar-tagline {
+		display: none;
+	}
+	.statusbar {
+		gap: 8px;
+		justify-content: flex-start;
+	}
+}
+
 /* ── Doc view ────────────────────────────────────────────────────────────── */
 .doc-view {
 	display: flex;
@@ -545,6 +572,28 @@
 	display: flex;
 	flex-direction: column;
 	animation: drawer-slide-in var(--t-base) var(--ease);
+}
+@media (max-width: 520px) {
+	.settings-drawer {
+		left: 0;
+		width: auto;
+	}
+	.palette {
+		left: 8px;
+		right: 8px;
+		width: auto;
+		transform: none;
+	}
+	.palette-row {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 4px;
+	}
+	.palette-hint {
+		max-width: none;
+	}
+	.palette-kbd-row {
+		display: none;
+	}
 }
 @media (prefers-reduced-motion: reduce) {
 	.settings-drawer {

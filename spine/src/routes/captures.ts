@@ -4,6 +4,7 @@ import type { CaptureRow } from '../db/rows';
 import { writeCaptureFile, refreshIndex } from '../search';
 import { onCapture, emitCapture } from '../captureEvents';
 import { parseCommand } from '../commands';
+import { listArchiveInboxRows } from '../archives';
 
 const VALID_TRIAGE_ACTIONS = new Set(['keep', 'archive', 'promote', 'task', 'skip']);
 const MAX_CAPTURE_TEXT_LENGTH = 10_000;
@@ -48,6 +49,69 @@ function parseCursor(value: string | undefined): CaptureCursor | null | undefine
 
 export const capturesRoutes = (db: Database) =>
 	new Elysia()
+		.get(
+			'/api/inbox',
+			({ query }) => {
+				const raw = query.limit ? Number(query.limit) : 50;
+				const limit = Math.min(Number.isFinite(raw) && raw > 0 ? raw : 50, 200);
+				const captureRows = db
+					.query(
+						`SELECT id, text, source, captured_at, ingested_at, triaged_at, triage_action, ${IMAGE_SUBQ}
+						 FROM captures WHERE triaged_at IS NULL ORDER BY ingested_at DESC, id DESC LIMIT ?`,
+					)
+					.all(limit) as CaptureRow[];
+				const captureItems = captureRows.map((c) => ({
+					item_type: 'capture',
+					id: `capture:${c.id}`,
+					capture_id: c.id,
+					title: c.text,
+					summary: c.text,
+					source: c.source,
+					created_at: c.ingested_at,
+					capture: c,
+					actions: [
+						{ action: 'keep', label: 'Keep', shortcut: 'k', tone: 'primary' },
+						{ action: 'archive', label: 'Archive', shortcut: 'a', tone: 'neutral' },
+						{ action: 'promote', label: 'Promote', shortcut: 'p', tone: 'neutral' },
+						{ action: 'task', label: 'Task', shortcut: 't', tone: 'neutral' },
+						{ action: 'skip', label: 'Skip', shortcut: 'Space', tone: 'neutral' },
+					],
+				}));
+				const archiveItems = listArchiveInboxRows(db, limit).map((a) => {
+					const recent = a.quality === 'good';
+					return {
+						item_type: recent ? 'archive_recent' : 'archive_recapture',
+						id: `archive:${a.id}`,
+						archive_id: a.id,
+						title: a.title ?? a.url,
+						summary: recent
+							? (a.why_saved ?? a.extracted_text.slice(0, 180))
+							: `Capture looks ${a.quality} and may need desktop recapture.`,
+						url: a.url,
+						source: a.source,
+						quality: a.quality,
+						created_at: a.archived_at,
+						actions: recent
+							? [
+									{ action: 'keep', label: 'Keep', shortcut: 'k', tone: 'primary' },
+									{ action: 'archive', label: 'Archive', shortcut: 'a', tone: 'neutral' },
+									{ action: 'recapture', label: 'Re-capture', shortcut: 'r', tone: 'neutral' },
+									{ action: 'skip', label: 'Skip', shortcut: 'Space', tone: 'neutral' },
+								]
+							: [
+									{ action: 'recapture', label: 'Re-capture', shortcut: 'r', tone: 'primary' },
+									{ action: 'delete', label: 'Delete', shortcut: 'd', tone: 'destructive' },
+									{ action: 'skip', label: 'Skip', shortcut: 'Space', tone: 'neutral' },
+								],
+					};
+				});
+				const items = [...captureItems, ...archiveItems]
+					.sort((a, b) => b.created_at.localeCompare(a.created_at))
+					.slice(0, limit);
+				return { items, next_cursor: null };
+			},
+			{ query: t.Object({ limit: t.Optional(t.String()), cursor: t.Optional(t.String()) }) },
+		)
 		.get(
 			'/api/captures',
 			({ query, set }) => {

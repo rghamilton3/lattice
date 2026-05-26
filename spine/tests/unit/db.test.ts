@@ -22,6 +22,7 @@ describe('db.initDb', () => {
 		expect(names).toContain('captures');
 		expect(names).toContain('file_index');
 		expect(names).toContain('capture_attachments');
+		expect(names).toContain('archives');
 
 		const migrations = db.query('SELECT name FROM schema_migrations ORDER BY name').all() as {
 			name: string;
@@ -36,6 +37,7 @@ describe('db.initDb', () => {
 			'007_agent_status.sql',
 			'008_attachment_upload_source.sql',
 			'009_working_attachments.sql',
+			'010_archives.sql',
 		]);
 		db.close();
 	});
@@ -74,7 +76,7 @@ describe('db.initDb', () => {
 		const { initDb, getMigrationStatus } = await import('../../src/db');
 		const db = initDb();
 
-		expect(getMigrationStatus(db)).toEqual({ ready: true, applied: 9 });
+		expect(getMigrationStatus(db)).toEqual({ ready: true, applied: 10 });
 		db.close();
 	});
 

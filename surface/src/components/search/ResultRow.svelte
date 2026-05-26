@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { createWorking } from '$lib/api/working';
+	import { archiveRawUrl } from '$lib/api/archives';
 	import type { SearchResult, DocRef } from '$lib/types';
 	import Icon from '$components/icons/Icon.svelte';
 	import { relTime } from '$lib/utils/relTime';
@@ -12,23 +13,28 @@
 	const chipClass = $derived(
 		result.kind === 'local-file'
 			? 'chip chip-file'
-			: result.kind === 'capture' || result.kind === 'capture-attachment'
-				? 'chip chip-capture'
-				: 'chip chip-working'
+			: result.kind === 'archive'
+				? 'chip chip-working'
+				: result.kind === 'capture' || result.kind === 'capture-attachment'
+					? 'chip chip-capture'
+					: 'chip chip-working'
 	);
 
 	const title = $derived(
 		result.kind === 'capture'
 			? `capture #${result.id}`
-			: result.kind === 'local-file'
-				? (result.path.split('/').pop() ?? result.path)
-				: result.kind === 'capture-attachment' || result.kind === 'working-attachment'
-					? result.filename
-					: `${result.slug}.md`
+			: result.kind === 'archive'
+				? (result.title ?? result.url)
+				: result.kind === 'local-file'
+					? (result.path.split('/').pop() ?? result.path)
+					: result.kind === 'capture-attachment' || result.kind === 'working-attachment'
+						? result.filename
+						: `${result.slug}.md`
 	);
 
 	function refToDocRef(r: SearchResult): DocRef {
 		if (r.kind === 'capture') return { kind: 'capture', id: r.id };
+		if (r.kind === 'archive') return { kind: 'file', id: r.id };
 		if (r.kind === 'working') return { kind: 'working', slug: r.slug };
 		if (r.kind === 'capture-attachment') return { kind: 'capture', id: r.capture_id };
 		if (r.kind === 'working-attachment') return { kind: 'working', slug: r.slug };
@@ -45,7 +51,7 @@
 		return {
 			kind: 'similar' as const,
 			id: r.id,
-			docKind: r.kind
+			docKind: r.kind === 'archive' ? 'local-file' : r.kind
 		};
 	}
 
@@ -67,6 +73,10 @@
 		} catch (e) {
 			promoteError = e instanceof Error ? e.message : 'promote failed';
 		}
+	}
+
+	function openNewTab(url: string) {
+		window.open(url, '_blank', 'noopener,noreferrer');
 	}
 </script>
 
@@ -104,21 +114,38 @@
 	</div>
 	<p class="result-snippet">{result.snippet}</p>
 	<div class="result-actions">
-		<button
-			class="btn"
-			aria-label={`Open ${title}`}
-			onclick={() => wb.openInPane(paneIndex, { kind: 'doc', ref: refToDocRef(result) })}
-		>
-			<Icon name="arrow-right" size={13} /> Open
-		</button>
-		<button
-			class="btn btn-ghost"
-			aria-label={`Open ${title} in split pane`}
-			onclick={() => wb.openInOther(paneIndex, { kind: 'doc', ref: refToDocRef(result) })}
-		>
-			<Icon name="split" size={13} /> Open in split
-		</button>
-		{#if result.kind !== 'working'}
+		{#if result.kind === 'archive'}
+			<button
+				class="btn"
+				aria-label={`Open archived page ${title}`}
+				onclick={() => openNewTab(archiveRawUrl(result.id))}
+			>
+				<Icon name="arrow-right" size={13} /> Open archive
+			</button>
+			<button
+				class="btn btn-ghost"
+				aria-label={`Open source URL for ${title}`}
+				onclick={() => openNewTab(result.url)}
+			>
+				<Icon name="arrow-right" size={13} /> Source
+			</button>
+		{:else}
+			<button
+				class="btn"
+				aria-label={`Open ${title}`}
+				onclick={() => wb.openInPane(paneIndex, { kind: 'doc', ref: refToDocRef(result) })}
+			>
+				<Icon name="arrow-right" size={13} /> Open
+			</button>
+			<button
+				class="btn btn-ghost"
+				aria-label={`Open ${title} in split pane`}
+				onclick={() => wb.openInOther(paneIndex, { kind: 'doc', ref: refToDocRef(result) })}
+			>
+				<Icon name="split" size={13} /> Open in split
+			</button>
+		{/if}
+		{#if result.kind !== 'working' && result.kind !== 'archive'}
 			<button
 				class="btn btn-ghost"
 				aria-label={`Promote ${title} to working document`}

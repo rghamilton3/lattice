@@ -12,6 +12,7 @@ import { agentRoutes } from './routes/agent';
 import { statusRoutes } from './routes/status';
 import { tasksRoutes } from './routes/tasks';
 import { attachmentRoutes } from './routes/attachments';
+import { archivesRoutes } from './routes/archives';
 import { buildPlatformStatus } from './status';
 
 export interface AppDeps {
@@ -21,10 +22,11 @@ export interface AppDeps {
 	devUser: string | undefined;
 	surfaceBuild: string | undefined;
 	attachmentsDir: string;
+	archiveDir: string;
 }
 
 export function buildApp(deps: AppDeps) {
-	const { db, agentToken, allowHttp, devUser, surfaceBuild, attachmentsDir } = deps;
+	const { db, agentToken, allowHttp, devUser, surfaceBuild, attachmentsDir, archiveDir } = deps;
 
 	const surface =
 		surfaceBuild && existsSync(surfaceBuild)
@@ -48,11 +50,12 @@ export function buildApp(deps: AppDeps) {
 						buildPlatformStatus({ db, agentToken, allowHttp, devUser, surfaceBuild }),
 					),
 				)
-				.use(attachmentRoutes(db, { attachmentsDir })),
+				.use(attachmentRoutes(db, { attachmentsDir }))
+				.use(archivesRoutes(db, { archiveDir })),
 		)
 		.group('/api/agent', (app) =>
 			app.guard({ beforeHandle: agentBeforeHandle({ allowHttp, agentToken }) }, (inner) =>
-				inner.use(agentRoutes(db, { attachmentsDir })),
+				inner.use(agentRoutes(db, { attachmentsDir, archiveDir })),
 			),
 		);
 }

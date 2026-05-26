@@ -2,17 +2,13 @@
 	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
 	import { browser } from '$app/environment';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
-	import {
-		captureKeys,
-		fetchCaptures,
-		triageCapture,
-		TRIAGE_ACTION_LABEL
-	} from '$lib/api/captures';
+	import { triageCapture, TRIAGE_ACTION_LABEL } from '$lib/api/captures';
+	import { applyArchiveAction, fetchInbox, inboxKeys, archiveRawUrl } from '$lib/api/archives';
 	import type { TriageAction } from '$lib/api/captures';
 	import { workingKeys, fetchWorkingList } from '$lib/api/working';
 	import { taskKeys, fetchTasks } from '$lib/api/tasks';
 	import { useCompleteTask } from '$lib/state/useCompleteTask.svelte';
-	import type { Capture, DocRef, Task } from '$lib/types';
+	import type { ArchiveAction, Capture, DocRef, InboxItem, Task } from '$lib/types';
 	import Icon from '$components/icons/Icon.svelte';
 	import NowCard from './NowCard.svelte';
 	import InboxList from './InboxList.svelte';
@@ -36,10 +32,27 @@
 			try {
 				const capture = JSON.parse(e.data) as Capture;
 				if (capture.triaged_at !== null) return; // pre-triaged: bypass inbox
-				queryClient.setQueryData(captureKeys.list(20), (old: Capture[] | undefined) => {
-					if (!old) return [capture];
-					if (old.some((c) => c.id === capture.id)) return old;
-					return [capture, ...old].slice(0, 20);
+				queryClient.setQueryData(inboxKeys.list(20), (old: { items: InboxItem[] } | undefined) => {
+					const item: InboxItem = {
+						item_type: 'capture',
+						id: `capture:${capture.id}`,
+						capture_id: capture.id,
+						title: capture.text,
+						summary: capture.text,
+						source: capture.source,
+						created_at: capture.ingested_at,
+						capture,
+						actions: [
+							{ action: 'keep', label: 'Keep', shortcut: 'k', tone: 'primary' },
+							{ action: 'archive', label: 'Archive', shortcut: 'a', tone: 'neutral' },
+							{ action: 'promote', label: 'Promote', shortcut: 'p', tone: 'neutral' },
+							{ action: 'task', label: 'Task', shortcut: 't', tone: 'neutral' },
+							{ action: 'skip', label: 'Skip', shortcut: 'Space', tone: 'neutral' }
+						]
+					};
+					if (!old) return { items: [item], next_cursor: null };
+					if (old.items.some((i) => i.id === item.id)) return old;
+					return { ...old, items: [item, ...old.items].slice(0, 20) };
 				});
 			} catch (err) {
 				console.error('[sse] malformed capture event:', err);
@@ -49,7 +62,7 @@
 			liveDisconnected = false;
 			if (!connected) {
 				connected = true;
-				queryClient.invalidateQueries({ queryKey: captureKeys.list(20) });
+				queryClient.invalidateQueries({ queryKey: inboxKeys.list(20) });
 			}
 		});
 		sse.addEventListener('error', (e) => {
@@ -65,9 +78,9 @@
 		};
 	});
 
-	const capturesQuery = createQuery(() => ({
-		queryKey: captureKeys.list(20),
-		queryFn: () => fetchCaptures(20),
+	const inboxQuery = createQuery(() => ({
+		queryKey: inboxKeys.list(20),
+		queryFn: () => fetchInbox(20),
 		enabled: browser
 	}));
 
@@ -89,8 +102,9 @@
 		return () => clearInterval(t);
 	});
 
-	const captureCount = $derived(capturesQuery.data?.length ?? 0);
-	const visibleCaptures = $derived(capturesQuery.data ?? []);
+	const inboxItems = $derived<InboxItem[]>(inboxQuery.data?.items ?? []);
+	const captureCount = $derived(inboxItems.length);
+	const visibleCaptures = $derived(inboxItems);
 	const workingDocs = $derived(workingQuery.data ?? []);
 	const last = $derived(workingDocs[0] ?? null);
 
@@ -105,13 +119,17 @@
 		openDocRef({ kind: 'capture', id });
 	}
 
+	function openArchive(id: number) {
+		window.open(archiveRawUrl(id), '_blank', 'noopener,noreferrer');
+	}
+
 	function onProcessMode() {
 		wb.startTriage();
 	}
 
 	async function onTriage(id: number, action: TriageAction) {
-		queryClient.setQueryData(captureKeys.list(20), (old: Capture[] | undefined) =>
-			old ? old.filter((c) => c.id !== id) : []
+		queryClient.setQueryData(inboxKeys.list(20), (old: { items: InboxItem[] } | undefined) =>
+			old ? { ...old, items: old.items.filter((item) => item.id !== `capture:${id}`) } : old
 		);
 		wb.showToast(`${TRIAGE_ACTION_LABEL[action]} · capture #${id}`);
 		try {
@@ -120,20 +138,41 @@
 				queryClient.invalidateQueries({ queryKey: taskKeys.list() });
 			}
 		} catch {
-			queryClient.invalidateQueries({ queryKey: captureKeys.list(20) });
+			queryClient.invalidateQueries({ queryKey: inboxKeys.list(20) });
 			wb.showToast(`Triage failed for capture #${id}`);
 		}
 	}
 
+	async function onArchiveInboxAction(id: number, action: string) {
+		queryClient.setQueryData(inboxKeys.list(20), (old: { items: InboxItem[] } | undefined) =>
+			old ? { ...old, items: old.items.filter((item) => item.id !== `archive:${id}`) } : old
+		);
+		try {
+			const result = await applyArchiveAction(id, action as ArchiveAction);
+			if (action === 'recapture') {
+				window.open(result.url, '_blank', 'noopener,noreferrer');
+				queryClient.invalidateQueries({ queryKey: inboxKeys.list(20) });
+			}
+			wb.showToast(`${action === 'recapture' ? 'Opened' : 'Saved'} · archive #${id}`);
+		} catch {
+			queryClient.invalidateQueries({ queryKey: inboxKeys.list(20) });
+			wb.showToast(`Archive action failed for #${id}`);
+		}
+	}
+
 	async function archiveAll() {
-		const ids = (capturesQuery.data ?? []).map((c) => c.id);
+		const ids = (inboxItems ?? [])
+			.filter((item) => item.item_type === 'capture')
+			.map((item) => item.capture_id);
 		if (ids.length === 0) return;
-		queryClient.setQueryData(captureKeys.list(20), []);
+		queryClient.setQueryData(inboxKeys.list(20), (old: { items: InboxItem[] } | undefined) =>
+			old ? { ...old, items: old.items.filter((item) => item.item_type !== 'capture') } : old
+		);
 		const settled = await Promise.allSettled(ids.map((id) => triageCapture(id, 'archive')));
 		const failed = settled.filter((s) => s.status === 'rejected').length;
 		const ok = ids.length - failed;
 		if (failed > 0) {
-			queryClient.invalidateQueries({ queryKey: captureKeys.list(20) });
+			queryClient.invalidateQueries({ queryKey: inboxKeys.list(20) });
 		}
 		wb.showToast(failed > 0 ? `Archived ${ok}, ${failed} failed` : `Archived ${ok}`);
 	}
@@ -200,14 +239,21 @@
 						Live updates are disconnected. Existing captures remain here; refresh to reconnect.
 					</div>
 				{/if}
-				{#if capturesQuery.isLoading}
+				{#if inboxQuery.isLoading}
 					<div class="inbox-empty soft" role="status">Loading recent captures…</div>
-				{:else if capturesQuery.isError}
+				{:else if inboxQuery.isError}
 					<div class="inbox-empty soft" style="color:var(--c-alarm)" role="alert">
 						Couldn't load captures. Try refreshing the page.
 					</div>
 				{:else}
-					<InboxList captures={visibleCaptures} {now} onOpen={openCapture} {onTriage} />
+					<InboxList
+						items={visibleCaptures}
+						{now}
+						onOpenCapture={openCapture}
+						onOpenArchive={openArchive}
+						{onTriage}
+						onArchiveAction={onArchiveInboxAction}
+					/>
 				{/if}
 				<div class="home-section-foot">
 					<button class="btn btn-ghost" onclick={archiveAll}>

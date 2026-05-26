@@ -2,7 +2,7 @@
 	import { onDestroy } from 'svelte';
 	import { useQueryClient } from '@tanstack/svelte-query';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
-	import { createCapture } from '$lib/api/captures';
+	import { createCapture, MAX_CAPTURE_TEXT_LENGTH } from '$lib/api/captures';
 	import { uploadAttachment, attachmentKeys } from '$lib/api/attachments';
 	import { taskKeys } from '$lib/api/tasks';
 	import { logError } from '$lib/utils/logError';
@@ -22,7 +22,10 @@
 	let previewUrl = $state<string | null>(null);
 	let dragDepth = $state(0);
 
-	const canSave = $derived((text.trim().length >= 1 || attachedFile !== null) && !submitting);
+	const overTextLimit = $derived(text.length > MAX_CAPTURE_TEXT_LENGTH);
+	const canSave = $derived(
+		(text.trim().length >= 1 || attachedFile !== null) && !overTextLimit && !submitting
+	);
 	const dragOver = $derived(dragDepth > 0);
 
 	$effect(() => {
@@ -109,7 +112,6 @@
 
 	async function submit() {
 		if (!canSave) {
-			close();
 			return;
 		}
 		const captureText = text.trim() || (attachedFile ? `(attached: ${attachedFile.name})` : '');
@@ -227,6 +229,8 @@
 			bind:value={text}
 			class="qcap-area"
 			placeholder="What's the thought? (Ctrl + Enter to save, Esc to dismiss)"
+			aria-describedby="qcap-status"
+			aria-invalid={overTextLimit}
 			onkeydown={onTextareaKey}
 		></textarea>
 		<div class="qcap-foot">
@@ -251,18 +255,23 @@
 					<Icon name="paperclip" size={13} />
 				</button>
 				<span
+					id="qcap-status"
 					class="faint"
 					style="font-size:12px; margin-left:6px"
-					style:color={failed ? 'var(--c-alarm)' : undefined}
+					style:color={failed || overTextLimit ? 'var(--c-alarm)' : undefined}
 				>
-					{#if failed}
+					{#if overTextLimit}
+						{text.length}/{MAX_CAPTURE_TEXT_LENGTH} chars — shorten before saving
+					{:else if failed}
 						Save failed — try again
 					{:else if confirmed}
 						Captured — inbox updated
 					{:else if attachedFile && !text.trim()}
 						{attachedFile.name} · paste or drag to replace
+					{:else if !text.trim()}
+						Add text or an attachment to save
 					{:else}
-						{text.length} chars · /task, /note, /skip
+						{text.length}/{MAX_CAPTURE_TEXT_LENGTH} chars · /task, /note, /skip
 					{/if}
 				</span>
 			</div>

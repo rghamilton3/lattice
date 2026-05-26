@@ -20,7 +20,7 @@
 {#if captures.length === 0}
 	<div class="inbox-empty soft">
 		<div style="font-size:22px; margin-bottom:6px">📭</div>
-		<div style="font-weight:500">Inbox is clear.</div>
+		<div style="font-weight:500">Inbox is clear. New captures will appear here.</div>
 		<div class="faint" style="font-size:13px; margin-top:4px">
 			Capture something the moment you think of it — sort later, or never.
 		</div>
@@ -30,6 +30,7 @@
 		{#each captures.slice(0, 5) as c, i (c.id)}
 			<div
 				class="inbox-row"
+				aria-label={`Open capture from ${c.source}: ${c.text}`}
 				data-active={i === active}
 				data-has-thumb={c.first_image_id != null}
 				role="button"

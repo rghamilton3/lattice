@@ -28,6 +28,7 @@
 	const doneTask = useCompleteTask();
 
 	let connected = false;
+	let liveDisconnected = $state(false);
 	$effect(() => {
 		if (!browser) return;
 		const sse = new EventSource('/api/captures/stream');
@@ -45,6 +46,7 @@
 			}
 		});
 		sse.addEventListener('open', () => {
+			liveDisconnected = false;
 			if (!connected) {
 				connected = true;
 				queryClient.invalidateQueries({ queryKey: captureKeys.list(20) });
@@ -52,6 +54,7 @@
 		});
 		sse.addEventListener('error', (e) => {
 			if (sse.readyState === EventSource.CLOSED) {
+				liveDisconnected = true;
 				logError('sse:captures', e);
 				wb.showToast('Live updates disconnected — refresh to reconnect');
 			}
@@ -192,10 +195,17 @@
 						process when you feel like it
 					</span>
 				</div>
+				{#if liveDisconnected}
+					<div class="inbox-empty soft" role="status">
+						Live updates are disconnected. Existing captures remain here; refresh to reconnect.
+					</div>
+				{/if}
 				{#if capturesQuery.isLoading}
-					<div class="inbox-empty soft">loading…</div>
+					<div class="inbox-empty soft" role="status">Loading recent captures…</div>
 				{:else if capturesQuery.isError}
-					<div class="inbox-empty soft" style="color:var(--c-alarm)">couldn't load captures</div>
+					<div class="inbox-empty soft" style="color:var(--c-alarm)" role="alert">
+						Couldn't load captures. Try refreshing the page.
+					</div>
 				{:else}
 					<InboxList captures={visibleCaptures} {now} onOpen={openCapture} {onTriage} />
 				{/if}

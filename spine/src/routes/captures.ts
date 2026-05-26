@@ -6,6 +6,7 @@ import { onCapture, emitCapture } from '../captureEvents';
 import { parseCommand } from '../commands';
 
 const VALID_TRIAGE_ACTIONS = new Set(['keep', 'archive', 'promote', 'task', 'skip']);
+const MAX_CAPTURE_TEXT_LENGTH = 10_000;
 const IMAGE_SUBQ =
 	"(SELECT id FROM capture_attachments WHERE capture_id = captures.id AND content_type LIKE 'image/%' ORDER BY created_at ASC LIMIT 1) AS first_image_id";
 
@@ -186,13 +187,27 @@ export const capturesRoutes = (db: Database) =>
 		)
 		.post(
 			'/api/captures',
-			({ body }) => {
+			({ body, set }) => {
+				const text = body.text.trim();
+				const source = body.source.trim();
+				if (text.length === 0) {
+					set.status = 422;
+					return { error: 'Capture text is required' };
+				}
+				if (text.length > MAX_CAPTURE_TEXT_LENGTH) {
+					set.status = 422;
+					return { error: 'Capture text must be 10,000 characters or fewer' };
+				}
+				if (source.length === 0) {
+					set.status = 422;
+					return { error: 'Capture source is required' };
+				}
 				// Server-generated captured_at — clients (browser surface) can't forge
 				// timestamps. Atomic INSERT + markdown write so an FS failure rolls
 				// back the row (matches /api/agent/capture).
 				const now = new Date().toISOString();
-				const cmd = parseCommand(body.text);
-				const storedText = cmd ? cmd.strippedText : body.text;
+				const cmd = parseCommand(text);
+				const storedText = cmd ? cmd.strippedText : text;
 				const triagedAt = cmd ? now : null;
 				const triagedAction = cmd ? cmd.action : null;
 				const row = db.transaction(() => {
@@ -200,15 +215,15 @@ export const capturesRoutes = (db: Database) =>
 						.prepare(
 							'INSERT INTO captures (text, source, captured_at, ingested_at, triaged_at, triage_action) VALUES (?, ?, ?, ?, ?, ?) RETURNING id',
 						)
-						.get(storedText, body.source, now, now, triagedAt, triagedAction) as { id: number };
-					writeCaptureFile(inserted.id, storedText, body.source, now);
+						.get(storedText, source, now, now, triagedAt, triagedAction) as { id: number };
+					writeCaptureFile(inserted.id, storedText, source, now);
 					return inserted;
 				})();
 				refreshIndex();
 				emitCapture({
 					id: row.id,
 					text: storedText,
-					source: body.source,
+					source,
 					captured_at: now,
 					ingested_at: now,
 					triaged_at: triagedAt,

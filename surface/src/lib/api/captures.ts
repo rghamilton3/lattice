@@ -2,6 +2,8 @@ import { apiFetch } from './client';
 import { logError } from '$lib/utils/logError';
 import type { Capture } from '$lib/types';
 
+export const MAX_CAPTURE_TEXT_LENGTH = 10_000;
+
 export const captureKeys = {
 	list: (limit: number) => ['captures', 'list', { limit }] as const,
 	listAll: (limit: number) => ['captures', 'list-all', { limit }] as const,

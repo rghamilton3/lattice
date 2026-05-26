@@ -384,6 +384,53 @@ describe('POST /api/captures', () => {
 		expect(res.status).toBe(422);
 	});
 
+	it('returns 422 when text is whitespace only', async () => {
+		const res = await app.app.handle(
+			req('/api/captures', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ text: '   \n\t  ', source: 'browser' }),
+			}),
+		);
+		expect(res.status).toBe(422);
+	});
+
+	it('returns 422 when text is over 10,000 characters', async () => {
+		const res = await app.app.handle(
+			req('/api/captures', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ text: 'x'.repeat(10_001), source: 'browser' }),
+			}),
+		);
+		expect(res.status).toBe(422);
+	});
+
+	it('trims text and source before storing a capture', async () => {
+		const res = await app.app.handle(
+			req('/api/captures', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ text: '  hello  ', source: ' browser ' }),
+			}),
+		);
+		expect(res.status).toBe(200);
+		const body = await json(res);
+		const row = app.db.query('SELECT text, source FROM captures WHERE id = ?').get(body.id) as any;
+		expect(row).toEqual({ text: 'hello', source: 'browser' });
+	});
+
+	it('returns 422 when source is whitespace only', async () => {
+		const res = await app.app.handle(
+			req('/api/captures', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ text: 'hello', source: '   ' }),
+			}),
+		);
+		expect(res.status).toBe(422);
+	});
+
 	it('returns 422 when source is missing', async () => {
 		const res = await app.app.handle(
 			req('/api/captures', {

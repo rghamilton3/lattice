@@ -275,7 +275,7 @@
 					{:else if filteredLibraryItems.length === 0}
 						<div class="lib-empty soft">
 							{libraryItems.length === 0
-								? 'Nothing here yet.'
+								? 'Nothing here yet. Create a working document or capture something to start your library.'
 								: 'No items match the selected kinds.'}
 							{#if libraryItems.length > 0}
 								<button class="btn btn-ghost" style="margin-left:8px" onclick={resetFacets}>

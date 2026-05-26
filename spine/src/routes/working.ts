@@ -90,6 +90,10 @@ export const workingRoutes = (db: Database, { attachmentsDir }: WorkingRoutesOpt
 						set.status = 409;
 						return { error: 'Slug already exists' };
 					}
+					if (e instanceof Error && e.message.startsWith('Title produces empty slug')) {
+						set.status = 400;
+						return { error: 'Title must include letters or numbers' };
+					}
 					console.error('[working] createWorking failed:', e);
 					throw e;
 				}

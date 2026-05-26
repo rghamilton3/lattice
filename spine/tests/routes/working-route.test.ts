@@ -1,5 +1,8 @@
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
+import { join } from 'node:path';
+import { utimesSync } from 'node:fs';
 import { buildTestApp, json, req, type TestApp } from '../helpers/app';
+import { workingDir } from '../../src/working';
 
 let app: TestApp;
 
@@ -44,6 +47,21 @@ describe('POST /api/working', () => {
 	it('rejects an empty title with 422 (TypeBox validation)', async () => {
 		const res = await app.app.handle(postJson('/api/working', { title: '' }));
 		expect(res.status).toBe(422);
+	});
+
+	it('returns 400 when title produces an empty slug', async () => {
+		const res = await app.app.handle(postJson('/api/working', { title: '!!!' }));
+		expect(res.status).toBe(400);
+		expect((await json(res)).error).toBe('Title must include letters or numbers');
+	});
+
+	it('preserves explicit empty content', async () => {
+		const res = await app.app.handle(postJson('/api/working', { title: 'Blank', content: '' }));
+		expect(res.status).toBe(200);
+		const { slug } = await json(res);
+
+		const get = await app.app.handle(req(`/api/working/${slug}`));
+		expect((await json(get)).content).toBe('');
 	});
 
 	it('seeds content from a capture when seed_capture_id is given', async () => {
@@ -129,6 +147,18 @@ describe('GET /api/working', () => {
 		expect(list.length).toBe(2);
 		expect(list.map((d: any) => d.slug).sort()).toEqual(['alpha', 'beta']);
 	});
+
+	it('returns summaries newest first', async () => {
+		await app.app.handle(postJson('/api/working', { title: 'Old' }));
+		await app.app.handle(postJson('/api/working', { title: 'New' }));
+		const now = Date.now();
+		utimesSync(join(workingDir(), 'old.md'), new Date(now - 2000), new Date(now - 2000));
+		utimesSync(join(workingDir(), 'new.md'), new Date(now - 1000), new Date(now - 1000));
+
+		const res = await app.app.handle(req('/api/working'));
+		const list = await json(res);
+		expect(list.map((d: any) => d.slug)).toEqual(['new', 'old']);
+	});
 });
 
 describe('GET /api/working/:slug', () => {
@@ -165,6 +195,15 @@ describe('DELETE /api/working/:slug', () => {
 		expect(del.status).toBe(200);
 		const get = await app.app.handle(req('/api/working/kill'));
 		expect(get.status).toBe(404);
+	});
+
+	it('removes deleted docs from the list', async () => {
+		await app.app.handle(postJson('/api/working', { title: 'Keep' }));
+		await app.app.handle(postJson('/api/working', { title: 'Remove' }));
+		await app.app.handle(req('/api/working/remove', { method: 'DELETE' }));
+
+		const list = await json(await app.app.handle(req('/api/working')));
+		expect(list.map((d: any) => d.slug)).toEqual(['keep']);
 	});
 
 	it('returns 404 on unknown slug', async () => {

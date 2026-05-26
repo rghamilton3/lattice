@@ -71,6 +71,12 @@ describe('createWorking', () => {
 		expect(doc.title).toBe('Custom title');
 	});
 
+	it('preserves explicitly provided empty content', () => {
+		const slug = createWorking('Empty Body', '');
+		expect(readWorking(slug).content).toBe('');
+		expect(readWorking(slug).title).toBe('empty-body');
+	});
+
 	it('throws WorkingConflictError on duplicate slug', () => {
 		createWorking('Same');
 		expect(() => createWorking('Same')).toThrow(WorkingConflictError);
@@ -78,6 +84,7 @@ describe('createWorking', () => {
 
 	it('throws when title produces empty slug', () => {
 		expect(() => createWorking('!!!')).toThrow(/empty slug/);
+		expect(() => createWorking('   ')).toThrow(/empty slug/);
 	});
 });
 

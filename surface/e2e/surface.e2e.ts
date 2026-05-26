@@ -31,7 +31,9 @@ test('quick capture: c → type → ⌘↵ shows toast', async ({ page }) => {
 	await dialog.getByRole('textbox').fill('a test thought');
 	await page.keyboard.press(`${mod}+Enter`);
 
-	await expect(page.getByRole('status')).toBeVisible();
+	await expect(
+		page.getByRole('status').filter({ hasText: /Captured|inbox updated/i })
+	).toBeVisible();
 });
 
 test('command palette: ⌘K → "search" → Enter switches the pane to library', async ({ page }) => {
@@ -62,6 +64,80 @@ test('settings drawer cycles each theme and updates <html data-theme>', async ({
 			.poll(() => page.evaluate(() => document.documentElement.dataset.theme))
 			.toBe(theme);
 	}
+});
+
+test('invalid document deep link falls back with a visible status message', async ({ page }) => {
+	await page.goto('/?view=doc&ref=not-a-ref');
+	await expect(page.getByRole('heading', { name: /Where you were/i })).toBeVisible();
+	await expect(page.getByRole('status').filter({ hasText: 'Invalid link' })).toBeVisible();
+});
+
+test('shortcut keys do not open capture while typing in library search', async ({ page }) => {
+	await page.goto('/');
+	await page.getByRole('heading', { name: /Where you were/i }).waitFor();
+
+	await page.keyboard.press(`${mod}+/`);
+	const input = page.getByPlaceholder('Filter your library…');
+	await expect(input).toBeVisible();
+	await input.fill('alpha');
+	await page.keyboard.press('c');
+
+	await expect(page.getByRole('dialog', { name: 'Quick capture' })).toBeHidden();
+	await expect(input).toHaveValue('alphac');
+});
+
+test('capture deep link can split and open similar results without replacing original', async ({
+	page
+}) => {
+	await page.route('**/api/captures/1', (route) =>
+		route.fulfill({
+			status: 200,
+			body: JSON.stringify({
+				id: 1,
+				text: 'Seed capture body',
+				source: 'test',
+				captured_at: '2026-05-21T11:00:00Z',
+				ingested_at: '2026-05-21T11:00:00Z',
+				triaged_at: null,
+				triage_action: null,
+				task_due_date: null,
+				task_priority: null,
+				task_notes: null,
+				first_image_id: null
+			})
+		})
+	);
+	await page.route('**/api/similar**', (route) =>
+		route.fulfill({
+			status: 200,
+			body: JSON.stringify({
+				results: [
+					{
+						kind: 'capture',
+						id: 2,
+						score: 0.91,
+						snippet: 'Related capture snippet',
+						body: 'Related capture snippet',
+						path: '/c/2',
+						modified_at: '2026-05-21T11:05:00Z'
+					}
+				]
+			})
+		})
+	);
+
+	await page.goto('/?view=doc&ref=capture:1');
+	await expect(page.getByText('Seed capture body')).toBeVisible();
+	await page.getByRole('button', { name: /Split/i }).click();
+	await expect(page.getByText('Seed capture body')).toHaveCount(2);
+	await page
+		.getByRole('button', { name: /Similar/i })
+		.first()
+		.click();
+	await expect(page.getByText('Seed capture body')).toBeVisible();
+	await expect(
+		page.getByRole('button', { name: /capture Related capture snippet/i })
+	).toBeVisible();
 });
 
 test('process mode: k / a / space advances queue and renders done card', async ({ page }) => {
@@ -152,10 +228,7 @@ test('search facets: toggle kind off filters results', async ({ page }) => {
 	await expect(page.getByText('fl snippet')).toBeVisible();
 
 	// Toggle "working" off; that row should disappear.
-	await page
-		.getByRole('button', { name: /^working/i })
-		.first()
-		.click();
+	await page.getByRole('button', { name: /Hide working results/i }).click();
 	await expect(page.getByText('wk snippet')).toBeHidden();
 	await expect(page.getByText('cap snippet')).toBeVisible();
 });

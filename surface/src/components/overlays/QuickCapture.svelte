@@ -11,7 +11,6 @@
 	const wb = getWorkbenchContext();
 	const queryClient = useQueryClient();
 
-	let textarea = $state<HTMLTextAreaElement | null>(null);
 	let modal = $state<HTMLDivElement | null>(null);
 	let text = $state('');
 	let voice = $state(false);
@@ -27,10 +26,6 @@
 		(text.trim().length >= 1 || attachedFile !== null) && !overTextLimit && !submitting
 	);
 	const dragOver = $derived(dragDepth > 0);
-
-	$effect(() => {
-		textarea?.focus();
-	});
 
 	onDestroy(() => {
 		if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -224,8 +219,9 @@
 				</button>
 			</div>
 		{/if}
+		<!-- svelte-ignore a11y_autofocus -->
 		<textarea
-			bind:this={textarea}
+			autofocus
 			bind:value={text}
 			class="qcap-area"
 			placeholder="What's the thought? (Ctrl + Enter to save, Esc to dismiss)"
@@ -239,6 +235,7 @@
 					class="btn btn-ghost"
 					class:is-on={voice}
 					aria-pressed={voice}
+					aria-label={voice ? 'Stop voice input' : 'Start voice input'}
 					title={voice ? 'Stop recording' : 'Voice input'}
 					onclick={() => (voice = !voice)}
 				>
@@ -246,6 +243,7 @@
 				</button>
 				<button
 					class="btn btn-ghost"
+					aria-label="Attach file"
 					title="Attach file"
 					onclick={() => {
 						wb.fileUploadInitialNote = text.trim();

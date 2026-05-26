@@ -21,7 +21,12 @@
 	function isEditableTarget(target: EventTarget | null): boolean {
 		if (!(target instanceof HTMLElement)) return false;
 		const tag = target.tagName;
-		return tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable;
+		return (
+			tag === 'INPUT' ||
+			tag === 'TEXTAREA' ||
+			target.isContentEditable ||
+			target.closest('[role="textbox"], .cm-editor') !== null
+		);
 	}
 
 	function handleKeydown(e: KeyboardEvent) {

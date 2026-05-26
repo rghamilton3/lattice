@@ -26,6 +26,7 @@
 
 		// `?view=doc` without a ref has nothing to open — fall through to home.
 		if (viewParam === 'home') wb.openInPane(0, { kind: 'home' });
+		else if (viewParam === 'tasks') wb.openInPane(0, { kind: 'tasks' });
 		else if (viewParam === 'library' || viewParam === 'search')
 			wb.openInPane(0, { kind: 'library', query: '' });
 	});

@@ -8,7 +8,6 @@
 
 	const wb = getWorkbenchContext();
 
-	let input = $state<HTMLInputElement | null>(null);
 	let modal = $state<HTMLDivElement | null>(null);
 	let q = $state('');
 	let active = $state(0);
@@ -24,10 +23,6 @@
 		queryFn: () => fetchCaptures(20),
 		enabled: browser
 	}));
-
-	$effect(() => {
-		input?.focus();
-	});
 
 	type Item = {
 		id: string;
@@ -123,17 +118,14 @@
 		if (!query) return all.slice(0, 12);
 		return all.filter((x) => (x.label + ' ' + x.hint).toLowerCase().includes(query)).slice(0, 14);
 	});
-
-	$effect(() => {
-		if (active >= items.length) active = 0;
-	});
+	const activeIndex = $derived(Math.min(active, Math.max(items.length - 1, 0)));
 
 	function close() {
 		wb.activeOverlay = 'none';
 	}
 
 	function runActive() {
-		const it = items[active];
+		const it = items[activeIndex];
 		if (!it) return;
 		it.run();
 		close();
@@ -193,10 +185,12 @@
 >
 	<div class="palette-input-row">
 		<Icon name="search" size={14} />
+		<!-- svelte-ignore a11y_autofocus -->
 		<input
-			bind:this={input}
+			autofocus
 			bind:value={q}
 			class="palette-input"
+			aria-label="Command palette search"
 			placeholder="Type an action or a phrase from a note…"
 			oninput={() => (active = 0)}
 			onkeydown={onInputKey}
@@ -205,7 +199,7 @@
 			<Icon name="x" size={14} />
 		</button>
 	</div>
-	<div class="palette-list">
+	<div class="palette-list" role="listbox" aria-label="Command palette results">
 		{#if items.length === 0}
 			<div class="palette-empty soft">
 				No matches — but you can still
@@ -222,8 +216,9 @@
 		{:else}
 			{#each items as it, i (it.id)}
 				<button
-					class="palette-row"
-					class:is-active={i === active}
+					class={['palette-row', i === activeIndex && 'is-active']}
+					role="option"
+					aria-selected={i === activeIndex}
 					onmouseenter={() => (active = i)}
 					onclick={() => {
 						it.run();

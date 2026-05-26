@@ -44,6 +44,12 @@ describe('classifyArchive', () => {
 		expect(result.quality).toBe('degraded');
 	});
 
+	it('marks mostly empty app shells as degraded', () => {
+		const result = classifyArchive('<div id="root"></div>', 'Loading');
+		expect(result.quality).toBe('degraded');
+		expect(result.reason).toBe('mostly empty app shell');
+	});
+
 	it('marks substantial readable captures as good', () => {
 		const text = Array.from({ length: 45 }, (_, i) => `word${i}`).join(' ');
 		expect(classifyArchive(`<main>${text}</main>`, text).quality).toBe('good');

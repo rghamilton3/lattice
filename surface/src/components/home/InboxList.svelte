@@ -1,6 +1,5 @@
 <script lang="ts">
-	import type { ArchiveAction, InboxAction, InboxItem } from '$lib/types';
-	import type { TriageAction } from '$lib/api/captures';
+	import type { ArchiveAction, InboxAction, InboxItem, TriageAction } from '$lib/types';
 	import { attachmentRawUrl } from '$lib/api/attachments';
 	import { archiveRawUrl } from '$lib/api/archives';
 	import Icon from '$components/icons/Icon.svelte';
@@ -79,7 +78,7 @@
 				onmouseenter={() => (active = i)}
 				onclick={() => openItem(item)}
 				onkeydown={(e) => {
-					if (e.key === 'Enter' || e.key === ' ') {
+					if (e.key === 'Enter') {
 						e.preventDefault();
 						openItem(item);
 					}

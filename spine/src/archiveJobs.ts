@@ -1,5 +1,5 @@
 import type { Database } from 'bun:sqlite';
-import { createArchive, type ArchiveRow } from './archives';
+import { createArchive, extractArchiveText, type ArchiveRow } from './archives';
 import { archiveNotificationPosture, emitArchiveAttention } from './archiveEvents';
 import { classifyArchive } from './archiveQuality';
 import { refreshIndex } from './search';
@@ -20,6 +20,7 @@ export interface ArchiveJob {
 }
 
 const jobs = new Map<string, ArchiveJob>();
+// URL archive jobs are intentionally volatile for v1; process restarts drop queued work.
 const queue: ArchiveJob[] = [];
 let running = false;
 let seq = 0;
@@ -70,10 +71,7 @@ async function runJob(db: Database, archiveDir: string, job: ArchiveJob): Promis
 	job.started_at = new Date().toISOString();
 	try {
 		const html = await runMonolith(job.url);
-		const text = html
-			.replace(/<[^>]+>/g, ' ')
-			.replace(/\s+/g, ' ')
-			.trim();
+		const text = extractArchiveText(html);
 		const quality = classifyArchive(html, text);
 		const row = createArchive(db, {
 			url: job.url,

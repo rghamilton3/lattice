@@ -15,8 +15,7 @@ const RENDER_MARKERS = [
 	'just a moment',
 ];
 
-export function classifyArchive(html: string, text: string, hadError = false): QualityResult {
-	if (hadError && html.trim().length === 0) return { quality: 'failed', reason: 'archiver failed' };
+export function classifyArchive(html: string, text: string): QualityResult {
 	if (html.trim().length === 0) return { quality: 'failed', reason: 'empty artifact' };
 
 	const normalized = text.replace(/\s+/g, ' ').trim();

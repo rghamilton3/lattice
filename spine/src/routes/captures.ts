@@ -110,7 +110,7 @@ export const capturesRoutes = (db: Database) =>
 					.slice(0, limit);
 				return { items, next_cursor: null };
 			},
-			{ query: t.Object({ limit: t.Optional(t.String()), cursor: t.Optional(t.String()) }) },
+			{ query: t.Object({ limit: t.Optional(t.String()) }) },
 		)
 		.get(
 			'/api/captures',

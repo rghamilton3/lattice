@@ -39,13 +39,15 @@ just check        # tsc --noEmit for all TypeScript components
 
 ## Environment variables
 
-| Variable              | Default               | Notes                                                                    |
-| --------------------- | --------------------- | ------------------------------------------------------------------------ |
-| `LATTICE_AGENT_TOKEN` | read from config.toml | Required for agent routes; unset means all agent routes reject with 401  |
-| `DEV_USER`            | unset                 | Set to any string to bypass Authentik auth. **Never set in production.** |
-| `ALLOW_HTTP`          | unset                 | Set to `true` to allow non-TLS connections (required in dev)             |
-| `DATABASE_PATH`       | `./lattice.dev.db`    | Override main SQLite path                                                |
-| `SURFACE_BUILD`       | `../../surface/build` | Path to built surface static files                                       |
+| Variable                       | Default                       | Notes                                                                    |
+| ------------------------------ | ----------------------------- | ------------------------------------------------------------------------ |
+| `LATTICE_AGENT_TOKEN`          | read from config.toml         | Required for agent routes; unset means all agent routes reject with 401  |
+| `DEV_USER`                     | unset                         | Set to any string to bypass Authentik auth. **Never set in production.** |
+| `ALLOW_HTTP`                   | unset                         | Set to `true` to allow non-TLS connections (required in dev)             |
+| `DATABASE_PATH`                | `./lattice.dev.db`            | Override main SQLite path                                                |
+| `SURFACE_BUILD`                | `../../surface/build`         | Path to built surface static files                                       |
+| `ARCHIVE_STORAGE_DIR`          | `web/` beside `DATABASE_PATH` | Override archive HTML storage directory                                  |
+| `ARCHIVE_NOTIFICATION_POSTURE` | `standard`                    | Controls archive attention notifications: `quiet`, `standard`, `active`  |
 
 Config file alternative to env vars: `~/.config/lattice/config.toml`
 

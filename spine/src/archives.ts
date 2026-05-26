@@ -124,6 +124,7 @@ export function createArchive(
 	const whySaved = cleanOptionalLine(input.whySaved);
 
 	const result = db.transaction(() => {
+		// Artifact writes are not transactional with SQLite; failed index writes may leave orphan files.
 		if (!existsSync(archivePath)) writeFileSync(archivePath, bytes);
 
 		const older =

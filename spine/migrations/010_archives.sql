@@ -19,4 +19,5 @@ CREATE TABLE archives (
 
 CREATE INDEX idx_archives_url_current ON archives(url, superseded_by, deleted_at);
 CREATE INDEX idx_archives_review ON archives(quality, reviewed_at, deleted_at, archived_at);
-CREATE INDEX idx_archives_hash ON archives(hash);
+CREATE INDEX idx_archives_superseded_by ON archives(superseded_by);
+CREATE UNIQUE INDEX idx_archives_url_hash ON archives(url, hash);

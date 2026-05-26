@@ -53,7 +53,7 @@
 - [X] T019 [P] Document WCAG 2.2 AA evidence and bilingual N/A rationale in `docs/accessibility/tasks-triage.md`
 - [X] T020 Run `cd spine && bun test tests/unit/commands.test.ts tests/routes/captures.test.ts tests/routes/tasks.test.ts`
 - [X] T021 Run `cd surface && bun run check`
-- [ ] T022 Mark completed tasks in `specs/006-tasks-triage/tasks.md` after verification and queue metadata updates
+- [X] T022 Mark completed tasks in `specs/006-tasks-triage/tasks.md` after verification and queue metadata updates
 
 ## Dependencies
 

@@ -8,10 +8,54 @@ import { parseCommand } from '../commands';
 import type { TrackCreateRequest, TrackCreateResponse } from '../db/rows';
 import { ArchiveValidationError, createArchive, normalizeArchiveUrl } from '../archives';
 import { enqueueArchiveUrlJob } from '../archiveJobs';
+import {
+	DUPLICATE_HORIZON_MS,
+	scoreTrackMatch,
+	sharedMatchTokens,
+	tokenizeTrackText,
+} from './tracks';
+import type { TrackDuplicateHint, TrackRow } from '../db/rows';
 
 export interface AgentRoutesOptions {
 	attachmentsDir: string;
 	archiveDir: string;
+}
+
+function possibleDuplicateHints(
+	db: Database,
+	text: string,
+	capturedAt: string,
+	insertedId: number,
+): TrackDuplicateHint[] {
+	const tokens = tokenizeTrackText(text);
+	if (tokens.length < 2) return [];
+	const horizonStart = new Date(Date.parse(capturedAt) - DUPLICATE_HORIZON_MS).toISOString();
+	const candidates = db
+		.prepare(
+			`SELECT id, text, captured_at, ingested_at, source, displaced, photo_ref, supersedes
+			 FROM tracks
+			 WHERE id != ?
+			   AND datetime(captured_at) >= datetime(?)
+			 ORDER BY datetime(captured_at) DESC, id DESC
+			 LIMIT 25`,
+		)
+		.all(insertedId, horizonStart) as TrackRow[];
+	return candidates
+		.map((candidate) => ({
+			candidate,
+			score: scoreTrackMatch(tokens, candidate.text),
+			shared: sharedMatchTokens(text, candidate.text),
+		}))
+		.filter((match) => match.score >= 4 && match.shared.length >= 2)
+		.slice(0, 3)
+		.map(({ candidate, shared }) => ({
+			track_id: candidate.id,
+			text: candidate.text,
+			captured_at: candidate.captured_at,
+			source: candidate.source,
+			displaced: candidate.displaced === 1,
+			reason: `shared phrase: ${shared.slice(0, 3).join(' ')}`,
+		}));
 }
 
 export const agentRoutes = (db: Database, { attachmentsDir, archiveDir }: AgentRoutesOptions) =>
@@ -73,7 +117,10 @@ export const agentRoutes = (db: Database, { attachmentsDir, archiveDir }: AgentR
 						supersedes,
 					) as { id: number };
 				set.status = 201;
-				return { id: inserted.id };
+				return {
+					id: inserted.id,
+					possible_duplicates: possibleDuplicateHints(db, text, capturedAt, inserted.id),
+				};
 			},
 			{ body: t.Any() },
 		)

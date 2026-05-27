@@ -27,7 +27,8 @@ test('POST /api/agent/track stores normal and displaced records', async () => {
 		}),
 	);
 	expect(normal.status).toBe(201);
-	const normalBody = (await normal.json()) as { id: number };
+	const normalBody = (await normal.json()) as { id: number; possible_duplicates: unknown[] };
+	expect(normalBody.possible_duplicates).toEqual([]);
 
 	const displaced = await app.handle(
 		agentJson('/api/agent/track', {
@@ -140,4 +141,97 @@ test('HA voice normal and checkout payload examples match endpoint shape', async
 	);
 	expect(normal.status).toBe(201);
 	expect(checkout.status).toBe(201);
+});
+
+test('POST /api/agent/track returns duplicate hints for strong recent overlap', async () => {
+	const { app } = setup();
+	const first = await app.handle(
+		agentJson('/api/agent/track', {
+			text: 'drill on the garage top shelf',
+			captured_at: '2026-05-20T00:00:00.000Z',
+			source: 'signal-text',
+			displaced: false,
+		}),
+	);
+	const firstBody = (await first.json()) as { id: number };
+
+	const second = await app.handle(
+		agentJson('/api/agent/track', {
+			text: 'drill in blue case on garage shelf',
+			captured_at: '2026-05-26T00:00:00.000Z',
+			source: 'ha-voice:printing-room',
+			displaced: false,
+		}),
+	);
+	expect(second.status).toBe(201);
+	const body = (await second.json()) as {
+		possible_duplicates: {
+			track_id: number;
+			text: string;
+			source: string;
+			displaced: boolean;
+			reason: string;
+		}[];
+	};
+	expect(body.possible_duplicates).toEqual([
+		expect.objectContaining({
+			track_id: firstBody.id,
+			text: 'drill on the garage top shelf',
+			source: 'signal-text',
+			displaced: false,
+			reason: expect.stringContaining('shared phrase:'),
+		}),
+	]);
+});
+
+test('duplicate hints do not block inserts or mutate prior rows', async () => {
+	const { app, db } = setup();
+	await app.handle(
+		agentJson('/api/agent/track', {
+			text: 'drill on the garage top shelf',
+			captured_at: '2026-05-20T00:00:00.000Z',
+			source: 'signal-text',
+			displaced: false,
+		}),
+	);
+	const second = await app.handle(
+		agentJson('/api/agent/track', {
+			text: 'drill in blue case on garage shelf',
+			captured_at: '2026-05-26T00:00:00.000Z',
+			source: 'ha-voice:printing-room',
+			displaced: false,
+		}),
+	);
+	const body = (await second.json()) as { possible_duplicates: unknown[] };
+	expect(body.possible_duplicates).toHaveLength(1);
+	const rows = db.query('SELECT text, supersedes FROM tracks ORDER BY id').all() as Pick<
+		TrackRow,
+		'text' | 'supersedes'
+	>[];
+	expect(rows).toEqual([
+		{ text: 'drill on the garage top shelf', supersedes: null },
+		{ text: 'drill in blue case on garage shelf', supersedes: null },
+	]);
+});
+
+test('POST /api/agent/track returns no duplicate hints for weak overlap', async () => {
+	const { app } = setup();
+	await app.handle(
+		agentJson('/api/agent/track', {
+			text: 'drill on the garage top shelf',
+			captured_at: '2026-05-20T00:00:00.000Z',
+			source: 'signal-text',
+			displaced: false,
+		}),
+	);
+	const weak = await app.handle(
+		agentJson('/api/agent/track', {
+			text: 'hammer in kitchen drawer',
+			captured_at: '2026-05-26T00:00:00.000Z',
+			source: 'ha-voice:printing-room',
+			displaced: false,
+		}),
+	);
+	const body = (await weak.json()) as { possible_duplicates: unknown[] };
+	expect(body.possible_duplicates).toEqual([]);
 });

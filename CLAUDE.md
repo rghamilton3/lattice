@@ -5,11 +5,11 @@ Lattice is a self-hosted personal knowledge management system. It captures text 
 
 ## Components
 
-| Directory | Language | Role |
-|-----------|----------|------|
-| `spine/` | TypeScript / Bun / Elysia | Central server: REST API, SQLite DB, serves surface as static files |
-| `surface/` | SvelteKit / Tailwind | Browser SPA: inbox, tasks, search, working doc editor |
-| `agent/` | Rust | Local file indexer: watches directories, POSTs to spine |
+| Directory  | Language                  | Role                                                                |
+| ---------- | ------------------------- | ------------------------------------------------------------------- |
+| `spine/`   | TypeScript / Bun / Elysia | Central server: REST API, SQLite DB, serves surface as static files |
+| `surface/` | SvelteKit / Tailwind      | Browser SPA: inbox, tasks, search, working doc editor               |
+| `agent/`   | Rust                      | Local file indexer: watches directories, POSTs to spine             |
 
 Each component has its own `CLAUDE.md` with detailed commands and architecture.
 
@@ -38,28 +38,9 @@ just install       # install all dependencies + git hooks (run once after clone)
 - Cross-component config: `config.toml.example` (deployed to `~/.config/lattice/config.toml`)
 
 <!-- SPECKIT START -->
+
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
 `specs/012-tracking-phase1/plan.md`
+
 <!-- SPECKIT END -->
-
-<!-- OCR:START -->
-## Open Code Review Instructions
-
-These instructions are for AI assistants handling code review in this project.
-
-Always open `.ocr/skills/SKILL.md` when the request:
-- Asks for code review, PR review, or feedback on changes
-- Mentions "review my code" or similar phrases
-- Wants multi-perspective analysis of code quality
-- Asks to map, organize, or navigate a large changeset
-
-Use `.ocr/skills/SKILL.md` to learn:
-- How to run the 8-phase review workflow
-- How to generate a Code Review Map for large changesets
-- Available reviewer personas and their focus areas
-- Session management and output format
-
-Keep this managed block so `ocr init` can refresh the instructions.
-
-<!-- OCR:END -->

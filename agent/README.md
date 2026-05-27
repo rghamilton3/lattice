@@ -87,3 +87,21 @@ a full re-index on next run.
 ### Logging
 
 Set `RUST_LOG=lattice_agent=debug` (in the service file or environment) for verbose output.
+
+## Product updates
+
+The local updater checks the existing GitHub release channel and never sends private content, config, queue, cache, or indexed data. Checks are read-only; applying updates requires explicit confirmation.
+
+```bash
+lattice-agent update check
+lattice-agent update apply lattice-agent
+lattice-agent update apply desktop-companions
+lattice-agent update apply --all-supported
+lattice-agent update history
+```
+
+`update check` prints one plain-text line per recognized product with installed version, latest version, status, and next action. Agent and installed desktop companions can be updated automatically when a matching platform artifact and BLAKE3 checksum are available. Spine, surface, installer scripts, service units, unknown products, and development builds are reported with manual guidance instead of being replaced automatically.
+
+`update apply lattice-agent` replaces only the installed agent binary after staging and checksum verification. `update apply desktop-companions` updates installed `lattice-capture`, `lattice-tray`, and `lattice-config` companions. `update apply --all-supported` includes the agent and installed desktop companions. Config, `agent.db`, `queue.db`, update history, caches, and service definitions are preserved.
+
+If verification fails, the updater records `failed-verification`, leaves the installed binary unchanged, and prints a recovery step. If release metadata is offline, no files are changed and the attempt is recorded as `offline`. After a successful agent update, restart the service with `systemctl --user restart lattice-agent` on Linux or restart the `LatticeAgent` scheduled task on Windows.

@@ -1,0 +1,43 @@
+{
+  "current": {
+    "tag_name": "agent-v0.10.0",
+    "body": "Release matches the installed agent.\n",
+    "assets": [
+      { "name": "lattice-agent-x86_64-unknown-linux-musl", "browser_download_url": "file:///tmp/current-agent", "size": 5 },
+      { "name": "checksums.blake3", "browser_download_url": "file:///tmp/checksums.blake3", "size": 80 }
+    ]
+  },
+  "newer": {
+    "tag_name": "agent-v0.11.0",
+    "body": "New agent and desktop companion release.\n",
+    "assets": [
+      { "name": "lattice-agent-x86_64-unknown-linux-musl", "browser_download_url": "file:///tmp/new-agent", "size": 5 },
+      { "name": "lattice-capture-x86_64-unknown-linux-musl", "browser_download_url": "file:///tmp/new-capture", "size": 7 },
+      { "name": "lattice-tray-x86_64-unknown-linux-musl", "browser_download_url": "file:///tmp/new-tray", "size": 4 },
+      { "name": "lattice-config-x86_64-unknown-linux-gnu", "browser_download_url": "file:///tmp/new-config", "size": 6 },
+      { "name": "checksums.blake3", "browser_download_url": "file:///tmp/checksums.blake3", "size": 320 }
+    ]
+  },
+  "missing_checksum": {
+    "tag_name": "agent-v0.11.0",
+    "body": "Artifact exists but checksum metadata is absent.\n",
+    "assets": [
+      { "name": "lattice-agent-x86_64-unknown-linux-musl", "browser_download_url": "file:///tmp/new-agent", "size": 5 }
+    ]
+  },
+  "platform_mismatch": {
+    "tag_name": "agent-v0.11.0",
+    "body": "Only a Windows artifact is available.\n",
+    "assets": [
+      { "name": "lattice-agent-x86_64-pc-windows-msvc.exe", "browser_download_url": "file:///tmp/new-agent.exe", "size": 5 }
+    ]
+  },
+  "corrupted_artifact": {
+    "tag_name": "agent-v0.11.0",
+    "body": "Checksum intentionally does not match staged bytes.\n",
+    "assets": [
+      { "name": "lattice-agent-x86_64-unknown-linux-musl", "browser_download_url": "file:///tmp/corrupt-agent", "size": 9 },
+      { "name": "checksums.blake3", "browser_download_url": "file:///tmp/bad-checksums.blake3", "size": 80 }
+    ]
+  }
+}

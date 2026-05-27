@@ -146,6 +146,25 @@ schtasks /Run /TN LatticeTray
 Get-ScheduledTask -TaskName LatticeAgent,LatticeTray
 ```
 
+## Product updates
+
+Local agent installs can check for product updates without modifying files:
+
+```bash
+lattice-agent update check
+```
+
+Automatic apply is limited to `lattice-agent` and installed desktop companions (`lattice-capture`, `lattice-tray`, `lattice-config`) when a matching release artifact and checksum are available:
+
+```bash
+lattice-agent update apply lattice-agent
+lattice-agent update apply desktop-companions
+lattice-agent update apply --all-supported
+lattice-agent update history
+```
+
+Checks and history output are plain text and include product, installed version, latest version, outcome, and next action. Spine, surface, Docker deployment files, installer scripts, service units, unknown products, and development builds are reported with manual guidance so self-hosted deployment ownership stays explicit.
+
 ## Quickstart
 
 ```bash

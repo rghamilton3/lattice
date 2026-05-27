@@ -99,6 +99,10 @@ impl ConfigApp {
     }
 
     fn choose_watch_folder() -> PickerResult {
+        if let Some(message) = folder_picker_unavailable_message() {
+            return PickerResult::Failed(message);
+        }
+
         match std::panic::catch_unwind(|| {
             rfd::FileDialog::new()
                 .set_title("Choose watch folder")
@@ -121,8 +125,16 @@ impl ConfigApp {
         match result {
             PickerResult::Selected(path) => match watch_rows.get_mut(row_index) {
                 Some(row) => {
-                    row.path = path.display().to_string();
-                    None
+                    match path.to_str() {
+                        Some(path) => {
+                            row.path = path.to_owned();
+                            None
+                        }
+                        None => Some(
+                            "The selected watch path is not valid UTF-8. Type the path manually and try saving again."
+                                .into(),
+                        ),
+                    }
                 }
                 None => Some("The selected watch path row no longer exists.".into()),
             },
@@ -130,6 +142,38 @@ impl ConfigApp {
             PickerResult::Failed(message) => Some(message),
         }
     }
+
+    fn browse_watch_folder<F>(
+        watch_rows: &mut [WatchRow],
+        row_index: usize,
+        choose_folder: F,
+    ) -> Option<String>
+    where
+        F: FnOnce() -> PickerResult,
+    {
+        Self::apply_watch_path_picker_result(watch_rows, row_index, choose_folder())
+    }
+}
+
+#[cfg(unix)]
+fn folder_picker_unavailable_message() -> Option<String> {
+    let has_display = std::env::var_os("WAYLAND_DISPLAY").is_some()
+        || std::env::var_os("DISPLAY").is_some()
+        || std::env::var_os("XDG_CURRENT_DESKTOP").is_some();
+
+    if has_display {
+        None
+    } else {
+        Some(
+            "Could not open the folder picker because no desktop display session was detected. Type the watch path manually and try saving again."
+                .into(),
+        )
+    }
+}
+
+#[cfg(not(unix))]
+fn folder_picker_unavailable_message() -> Option<String> {
+    None
 }
 
 impl eframe::App for ConfigApp {
@@ -259,7 +303,7 @@ impl eframe::App for ConfigApp {
 
         let mut save_clicked = false;
         let mut cancel_clicked = false;
-        let mut picker_result: Option<(usize, PickerResult)> = None;
+        let mut browse_row_index: Option<usize> = None;
 
         // Button row must be reserved before CentralPanel so ScrollArea doesn't
         // consume all vertical space and push the buttons off screen.
@@ -357,7 +401,7 @@ impl eframe::App for ConfigApp {
                                         .desired_width(field_w),
                                 );
                                 if ui.button("Browse...").clicked() {
-                                    picker_result = Some((i, Self::choose_watch_folder()));
+                                    browse_row_index = Some(i);
                                 }
                                 if ui.button("Remove").clicked() {
                                     to_remove = Some(i);
@@ -403,11 +447,11 @@ impl eframe::App for ConfigApp {
         if cancel_clicked {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
-        if let Some((row_index, result)) = picker_result {
-            if let Some(message) = Self::apply_watch_path_picker_result(
+        if let Some(row_index) = browse_row_index {
+            if let Some(message) = Self::browse_watch_folder(
                 form.watch_rows.as_mut_slice(),
                 row_index,
-                result,
+                Self::choose_watch_folder,
             ) {
                 *modal = ModalState::Error(message);
             }
@@ -568,6 +612,43 @@ mod tests {
             Some("The selected watch path row no longer exists.")
         );
         assert_eq!(rows[0].path, "/before/one");
+        assert_eq!(rows[1].path, "/before/two");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn picker_selection_rejects_non_utf8_paths() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        let mut rows = rows();
+        let path = PathBuf::from(OsString::from_vec(vec![0xff, b'f', b'o', b'o']));
+
+        let message = ConfigApp::apply_watch_path_picker_result(
+            rows.as_mut_slice(),
+            0,
+            PickerResult::Selected(path),
+        );
+
+        assert_eq!(
+            message.as_deref(),
+            Some(
+                "The selected watch path is not valid UTF-8. Type the path manually and try saving again."
+            )
+        );
+        assert_eq!(rows[0].path, "/before/one");
+    }
+
+    #[test]
+    fn browse_action_invokes_picker_and_applies_result() {
+        let mut rows = rows();
+
+        let message = ConfigApp::browse_watch_folder(rows.as_mut_slice(), 0, || {
+            PickerResult::Selected(PathBuf::from("/picked/from/browse"))
+        });
+
+        assert!(message.is_none());
+        assert_eq!(rows[0].path, "/picked/from/browse");
         assert_eq!(rows[1].path, "/before/two");
     }
 }

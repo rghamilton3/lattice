@@ -40,6 +40,8 @@ const STOP_WORDS = new Set([
 	'with',
 ]);
 
+const TRACK_QUERY_COLUMNS = 'id, query, queried_at, opened_track_id, loop_closed_at, loop_outcome';
+
 export function tokenizeTrackText(value: string): string[] {
 	return [...new Set(value.toLowerCase().match(/[a-z0-9]+/g) ?? [])].filter(
 		(token) => token.length > 1 && !STOP_WORDS.has(token),
@@ -84,6 +86,7 @@ function rankedRows(db: Database, queryText: string, limit = 50): TrackRow[] {
 	if (tokens.length === 0) return [];
 	const rows = db
 		.prepare(
+			// TODO: Introduce a SQL prefilter or FTS5 once track volume makes full scoring visible.
 			'SELECT id, text, captured_at, ingested_at, source, displaced, photo_ref, supersedes FROM tracks',
 		)
 		.all() as TrackRow[];
@@ -118,6 +121,7 @@ function hasNewerMatchingTrack(db: Database, query: TrackQueryRow, openedTrack: 
 	if (queryTokens.length === 0) return false;
 	const newerRows = db
 		.prepare(
+			// TODO: Prefilter candidate rows before JS scoring if follow-up checks become hot.
 			`SELECT id, text, captured_at, ingested_at, source, displaced, photo_ref, supersedes
 			 FROM tracks
 			 WHERE id != ?
@@ -148,7 +152,7 @@ function followupForQuery(db: Database, query: TrackQueryRow, now: Date): TrackF
 
 function requirePendingFollowup(db: Database, queryId: number, set: { status?: number | string }) {
 	const query = db
-		.prepare('SELECT * FROM track_queries WHERE id = ?')
+		.prepare(`SELECT ${TRACK_QUERY_COLUMNS} FROM track_queries WHERE id = ?`)
 		.get(queryId) as TrackQueryRow | null;
 	if (!query) {
 		set.status = 404;
@@ -165,7 +169,7 @@ function requirePendingFollowup(db: Database, queryId: number, set: { status?: n
 	const now = new Date();
 	expireOldFollowups(db, now);
 	const refreshed = db
-		.prepare('SELECT * FROM track_queries WHERE id = ?')
+		.prepare(`SELECT ${TRACK_QUERY_COLUMNS} FROM track_queries WHERE id = ?`)
 		.get(queryId) as TrackQueryRow;
 	const followup = followupForQuery(db, refreshed, now);
 	if (!followup) {
@@ -228,20 +232,25 @@ export const tracksRoutes = (db: Database) =>
 					set.status = 400;
 					return { error: 'invalid track_id' };
 				}
-				const queryRow = db.query('SELECT id FROM track_queries WHERE id = ?').get(queryId);
+				const queryRow = db
+					.query('SELECT id, opened_track_id FROM track_queries WHERE id = ?')
+					.get(queryId) as { id: number; opened_track_id: number | null } | null;
 				if (!queryRow) {
 					set.status = 404;
 					return { error: 'query not found' };
+				}
+				if (queryRow.opened_track_id) {
+					set.status = 409;
+					return { error: 'query was already opened' };
 				}
 				const track = db.query('SELECT id FROM tracks WHERE id = ?').get(trackId as number);
 				if (!track) {
 					set.status = 404;
 					return { error: 'track not found' };
 				}
-				db.prepare('UPDATE track_queries SET opened_track_id = ? WHERE id = ?').run(
-					trackId as number,
-					queryId,
-				);
+				db.prepare(
+					'UPDATE track_queries SET opened_track_id = ? WHERE id = ? AND opened_track_id IS NULL',
+				).run(trackId as number, queryId);
 				return { ok: true };
 			},
 			{ params: t.Object({ id: t.String() }), body: t.Any() },

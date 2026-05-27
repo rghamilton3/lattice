@@ -80,7 +80,7 @@ export interface TrackQueryRow {
 	queried_at: string;
 	opened_track_id: number | null;
 	loop_closed_at: string | null;
-	loop_outcome: string | null;
+	loop_outcome: 'still_accurate' | 'moved' | 'skipped' | 'expired' | null;
 }
 
 export interface TrackCreateRequest {

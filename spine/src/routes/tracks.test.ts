@@ -109,6 +109,7 @@ test('GET /api/tracks/search ranks ordinary multi-token wording by match quality
 test('POST /api/tracks/queries/:id/open records opened result and handles errors', async () => {
 	const { app, db } = setup();
 	const track = await createTrack(app, 'drill on shelf', '2026-01-02T00:00:00.000Z');
+	const alternateTrack = await createTrack(app, 'drill on bench', '2026-01-03T00:00:00.000Z');
 	const search = await app.handle(browserGet('/api/tracks/search?q=drill'));
 	const searchBody = (await search.json()) as TrackSearchResponse;
 
@@ -121,6 +122,24 @@ test('POST /api/tracks/queries/:id/open records opened result and handles errors
 		.query('SELECT opened_track_id FROM track_queries WHERE id = ?')
 		.get(searchBody.query_id) as { opened_track_id: number };
 	expect(queryRow.opened_track_id).toBe(track.id);
+	expect(
+		(
+			await app.handle(
+				browserJson(`/api/tracks/queries/${searchBody.query_id}/open`, {
+					track_id: alternateTrack.id,
+				}),
+			)
+		).status,
+	).toBe(409);
+	expect(
+		(
+			db
+				.query('SELECT opened_track_id FROM track_queries WHERE id = ?')
+				.get(searchBody.query_id) as {
+				opened_track_id: number;
+			}
+		).opened_track_id,
+	).toBe(track.id);
 
 	expect(
 		(
@@ -132,10 +151,13 @@ test('POST /api/tracks/queries/:id/open records opened result and handles errors
 	expect(
 		(await app.handle(browserJson('/api/tracks/queries/999/open', { track_id: track.id }))).status,
 	).toBe(404);
+	const missingTrackSearch = (await (
+		await app.handle(browserGet('/api/tracks/search?q=drill'))
+	).json()) as TrackSearchResponse;
 	expect(
 		(
 			await app.handle(
-				browserJson(`/api/tracks/queries/${searchBody.query_id}/open`, { track_id: 999 }),
+				browserJson(`/api/tracks/queries/${missingTrackSearch.query_id}/open`, { track_id: 999 }),
 			)
 		).status,
 	).toBe(404);

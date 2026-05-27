@@ -102,7 +102,7 @@ Searches tracking records, logs the query, and returns a primary answer plus his
 
 ### Compatibility Note
 
-Existing Phase 0 clients may receive or use a flat `results` array during implementation, but Phase 1 user-facing behavior must distinguish the primary newest answer from older history.
+Existing Phase 0 clients may receive or use a flat `results` array during implementation, but Phase 1 user-facing behavior must distinguish the primary newest answer from older history. `results` remains the complete ranked list: `primary` is `results[0] ?? null`, and `history` is `results.slice(1)` when `primary` exists.
 
 ### Behavior
 
@@ -140,6 +140,7 @@ Marks that the user opened a specific search result.
 ### Behavior
 
 - Sets `track_queries.opened_track_id` to the supplied track ID.
+- Rejects repeat opens instead of overwriting an existing `opened_track_id`.
 - Leaves `queried_at` as the original search time.
 - Makes the query eligible for derived follow-up after the minimum elapsed time if all trigger conditions still pass.
 
@@ -148,6 +149,7 @@ Marks that the user opened a specific search result.
 - Unknown query ID: `404`.
 - Unknown track ID: `404`.
 - Missing/invalid `track_id`: `400`.
+- Query already opened: `409`.
 
 ## `GET /api/tracks/followups`
 

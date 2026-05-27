@@ -214,6 +214,23 @@ test('GET /api/tracks/followups omits unopened, newer-matched, and expired queri
 	expect(expiredRow.loop_closed_at).toBeString();
 });
 
+test('GET /api/tracks/followups keeps queries when newer tracks only match opened-track location', async () => {
+	const { app, db } = setup();
+	const track = await createTrack(app, 'drill on shelf', '2026-01-02T00:00:00.000Z');
+	const search = (await (
+		await app.handle(browserGet('/api/tracks/search?q=drill'))
+	).json()) as TrackSearchResponse;
+	await app.handle(
+		browserJson(`/api/tracks/queries/${search.query_id}/open`, { track_id: track.id }),
+	);
+	ageQuery(db, search.query_id, eligibleQueriedAt());
+	await createTrack(app, 'book on shelf', new Date().toISOString());
+
+	const response = await app.handle(browserGet('/api/tracks/followups'));
+	const body = (await response.json()) as { followups: TrackFollowUp[] };
+	expect(body.followups.map((followup) => followup.query_id)).toEqual([search.query_id]);
+});
+
 test('follow-up endpoints close still-accurate, moved, and skipped outcomes', async () => {
 	const { app, db } = setup();
 	const stillTrack = await createTrack(app, 'drill on shelf', '2026-01-02T00:00:00.000Z');

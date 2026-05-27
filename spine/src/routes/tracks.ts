@@ -114,7 +114,7 @@ function expireOldFollowups(db: Database, now: Date) {
 }
 
 function hasNewerMatchingTrack(db: Database, query: TrackQueryRow, openedTrack: TrackRow): boolean {
-	const queryTokens = tokenizeTrackText(`${query.query} ${openedTrack.text}`);
+	const queryTokens = tokenizeTrackText(query.query);
 	if (queryTokens.length === 0) return false;
 	const newerRows = db
 		.prepare(

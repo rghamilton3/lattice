@@ -1,5 +1,10 @@
 import { expect, test } from 'bun:test';
-import { postCapture, postTrack, spineBaseFromCaptureUrl } from './signal-relay';
+import {
+	firstImageAttachmentId,
+	postCapture,
+	postTrack,
+	spineBaseFromCaptureUrl,
+} from './signal-relay';
 
 test('spineBaseFromCaptureUrl accepts capture or track endpoint env values', () => {
 	expect(spineBaseFromCaptureUrl('http://127.0.0.1:3000/api/agent/capture')).toBe(
@@ -65,4 +70,15 @@ test('postTrack sends normal and displaced payloads to track endpoint', async ()
 			source: 'signal-photo',
 		},
 	]);
+});
+
+test('firstImageAttachmentId ignores non-image attachments', () => {
+	expect(
+		firstImageAttachmentId([
+			{ id: 'voice-1', contentType: 'audio/ogg' },
+			{ id: 'file-1', contentType: 'application/pdf' },
+			{ id: 'photo-1', contentType: 'image/jpeg' },
+		]),
+	).toBe('photo-1');
+	expect(firstImageAttachmentId([{ id: 'voice-1', contentType: 'audio/ogg' }])).toBeNull();
 });

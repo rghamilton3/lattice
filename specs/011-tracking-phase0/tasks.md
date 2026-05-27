@@ -18,7 +18,7 @@
 
 **Purpose**: Establish schema and shared route scaffolding needed by all tracking stories.
 
-- [X] T001 Create tracking schema migration with `tracks` and `track_queries` tables plus indexes in `spine/migrations/010_tracks.sql`
+- [X] T001 Create tracking schema migration with `tracks` and `track_queries` tables plus indexes in `spine/migrations/011_tracks.sql`
 - [X] T002 [P] Add shared tracking row/request/response TypeScript interfaces in `spine/src/db/rows.ts`
 - [X] T003 [P] Create placeholder authenticated browser tracking route module in `spine/src/routes/tracks.ts`
 - [X] T004 Register `tracksRoutes(db)` inside the existing Authentik guard in `spine/src/app.ts`
@@ -35,7 +35,7 @@
 - [X] T006 [P] Add test database setup helpers for route tests in `spine/src/testSupport/db.ts`
 - [X] T007 [P] Add app request/auth helper utilities for bearer-token and Authentik-style test requests in `spine/src/testSupport/http.ts`
 - [X] T008 Cover track request normalization and validation through route tests in `spine/src/routes/agent.track.test.ts`
-- [X] T009 Run `bun test spine/src/tracks.schema.test.ts` and fix schema/setup failures in `spine/migrations/010_tracks.sql`
+- [X] T009 Run `bun test spine/src/tracks.schema.test.ts` and fix schema/setup failures in `spine/migrations/011_tracks.sql`
 
 **Checkpoint**: Database schema and test harness are ready; user stories can now be implemented.
 

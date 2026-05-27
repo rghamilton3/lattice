@@ -12,6 +12,7 @@ export function buildTestApp(db: Database, attachmentsDir: string) {
 		devUser: undefined,
 		surfaceBuild: undefined,
 		attachmentsDir: join(attachmentsDir, 'attachments'),
+		archiveDir: join(attachmentsDir, 'archive'),
 	});
 }
 

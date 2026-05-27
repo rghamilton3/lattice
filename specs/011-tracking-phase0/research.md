@@ -8,7 +8,7 @@
 
 ## Decision: Use Direct SQL And A Forward-Only Migration
 
-**Rationale**: Existing spine schema changes live in numbered SQL migrations. `010_tracks.sql` is the next migration after `009_working_attachments.sql`. Direct SQL preserves the no-ORM constitution rule and keeps the implementation easy to inspect.
+**Rationale**: Existing spine schema changes live in numbered SQL migrations. `011_tracks.sql` follows the existing archive migration without sharing a migration number. Direct SQL preserves the no-ORM constitution rule and keeps the implementation easy to inspect.
 
 **Alternatives considered**: An ORM or repository layer was rejected as premature abstraction. A hand-edited database was rejected because migrations are the canonical schema.
 

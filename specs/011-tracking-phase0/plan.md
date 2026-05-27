@@ -14,7 +14,7 @@ Deliver the Phase 0 tracking substrate from `docs/tracking-development-plan.md`:
 
 **Primary Dependencies**: Existing spine stack (`bun:sqlite`, Elysia, TypeBox schemas via `elysia.t`), existing Signal relay code, existing Surface SvelteKit/TanStack Query stack if a minimal search/open UI is touched
 
-**Storage**: Spine-owned SQLite database via forward-only migration `spine/migrations/010_tracks.sql`; optional photo references are stored as paths/identifiers only, not OCRed or semantically indexed in Phase 0
+**Storage**: Spine-owned SQLite database via forward-only migration `spine/migrations/011_tracks.sql`; optional photo references are stored as paths/identifiers only, not OCRed or semantically indexed in Phase 0
 
 **Testing**: `just test`, targeted `bun test` spine route/unit tests, `just check`, and `cd surface && bun run check` if Surface code changes; manual curl/device smoke tests documented in quickstart
 
@@ -63,7 +63,7 @@ specs/011-tracking-phase0/
 ```text
 spine/
 ├── migrations/
-│   └── 010_tracks.sql
+│   └── 011_tracks.sql
 ├── src/
 │   ├── routes/
 │   │   ├── agent.ts

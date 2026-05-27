@@ -225,7 +225,7 @@ function handleMessage(msg: unknown): void {
 					text: parsed.trackText ?? parsed.captureText,
 					captured_at: parsed.capturedAt,
 					displaced: parsed.displaced,
-					photo_ref: parsed.attachments[0]?.id ?? null,
+					photo_ref: firstImageAttachmentId(parsed.attachments),
 				})
 			: postCapture(parsed.captureText, parsed.capturedAt);
 
@@ -245,6 +245,10 @@ function handleMessage(msg: unknown): void {
 			}
 		})
 		.catch((err: Error) => console.error('[signal-relay] failed to post message:', err.message));
+}
+
+export function firstImageAttachmentId(attachments: SignalAttachment[]): string | null {
+	return attachments.find((att) => att.id && att.contentType?.startsWith('image/'))?.id ?? null;
 }
 
 // Spine's agent guard enforces `X-Forwarded-Proto: https` as defense in

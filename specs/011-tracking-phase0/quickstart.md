@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Run spine in development with agent token, dev auth, and HTTP allowed as appropriate for local testing.
-- Apply migrations by starting spine normally; `010_tracks.sql` should be applied on startup.
+- Apply migrations by starting spine normally; `011_tracks.sql` should be applied on startup.
 - Keep existing non-tracking capture flows available for regression checks.
 
 ## Local API Smoke Test

@@ -40,7 +40,7 @@ describe('db.initDb', () => {
 			'008_attachment_upload_source.sql',
 			'009_working_attachments.sql',
 			'010_archives.sql',
-			'010_tracks.sql',
+			'011_tracks.sql',
 		]);
 		db.close();
 	});

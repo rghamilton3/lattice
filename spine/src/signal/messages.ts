@@ -6,7 +6,10 @@ export interface SignalAttachment {
 }
 
 export interface ParsedSignalMessage {
+	action: 'capture' | 'track';
 	captureText: string;
+	trackText: string | null;
+	displaced: boolean;
 	capturedAt: string;
 	attachments: SignalAttachment[];
 	// Fields needed to target this message with a reaction. `sourceTimestamp`
@@ -97,6 +100,9 @@ export function parseSignalMessage(
 		return null;
 	}
 
+	const command = text.match(/^\/(track|checkout)\s+([\s\S]*\S)\s*$/i);
+	const action = command ? 'track' : 'capture';
+	const trackText = command ? command[2].trim() : null;
 	const captureText = text || placeholderText(attachments);
 
 	// Reactions must target the original send timestamp, which is the payload
@@ -109,7 +115,10 @@ export function parseSignalMessage(
 	const capturedAt = new Date(sourceTimestamp).toISOString();
 
 	return {
+		action,
 		captureText,
+		trackText,
+		displaced: command?.[1].toLowerCase() === 'checkout',
 		capturedAt,
 		attachments,
 		sourceNumber: envelope.sourceNumber as string,

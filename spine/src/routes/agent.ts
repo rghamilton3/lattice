@@ -5,6 +5,7 @@ import { basename, join } from 'node:path';
 import { writeCaptureFile, writeLocalFile, writeAttachmentIndex, refreshIndex } from '../search';
 import { emitCapture } from '../captureEvents';
 import { parseCommand } from '../commands';
+import type { TrackCreateRequest, TrackCreateResponse } from '../db/rows';
 import { ArchiveValidationError, createArchive, normalizeArchiveUrl } from '../archives';
 import { enqueueArchiveUrlJob } from '../archiveJobs';
 
@@ -15,6 +16,67 @@ export interface AgentRoutesOptions {
 
 export const agentRoutes = (db: Database, { attachmentsDir, archiveDir }: AgentRoutesOptions) =>
 	new Elysia()
+		.post(
+			'/track',
+			({ body, set }): TrackCreateResponse | { error: string } => {
+				const payload = body as Partial<TrackCreateRequest>;
+				const text = typeof payload.text === 'string' ? payload.text.trim() : '';
+				const source = typeof payload.source === 'string' ? payload.source.trim() : '';
+				const capturedAt =
+					typeof payload.captured_at === 'string' ? payload.captured_at.trim() : '';
+				if (!text) {
+					set.status = 400;
+					return { error: 'text is required' };
+				}
+				if (!source) {
+					set.status = 400;
+					return { error: 'source is required' };
+				}
+				if (!capturedAt || Number.isNaN(Date.parse(capturedAt))) {
+					set.status = 400;
+					return { error: 'captured_at is required' };
+				}
+				if (typeof payload.displaced !== 'boolean') {
+					set.status = 400;
+					return { error: 'displaced must be boolean' };
+				}
+				const supersedes = payload.supersedes ?? null;
+				if (supersedes !== null) {
+					if (!Number.isInteger(supersedes) || supersedes < 1) {
+						set.status = 400;
+						return { error: 'invalid supersedes' };
+					}
+					const existing = db.query('SELECT id FROM tracks WHERE id = ?').get(supersedes);
+					if (!existing) {
+						set.status = 404;
+						return { error: 'supersedes not found' };
+					}
+				}
+
+				const photoRef =
+					typeof payload.photo_ref === 'string' && payload.photo_ref.trim()
+						? payload.photo_ref.trim()
+						: null;
+				const inserted = db
+					.prepare(
+						`INSERT INTO tracks
+						 (text, captured_at, ingested_at, source, displaced, photo_ref, supersedes)
+						 VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+					)
+					.get(
+						text,
+						capturedAt,
+						new Date().toISOString(),
+						source,
+						payload.displaced ? 1 : 0,
+						photoRef,
+						supersedes,
+					) as { id: number };
+				set.status = 201;
+				return { id: inserted.id };
+			},
+			{ body: t.Any() },
+		)
 		.post(
 			'/archive-page',
 			async ({ body, set }) => {

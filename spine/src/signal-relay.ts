@@ -34,7 +34,7 @@ export function validateRelayConfig(config: RelayConfig): string[] {
 
 // Derive base URL from SPINE_URL for constructing attachment endpoint paths.
 export function spineBaseFromCaptureUrl(spineUrl: string): string {
-	return spineUrl.replace(/\/api\/agent\/capture$/, '');
+	return spineUrl.replace(/\/api\/agent\/(capture|track)$/, '');
 }
 
 let config = loadRelayConfig();
@@ -219,17 +219,36 @@ function handleMessage(msg: unknown): void {
 
 	sendReaction('👀', parsed.sourceNumber, parsed.sourceTimestamp);
 
-	postCapture(parsed.captureText, parsed.capturedAt)
+	const post =
+		parsed.action === 'track'
+			? postTrack({
+					text: parsed.trackText ?? parsed.captureText,
+					captured_at: parsed.capturedAt,
+					displaced: parsed.displaced,
+					photo_ref: firstImageAttachmentId(parsed.attachments),
+				})
+			: postCapture(parsed.captureText, parsed.capturedAt);
+
+	post
 		.then((result) => {
 			sendReaction('✅', parsed.sourceNumber, parsed.sourceTimestamp);
-			if (parsed.attachments.length === 0 || !config.signalAttachmentsDir) return;
+			if (
+				parsed.action === 'track' ||
+				parsed.attachments.length === 0 ||
+				!config.signalAttachmentsDir
+			)
+				return;
 			for (const att of parsed.attachments) {
 				postAttachment(result.id, att).catch((err: Error) =>
 					console.error(`[signal-relay] failed to store attachment ${att.id}:`, err.message),
 				);
 			}
 		})
-		.catch((err: Error) => console.error('[signal-relay] failed to post capture:', err.message));
+		.catch((err: Error) => console.error('[signal-relay] failed to post message:', err.message));
+}
+
+export function firstImageAttachmentId(attachments: SignalAttachment[]): string | null {
+	return attachments.find((att) => att.id && att.contentType?.startsWith('image/'))?.id ?? null;
 }
 
 // Spine's agent guard enforces `X-Forwarded-Proto: https` as defense in
@@ -243,12 +262,24 @@ interface CaptureResult {
 	text: string;
 }
 
-async function postCapture(text: string, captured_at: string): Promise<CaptureResult> {
-	const res = await fetch(config.spineUrl, {
+export interface PostMessageOptions {
+	spineUrl?: string;
+	spineBase?: string;
+	agentToken?: string;
+	fetchImpl?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+}
+
+export async function postCapture(
+	text: string,
+	captured_at: string,
+	options: PostMessageOptions = {},
+): Promise<CaptureResult> {
+	const fetchImpl = options.fetchImpl ?? fetch;
+	const res = await fetchImpl(options.spineUrl ?? config.spineUrl, {
 		method: 'POST',
 		headers: {
 			'content-type': 'application/json',
-			authorization: `Bearer ${config.agentToken}`,
+			authorization: `Bearer ${options.agentToken ?? config.agentToken}`,
 			'x-forwarded-proto': 'https',
 		},
 		body: JSON.stringify({ text, source: 'signal', captured_at }),
@@ -272,6 +303,44 @@ async function postCapture(text: string, captured_at: string): Promise<CaptureRe
 		sendReply(`✓ #${result.id}`);
 	}
 
+	return result;
+}
+
+export interface TrackPostBody {
+	text: string;
+	captured_at: string;
+	displaced: boolean;
+	photo_ref?: string | null;
+}
+
+export async function postTrack(
+	body: TrackPostBody,
+	options: PostMessageOptions = {},
+): Promise<{ id: number }> {
+	const fetchImpl = options.fetchImpl ?? fetch;
+	const spineBase =
+		options.spineBase ?? spineBaseFromCaptureUrl(options.spineUrl ?? config.spineUrl);
+	const source = body.photo_ref ? 'signal-photo' : 'signal-text';
+	const res = await fetchImpl(`${spineBase}/api/agent/track`, {
+		method: 'POST',
+		headers: {
+			'content-type': 'application/json',
+			authorization: `Bearer ${options.agentToken ?? config.agentToken}`,
+			'x-forwarded-proto': 'https',
+		},
+		body: JSON.stringify({ ...body, source }),
+	});
+
+	if (!res.ok) {
+		const responseBody = await res.text().catch(() => '');
+		throw new Error(
+			`POST /api/agent/track returned ${res.status}${responseBody ? `: ${responseBody}` : ''}`,
+		);
+	}
+
+	const result = (await res.json()) as { id: number };
+	console.log(`[signal-relay] tracked id=${result.id}: ${body.text.slice(0, 80)}`);
+	sendReply(`Tracked: ${body.text}`);
 	return result;
 }
 

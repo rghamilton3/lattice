@@ -8,6 +8,7 @@ import { searchRoutes } from './routes/search';
 import { filesRoutes } from './routes/files';
 import { workingRoutes } from './routes/working';
 import { lateralRoutes } from './routes/lateral';
+import { tracksRoutes } from './routes/tracks';
 import { agentRoutes } from './routes/agent';
 import { statusRoutes } from './routes/status';
 import { tasksRoutes } from './routes/tasks';
@@ -45,6 +46,7 @@ export function buildApp(deps: AppDeps) {
 				.use(filesRoutes(db))
 				.use(workingRoutes(db, { attachmentsDir }))
 				.use(lateralRoutes(db))
+				.use(tracksRoutes(db))
 				.use(
 					statusRoutes(db, () =>
 						buildPlatformStatus({ db, agentToken, allowHttp, devUser, surfaceBuild }),

@@ -1,5 +1,6 @@
 installed:
 - git
+- review
 - time-machine
 settings:
   auto_execute_hooks: true
@@ -130,6 +131,13 @@ hooks:
     optional: true
     prompt: Feature implemented. Continue to the next feature in the queue?
     description: ''
+    condition: null
+  - extension: review
+    command: speckit.review.run
+    enabled: true
+    optional: true
+    prompt: Run PR review on implemented changes?
+    description: Comprehensive review after implementation
     condition: null
   after_checklist:
   - extension: git

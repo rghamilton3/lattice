@@ -6,12 +6,15 @@ import { writeCaptureFile, writeLocalFile, writeAttachmentIndex, refreshIndex } 
 import { emitCapture } from '../captureEvents';
 import { parseCommand } from '../commands';
 import type { TrackCreateRequest, TrackCreateResponse } from '../db/rows';
+import { ArchiveValidationError, createArchive, normalizeArchiveUrl } from '../archives';
+import { enqueueArchiveUrlJob } from '../archiveJobs';
 
 export interface AgentRoutesOptions {
 	attachmentsDir: string;
+	archiveDir: string;
 }
 
-export const agentRoutes = (db: Database, { attachmentsDir }: AgentRoutesOptions) =>
+export const agentRoutes = (db: Database, { attachmentsDir, archiveDir }: AgentRoutesOptions) =>
 	new Elysia()
 		.post(
 			'/track',
@@ -73,6 +76,76 @@ export const agentRoutes = (db: Database, { attachmentsDir }: AgentRoutesOptions
 				return { id: inserted.id };
 			},
 			{ body: t.Any() },
+		)
+		.post(
+			'/archive-page',
+			async ({ body, set }) => {
+				try {
+					const html = await body.file.text();
+					if (html.trim().length === 0) throw new ArchiveValidationError('archive file is empty');
+					const row = createArchive(db, {
+						url: body.url,
+						title: body.title,
+						html,
+						capturedVia: 'singlefile',
+						source: body.source ?? 'browser-ext',
+						whySaved: body.why_saved,
+						quality: 'good',
+						archiveDir,
+					});
+					refreshIndex();
+					return {
+						id: row.id,
+						url: row.url,
+						title: row.title,
+						quality: row.quality,
+						captured_via: row.captured_via,
+						superseded: row.superseded,
+					};
+				} catch (error) {
+					if (error instanceof ArchiveValidationError) {
+						set.status = 422;
+						return { error: error.message };
+					}
+					console.error('[archive] archive-page failed:', error);
+					set.status = 500;
+					return { error: 'archive failed' };
+				}
+			},
+			{
+				body: t.Object({
+					file: t.File(),
+					url: t.String({ minLength: 1 }),
+					title: t.Optional(t.String()),
+					why_saved: t.Optional(t.String()),
+					source: t.Optional(t.String()),
+				}),
+			},
+		)
+		.post(
+			'/archive-url',
+			({ body, set }) => {
+				try {
+					const url = normalizeArchiveUrl(body.url);
+					const job = enqueueArchiveUrlJob(db, archiveDir, {
+						url,
+						source: body.source,
+						why_saved: body.why_saved,
+					});
+					set.status = 202;
+					return { job_id: job.id, status: job.status };
+				} catch (error) {
+					set.status = 422;
+					return { error: error instanceof Error ? error.message : 'invalid archive URL' };
+				}
+			},
+			{
+				body: t.Object({
+					url: t.String({ minLength: 1 }),
+					why_saved: t.Optional(t.String()),
+					source: t.Optional(t.String()),
+				}),
+			},
 		)
 		.post(
 			'/capture',

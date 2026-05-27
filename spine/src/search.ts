@@ -30,17 +30,34 @@ interface CaptureData {
 	captured_at: string;
 }
 
+interface ArchiveData {
+	id: number;
+	url: string;
+	title: string | null;
+	archived_at: string;
+	quality: string;
+	extracted_text: string;
+}
+
 export interface SearchResult {
 	id: number;
 	score: number;
 	snippet: string;
 	body: string;
 	path: string;
-	kind: 'capture' | 'local-file' | 'working' | 'capture-attachment' | 'working-attachment';
+	kind:
+		| 'capture'
+		| 'local-file'
+		| 'working'
+		| 'capture-attachment'
+		| 'working-attachment'
+		| 'archive';
 	machine_id?: string;
 	slug?: string;
 	capture_id?: number;
 	filename?: string;
+	url?: string;
+	title?: string | null;
 	modified_at: string;
 }
 
@@ -62,6 +79,10 @@ export function attachmentsMdDir(): string {
 
 export function workingAttachmentsMdDir(): string {
 	return join(dbDir(), 'working-attachment-index');
+}
+
+export function archivesMdDir(): string {
+	return join(dbDir(), 'archive-index');
 }
 
 function qmdDbPath(): string {
@@ -102,6 +123,17 @@ export function localFileToMarkdown(machineId: string, path: string, text: strin
 	return `---\nmachine_id: ${sanitize(machineId)}\npath: ${sanitize(path)}\n---\n\n${text}\n`;
 }
 
+export function archiveToMarkdown({
+	id,
+	url,
+	title,
+	archived_at,
+	quality,
+	extracted_text,
+}: ArchiveData): string {
+	return `---\nid: ${id}\nurl: ${sanitize(url)}\ntitle: ${sanitize(title ?? url)}\narchived_at: ${sanitize(archived_at)}\nquality: ${sanitize(quality)}\n---\n\n${sanitize(title ?? url)}\n\n${extracted_text}\n`;
+}
+
 let _db: Database | null = null;
 let _store: QMDStore | null = null;
 let _initFailed = false;
@@ -130,6 +162,7 @@ export async function initSearch(db: Database): Promise<void> {
 	const working = workingDir();
 	const attachmentsMd = attachmentsMdDir();
 	const workingAttachmentsMd = workingAttachmentsMdDir();
+	const archivesMd = archivesMdDir();
 	// QMD's glob over `working` runs at createStore time; without the dir
 	// present it raises and trips _initFailed. Pre-refactor working.ts mkdir'd
 	// at module load; now it only mkdirs lazily, so init must do it.
@@ -138,6 +171,7 @@ export async function initSearch(db: Database): Promise<void> {
 	mkdirSync(working, { recursive: true });
 	mkdirSync(attachmentsMd, { recursive: true });
 	mkdirSync(workingAttachmentsMd, { recursive: true });
+	mkdirSync(archivesMd, { recursive: true });
 
 	const rows = db
 		.query('SELECT id, text, source, captured_at FROM captures')
@@ -176,6 +210,20 @@ export async function initSearch(db: Database): Promise<void> {
 		}
 	}
 
+	const archiveRows = db
+		.query(
+			`SELECT id, url, title, archived_at, quality, extracted_text FROM archives
+			 WHERE quality = 'good' AND superseded_by IS NULL AND deleted_at IS NULL`,
+		)
+		.all() as ArchiveData[];
+
+	for (const row of archiveRows) {
+		const filePath = join(archivesMd, `${row.id}.md`);
+		if (!existsSync(filePath)) {
+			writeFileSync(filePath, archiveToMarkdown(row));
+		}
+	}
+
 	try {
 		_store = await createStore({
 			dbPath: qmdDbPath(),
@@ -186,6 +234,7 @@ export async function initSearch(db: Database): Promise<void> {
 					'local-files': { path: localFiles, pattern: '**/*.md' },
 					'capture-attachments': { path: attachmentsMd, pattern: '**/*.md' },
 					'working-attachments': { path: workingAttachmentsMd, pattern: '**/*.md' },
+					archives: { path: archivesMd, pattern: '**/*.md' },
 				},
 			},
 		});
@@ -208,6 +257,11 @@ export function writeCaptureFile(
 		join(capturesDir(), `${id}.md`),
 		captureToMarkdown({ id, text, source, captured_at }),
 	);
+}
+
+export function writeArchiveIndex(row: ArchiveData): void {
+	mkdirSync(archivesMdDir(), { recursive: true });
+	writeFileSync(join(archivesMdDir(), `${row.id}.md`), archiveToMarkdown(row));
 }
 
 export function writeWorkingAttachmentIndex(
@@ -293,6 +347,10 @@ function mapResults(
 	const fileStmt = _db?.query(
 		'SELECT id, modified_at FROM file_index WHERE machine_id = ? AND hash = ?',
 	);
+	const archiveStmt = _db?.query(
+		`SELECT id, url, title, archived_at FROM archives
+		 WHERE id = ? AND quality = 'good' AND superseded_by IS NULL AND deleted_at IS NULL`,
+	);
 	return hits.flatMap((r): SearchResult[] => {
 		const m = VIRTUAL_PATH.exec(r.file);
 		if (!m) return [];
@@ -350,6 +408,30 @@ function mapResults(
 					kind: 'local-file' as const,
 					machine_id,
 					modified_at: fileRow.modified_at,
+				},
+			];
+		}
+		if (collection === 'archives') {
+			const id = parseInt(basename(relPath, '.md'), 10);
+			if (isNaN(id)) return [];
+			const archiveRow = archiveStmt?.get(id) as {
+				id: number;
+				url: string;
+				title: string | null;
+				archived_at: string;
+			} | null;
+			if (!archiveRow) return [];
+			return [
+				{
+					id,
+					score: r.score,
+					snippet: r.bestChunk,
+					body: r.body,
+					path: archiveRow.url,
+					kind: 'archive' as const,
+					url: archiveRow.url,
+					title: archiveRow.title,
+					modified_at: archiveRow.archived_at,
 				},
 			];
 		}

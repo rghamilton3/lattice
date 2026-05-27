@@ -3,6 +3,7 @@
 	import { browser } from '$app/environment';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { searchKeys, fetchSimilar } from '$lib/api/search';
+	import { archiveRawUrl } from '$lib/api/archives';
 	import type { DocRef, SearchResult } from '$lib/types';
 	import Icon from '$components/icons/Icon.svelte';
 
@@ -55,7 +56,16 @@
 		if (r.kind === 'local-file') return { kind: 'file', id: r.id };
 		if (r.kind === 'capture-attachment') return { kind: 'capture', id: r.capture_id };
 		if (r.kind === 'working-attachment') return { kind: 'working', slug: r.slug };
+		if (r.kind === 'archive') return { kind: 'file', id: r.id };
 		return { kind: 'working', slug: r.slug };
+	}
+
+	function openRelated(r: SearchResult) {
+		if (r.kind === 'archive') {
+			window.open(archiveRawUrl(r.id), '_blank', 'noopener,noreferrer');
+			return;
+		}
+		wb.openInPane(paneIndex, { kind: 'doc', ref: toRef(r) });
 	}
 
 	function chipClass(kind: SearchResult['kind']): string {
@@ -114,10 +124,7 @@
 			{:else if relatedQuery.data}
 				<div class="related-list" style="overflow-y:auto; padding: 0 22px 22px">
 					{#each relatedQuery.data.results.slice(0, 6) as r (`${r.kind}:${r.kind === 'working' ? r.slug : r.id}`)}
-						<button
-							class="related-card"
-							onclick={() => wb.openInPane(paneIndex, { kind: 'doc', ref: toRef(r) })}
-						>
+						<button class="related-card" onclick={() => openRelated(r)}>
 							<div class="row" style="gap:6px">
 								<span class="chip {chipClass(r.kind)}">{chipLabel(r.kind)}</span>
 								{#if machineId(r)}

@@ -6,6 +6,7 @@ import { buildApp } from './app';
 
 const DB_PATH = resolve(getDatabasePath());
 const ATTACHMENTS_DIR = join(dirname(DB_PATH), 'attachments');
+const ARCHIVE_DIR = process.env.ARCHIVE_STORAGE_DIR ?? join(dirname(DB_PATH), 'web');
 const SURFACE_BUILD = process.env.SURFACE_BUILD ?? join(import.meta.dir, '../../surface/build');
 
 const db = initDb();
@@ -28,6 +29,7 @@ const app = buildApp({
 	devUser: process.env.DEV_USER,
 	surfaceBuild: SURFACE_BUILD,
 	attachmentsDir: ATTACHMENTS_DIR,
+	archiveDir: ARCHIVE_DIR,
 }).listen({ port: 3000, hostname: process.env.HOST ?? '127.0.0.1' });
 
 console.log(`Spine listening on http://${app.server?.hostname}:${app.server?.port}`);

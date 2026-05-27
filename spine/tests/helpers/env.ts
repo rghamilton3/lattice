@@ -6,6 +6,7 @@ export interface TestEnv {
 	dir: string;
 	dbPath: string;
 	attachmentsDir: string;
+	archiveDir: string;
 	cleanup(): void;
 }
 
@@ -15,6 +16,7 @@ export function mkTestEnv(): TestEnv {
 	const dir = mkdtempSync(join(tmpdir(), 'spine-test-'));
 	const dbPath = join(dir, 'lattice.db');
 	const attachmentsDir = join(dir, 'attachments');
+	const archiveDir = join(dir, 'web');
 
 	process.env.DATABASE_PATH = dbPath;
 
@@ -22,6 +24,7 @@ export function mkTestEnv(): TestEnv {
 		dir,
 		dbPath,
 		attachmentsDir,
+		archiveDir,
 		cleanup() {
 			delete process.env.DATABASE_PATH;
 			try {

@@ -37,6 +37,12 @@ enum AppState {
     LoadError(String),
 }
 
+enum PickerResult {
+    Selected(PathBuf),
+    Canceled,
+    Failed(String),
+}
+
 // ── ConfigApp ─────────────────────────────────────────────────────────────────
 
 struct ConfigApp {
@@ -89,6 +95,39 @@ impl ConfigApp {
         };
         if done {
             self.reindex_rx = None;
+        }
+    }
+
+    fn choose_watch_folder() -> PickerResult {
+        match std::panic::catch_unwind(|| {
+            rfd::FileDialog::new()
+                .set_title("Choose watch folder")
+                .pick_folder()
+        }) {
+            Ok(Some(path)) => PickerResult::Selected(path),
+            Ok(None) => PickerResult::Canceled,
+            Err(_) => PickerResult::Failed(
+                "Could not open the folder picker. Type the watch path manually and try saving again."
+                    .into(),
+            ),
+        }
+    }
+
+    fn apply_watch_path_picker_result(
+        watch_rows: &mut [WatchRow],
+        row_index: usize,
+        result: PickerResult,
+    ) -> Option<String> {
+        match result {
+            PickerResult::Selected(path) => match watch_rows.get_mut(row_index) {
+                Some(row) => {
+                    row.path = path.display().to_string();
+                    None
+                }
+                None => Some("The selected watch path row no longer exists.".into()),
+            },
+            PickerResult::Canceled => None,
+            PickerResult::Failed(message) => Some(message),
         }
     }
 }
@@ -220,6 +259,7 @@ impl eframe::App for ConfigApp {
 
         let mut save_clicked = false;
         let mut cancel_clicked = false;
+        let mut picker_result: Option<(usize, PickerResult)> = None;
 
         // Button row must be reserved before CentralPanel so ScrollArea doesn't
         // consume all vertical space and push the buttons off screen.
@@ -310,12 +350,15 @@ impl eframe::App for ConfigApp {
                         egui::Frame::group(ui.style()).show(ui, |ui| {
                             ui.horizontal(|ui| {
                                 ui.label("Path:");
-                                // Reserve ~70 px for the Remove button; field gets the rest.
-                                let field_w = (ui.available_width() - 70.0).max(60.0);
+                                // Reserve room for Browse and Remove; field gets the rest.
+                                let field_w = (ui.available_width() - 150.0).max(60.0);
                                 ui.add(
                                     egui::TextEdit::singleline(&mut row.path)
                                         .desired_width(field_w),
                                 );
+                                if ui.button("Browse...").clicked() {
+                                    picker_result = Some((i, Self::choose_watch_folder()));
+                                }
                                 if ui.button("Remove").clicked() {
                                     to_remove = Some(i);
                                 }
@@ -359,6 +402,15 @@ impl eframe::App for ConfigApp {
 
         if cancel_clicked {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+        if let Some((row_index, result)) = picker_result {
+            if let Some(message) = Self::apply_watch_path_picker_result(
+                form.watch_rows.as_mut_slice(),
+                row_index,
+                result,
+            ) {
+                *modal = ModalState::Error(message);
+            }
         }
         if save_clicked {
             match config_edit::validate(form) {
@@ -438,4 +490,84 @@ fn main() {
         Box::new(|_cc| Ok(Box::new(ConfigApp::new()))),
     )
     .expect("eframe failed to start");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rows() -> Vec<WatchRow> {
+        vec![
+            WatchRow {
+                path: "/before/one".into(),
+                patterns: "**/*.md".into(),
+            },
+            WatchRow {
+                path: "/before/two".into(),
+                patterns: "**/*.txt".into(),
+            },
+        ]
+    }
+
+    #[test]
+    fn picker_selection_updates_only_target_watch_row() {
+        let mut rows = rows();
+
+        let message = ConfigApp::apply_watch_path_picker_result(
+            rows.as_mut_slice(),
+            1,
+            PickerResult::Selected(PathBuf::from("/picked/folder")),
+        );
+
+        assert!(message.is_none());
+        assert_eq!(rows[0].path, "/before/one");
+        assert_eq!(rows[1].path, "/picked/folder");
+    }
+
+    #[test]
+    fn picker_cancel_preserves_existing_watch_path() {
+        let mut rows = rows();
+
+        let message = ConfigApp::apply_watch_path_picker_result(
+            rows.as_mut_slice(),
+            0,
+            PickerResult::Canceled,
+        );
+
+        assert!(message.is_none());
+        assert_eq!(rows[0].path, "/before/one");
+        assert_eq!(rows[1].path, "/before/two");
+    }
+
+    #[test]
+    fn picker_failure_preserves_path_and_returns_text_feedback() {
+        let mut rows = rows();
+
+        let message = ConfigApp::apply_watch_path_picker_result(
+            rows.as_mut_slice(),
+            0,
+            PickerResult::Failed("Folder picker is unavailable.".into()),
+        );
+
+        assert_eq!(message.as_deref(), Some("Folder picker is unavailable."));
+        assert_eq!(rows[0].path, "/before/one");
+    }
+
+    #[test]
+    fn picker_result_for_removed_row_reports_error_without_mutation() {
+        let mut rows = rows();
+
+        let message = ConfigApp::apply_watch_path_picker_result(
+            rows.as_mut_slice(),
+            9,
+            PickerResult::Selected(PathBuf::from("/picked/folder")),
+        );
+
+        assert_eq!(
+            message.as_deref(),
+            Some("The selected watch path row no longer exists.")
+        );
+        assert_eq!(rows[0].path, "/before/one");
+        assert_eq!(rows[1].path, "/before/two");
+    }
 }

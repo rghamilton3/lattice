@@ -396,4 +396,83 @@ max_file_bytes = 10485760
         assert!(output.contains("**/*.md"));
         assert!(output.contains("**/*.txt"));
     }
+
+    #[test]
+    fn picker_selected_path_uses_existing_watch_toml_shape() {
+        let mut doc: DocumentMut = r#"[spine]
+url = "https://example.com"
+agent_token = "tok"
+
+[agent]
+poll_interval_minutes = 15
+max_file_bytes = 10485760
+"#
+        .parse()
+        .unwrap();
+        let form = ConfigForm {
+            spine_url: "https://example.com".into(),
+            spine_token: "tok".into(),
+            machine_id: String::new(),
+            poll_minutes: 15,
+            max_file_mb: 10.0,
+            watch_rows: vec![WatchRow {
+                path: "/picked/folder".into(),
+                patterns: "**/*.md".into(),
+            }],
+        };
+
+        apply(&mut doc, &form);
+        let output = doc.to_string();
+
+        assert!(output.contains("[[agent.watch]]"));
+        assert!(output.contains("path = \"/picked/folder\""));
+        assert!(output.contains("patterns = [\"**/*.md\"]"));
+    }
+
+    #[test]
+    fn manual_path_edge_cases_still_round_trip_through_watch_rows() {
+        let mut doc: DocumentMut = "".parse().unwrap();
+        let form = ConfigForm {
+            spine_url: "https://example.com".into(),
+            spine_token: "tok".into(),
+            machine_id: String::new(),
+            poll_minutes: 15,
+            max_file_mb: 10.0,
+            watch_rows: vec![
+                WatchRow {
+                    path: r#"C:\Users\Riley\Notes"#.into(),
+                    patterns: "**/*.md\n\n**/*.txt".into(),
+                },
+                WatchRow {
+                    path: "~/Documents/quoted path".into(),
+                    patterns: "  ".into(),
+                },
+                WatchRow {
+                    path: r#"/tmp/has "quote""#.into(),
+                    patterns: "**/*.pdf".into(),
+                },
+                WatchRow {
+                    path: r#"C:\Users\Riley\Notes"#.into(),
+                    patterns: "**/*.org".into(),
+                },
+            ],
+        };
+
+        apply(&mut doc, &form);
+        let output = doc.to_string();
+        let parsed: DocumentMut = output.parse().unwrap();
+        let paths: Vec<&str> = parsed["agent"]["watch"]
+            .as_array_of_tables()
+            .unwrap()
+            .iter()
+            .filter_map(|watch| watch["path"].as_str())
+            .collect();
+
+        assert_eq!(paths[0], r#"C:\Users\Riley\Notes"#);
+        assert_eq!(paths[1], "~/Documents/quoted path");
+        assert_eq!(paths[2], r#"/tmp/has "quote""#);
+        assert_eq!(paths[3], r#"C:\Users\Riley\Notes"#);
+        assert!(output.contains("patterns = []"));
+        assert!(output.contains("**/*.org"));
+    }
 }

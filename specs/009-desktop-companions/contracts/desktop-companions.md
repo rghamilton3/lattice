@@ -108,6 +108,11 @@ patterns = ["**/*.md", "**/*.txt", "**/*.pdf"]
 Config editor behavior:
 
 - Load missing optional values with documented defaults.
+- Watch path rows expose a `Browse...` folder picker beside the editable path field.
+- Successful folder selections update the same path value used by manual editing and save as `[[agent.watch]] path = "..."`.
+- Picker cancellation leaves the prior path unchanged.
+- Picker launch failure leaves the prior path unchanged and reports plain text guidance to type the path manually.
+- Manual path editing remains available as the correction and unsupported-picker fallback.
 - Preserve comments and unrelated formatting where possible.
 - Save atomically through a temporary file and rename.
 - Remove empty watch patterns instead of writing blank patterns.

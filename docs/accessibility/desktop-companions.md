@@ -16,6 +16,10 @@
 - Tray state is not color-only: status text includes labels such as `Agent stopped`, `Spine: reachable`, `Spine: unreachable`, `IPC error`, and `Last error`.
 - Quick capture provides plain text confirmation or queued/lost-capture diagnostics in addition to desktop notifications.
 - Configuration editing validates required spine URL/token and numeric limits before saving, with field-specific plain text errors.
+- Watch path rows keep the `Path:` text label and editable text field, and add a text-labeled `Browse...` folder picker; the control is not icon-only.
+- The `Browse...` button participates in egui's normal button focus/activation model; the native folder dialog follows platform keyboard behavior where available.
+- Canceling the folder picker leaves the visible path unchanged. Picker launch failure shows plain text guidance: `Could not open the folder picker. Type the watch path manually and try saving again.`
+- Manual path editing remains available as the accessibility and unsupported-picker fallback for watch directories.
 - Reindex and restart failures name the failed local control path, such as `systemctl`, `schtasks`, or agent IPC connection errors.
 - Documentation includes text commands for checking services, reading logs, invoking capture manually, and starting Windows scheduled tasks.
 

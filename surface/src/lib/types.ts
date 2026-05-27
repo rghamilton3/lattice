@@ -31,6 +31,17 @@ export type SearchResult =
 			modified_at: string;
 	  }
 	| {
+			kind: 'archive';
+			id: number;
+			score: number;
+			snippet: string;
+			body: string;
+			path: string;
+			url: string;
+			title: string | null;
+			modified_at: string;
+	  }
+	| {
 			kind: 'capture-attachment';
 			id: number;
 			score: number;
@@ -65,6 +76,53 @@ export interface Capture {
 	task_priority: 'high' | 'medium' | 'low' | null;
 	task_notes: string | null;
 	first_image_id: number | null;
+}
+
+export type ArchiveQuality = 'good' | 'degraded' | 'failed';
+export type TriageAction = 'keep' | 'archive' | 'promote' | 'task' | 'skip';
+export type ArchiveAction = 'keep' | 'archive' | 'recapture' | 'delete' | 'skip' | 'auto-kept';
+export type InboxAction = TriageAction | ArchiveAction;
+
+export interface InboxActionDescriptor {
+	action: InboxAction;
+	label: string;
+	shortcut: string;
+	tone?: 'primary' | 'neutral' | 'destructive';
+}
+
+export type InboxItem =
+	| {
+			item_type: 'capture';
+			id: string;
+			capture_id: number;
+			title: string;
+			summary: string;
+			source: string;
+			created_at: string;
+			capture: Capture;
+			actions: InboxActionDescriptor[];
+	  }
+	| {
+			item_type: 'archive_recapture' | 'archive_recent';
+			id: string;
+			archive_id: number;
+			title: string;
+			summary: string;
+			url: string;
+			source: string | null;
+			quality: ArchiveQuality;
+			created_at: string;
+			actions: InboxActionDescriptor[];
+	  };
+
+export interface InboxPage {
+	items: InboxItem[];
+	next_cursor: string | null;
+}
+
+export interface ArchiveActionResponse {
+	ok: boolean;
+	url: string;
 }
 
 export type TaskPriority = 'high' | 'medium' | 'low';

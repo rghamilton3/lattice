@@ -14,6 +14,7 @@ export interface BuildTestAppOptions {
 	allowHttp?: boolean;
 	devUser?: string | undefined;
 	surfaceBuild?: string | undefined;
+	archiveDir?: string | undefined;
 }
 
 // Sets up a complete test environment:
@@ -44,6 +45,7 @@ export async function buildTestApp(opts: BuildTestAppOptions = {}): Promise<Test
 		devUser: 'devUser' in opts ? opts.devUser : 'dev@local',
 		surfaceBuild: opts.surfaceBuild,
 		attachmentsDir: env.attachmentsDir,
+		archiveDir: opts.archiveDir ?? env.archiveDir,
 	});
 
 	return {

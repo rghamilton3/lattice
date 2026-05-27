@@ -1,5 +1,11 @@
 **/node_modules/
 **/.svelte-kit/
+.git/
+Dockerfile*
+.dockerignore
+*.log*
+.env*
+coverage/
 spine/captures/
 spine/*.db
 spine/*.db-shm

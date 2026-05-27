@@ -84,7 +84,19 @@ Searches tracking records, logs the query, and returns a primary answer plus his
       "supersedes": null
     }
   ],
-  "empty_message": null
+  "empty_message": null,
+  "results": [
+    {
+      "id": 42,
+      "text": "drill is on the garage top shelf, blue case",
+      "captured_at": "2026-05-26T14:30:12Z",
+      "ingested_at": "2026-05-26T14:30:13Z",
+      "source": "ha-voice:printing-room",
+      "displaced": false,
+      "photo_ref": null,
+      "supersedes": null
+    }
+  ]
 }
 ```
 

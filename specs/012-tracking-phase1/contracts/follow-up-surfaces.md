@@ -2,6 +2,8 @@
 
 Phase 1 may use a minimal Surface view, Signal messages, or documented browser/curl flows. Any chosen surface must satisfy this user-facing contract.
 
+Chosen Phase 1 surface: documented browser/curl endpoint flow. No persistent Surface UI is added for this milestone, so persistent web UI accessibility evidence is N/A until a durable tracking view is introduced.
+
 ## Retrieval Surface
 
 ### Required User Actions

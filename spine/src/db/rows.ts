@@ -94,6 +94,7 @@ export interface TrackCreateRequest {
 
 export interface TrackCreateResponse {
 	id: number;
+	possible_duplicates: TrackDuplicateHint[];
 }
 
 export interface TrackSearchResult {
@@ -109,5 +110,26 @@ export interface TrackSearchResult {
 
 export interface TrackSearchResponse {
 	query_id: number;
+	primary: TrackSearchResult | null;
+	history: TrackSearchResult[];
+	empty_message: string | null;
 	results: TrackSearchResult[];
+}
+
+export interface TrackDuplicateHint {
+	track_id: number;
+	text: string;
+	captured_at: string;
+	source: string;
+	displaced: boolean;
+	reason: string;
+}
+
+export interface TrackFollowUp {
+	query_id: number;
+	query: string;
+	queried_at: string;
+	expires_at: string;
+	opened_track: TrackSearchResult;
+	affirmative_label: string;
 }

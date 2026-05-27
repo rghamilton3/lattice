@@ -8,6 +8,8 @@
 
 ## Local Full-Cycle Smoke Test
 
+Phase 1 uses documented browser/curl endpoints only. No persistent Surface tracking UI is added in this milestone; the polished tracking board remains deferred.
+
 1. Start spine:
 
 ```bash
@@ -32,6 +34,12 @@ curl -sS -X POST http://localhost:3000/api/agent/track \
   -d '{"text":"drill is on the garage top shelf, blue case","captured_at":"2026-05-26T14:30:12Z","source":"manual-smoke","displaced":false}'
 ```
 
+Expected response shape:
+
+```json
+{ "id": 42, "possible_duplicates": [] }
+```
+
 4. Search with ordinary wording:
 
 ```bash
@@ -39,6 +47,8 @@ curl -sS 'http://localhost:3000/api/tracks/search?q=where%20is%20the%20drill' \
   -H 'x-forwarded-proto: https' \
   -H 'x-authentik-username: dev'
 ```
+
+Expected response includes `query_id`, `primary`, `history`, `empty_message`, and a compatibility `results` array.
 
 5. Open the primary result:
 
@@ -101,12 +111,13 @@ curl -sS -X POST http://localhost:3000/api/tracks/followups/<query_id>/skip \
 ## Accessibility And Language Checks
 
 - If persistent Surface UI changed, update `docs/accessibility/tracking-phase1.md` with keyboard, focus, label, and non-color-only state evidence.
-- If using CLI/curl or Signal flows, confirm output is readable plain text, action labels are explicit, and no state depends on color.
+- Persistent Surface UI did not change, so `docs/accessibility/` evidence is N/A for Phase 1.
+- CLI/curl output is readable JSON/plain text, action labels are explicit in endpoint names (`still-accurate`, `moved`, `skip`), and no state depends on color.
 - Confirm follow-up copy avoids backlog, streak, overdue, debt, or nagging language.
 - Bilingual delivery is N/A for Phase 1 unless translation resources are introduced separately.
 
 ## Done Evidence
 
-- Record one full real-item cycle: track, query, open result, receive follow-up, answer follow-up.
-- Record at least three real-item loop closures across the three outcomes where practical.
-- Note any physical HA Voice, Tasker, or live Signal checks that cannot be run in the coding environment.
+- Coding-environment evidence: route tests complete one full track, query, open-result, pending follow-up, and answer cycle.
+- Coding-environment evidence: route tests cover all three loop-closure outcomes: still accurate, moved/new location, and skipped.
+- Real physical HA Voice, Tasker, and live Signal checks cannot be run in this coding environment and should be completed after deployment.

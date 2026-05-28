@@ -72,6 +72,14 @@ function Resolve-InstallerDownloads {
 
 $allAssetsRelease = New-TestRelease -AssetNames @($agentAsset, $captureAsset, $trayAsset)
 
+$emptyArgumentActionParams = Resolve-ScheduledTaskActionParameters -ExePath 'C:\lattice\lattice-agent.exe'
+Assert-Equal -Actual $emptyArgumentActionParams.Execute -Expected 'C:\lattice\lattice-agent.exe' -Message 'Task action should include executable path.'
+Assert-Equal -Actual $emptyArgumentActionParams.ContainsKey('Argument') -Expected $false -Message 'Task action should omit empty Argument parameter.'
+
+$promptActionParams = Resolve-ScheduledTaskActionParameters -ExePath 'C:\lattice\lattice-capture.exe' -Arguments '--prompt'
+Assert-Equal -Actual $promptActionParams.Execute -Expected 'C:\lattice\lattice-capture.exe' -Message 'Task action with arguments should include executable path.'
+Assert-Equal -Actual $promptActionParams.Argument -Expected '--prompt' -Message 'Task action should preserve non-empty arguments.'
+
 Assert-Equal `
     -Actual (Get-ReleaseAssetUrl -Release $allAssetsRelease -Asset $agentAsset) `
     -Expected 'https://downloads.example.test/agent-v0.10.0/lattice-agent-x86_64-pc-windows-msvc.exe' `

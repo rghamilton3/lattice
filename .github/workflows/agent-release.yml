@@ -150,7 +150,6 @@ jobs:
         run: |
           cp agent/lattice-agent.service lattice-agent.service
           cp agent/lattice-tray.service  lattice-tray.service
-          cp install.ps1                  install.ps1
 
       - name: Install BLAKE3 checksum tool
         uses: taiki-e/install-action@v2

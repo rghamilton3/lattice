@@ -109,6 +109,16 @@
 				actions: [{ label: 'Reload', onclick: () => pwa.reloadForUpdate(), variant: 'primary' }]
 			};
 		}
+		if (pwa.installUnsupported) {
+			return {
+				kind: 'unsupported',
+				tone: 'info',
+				title: 'Install unavailable',
+				message:
+					'This browser did not expose an install prompt. You can still use Surface in this tab.',
+				actions: [{ label: 'Dismiss', onclick: () => pwa.dismissInstall() }]
+			};
+		}
 		return null;
 	});
 
@@ -124,8 +134,9 @@
 	ononline={() => pwa.setNetworkState(true)}
 	onoffline={() => pwa.setNetworkState(false)}
 	onfocus={() => pwa.refreshBrowserState()}
+	onfocusin={() => pwa.refreshActiveTextEntry()}
+	onfocusout={() => pwa.refreshActiveTextEntry()}
 	onpointerdown={() => pwa.refreshBrowserState()}
-	onkeyup={() => pwa.refreshBrowserState()}
 />
 
 <div class="shell" data-focus={wb.focusMode ? 'on' : 'off'}>

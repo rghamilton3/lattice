@@ -32,6 +32,15 @@ describe('PWA install runtime state', () => {
 		expect(pwa.installAvailable).toBe(false);
 	});
 
+	it('reports unsupported browser install prompts until dismissed', () => {
+		const pwa = new PwaRuntimeState();
+		pwa.displayMode = 'browser';
+
+		expect(pwa.installUnsupported).toBe(true);
+		pwa.dismissInstall();
+		expect(pwa.installUnsupported).toBe(false);
+	});
+
 	it('dismisses the prompt when the browser install choice is dismissed', async () => {
 		const pwa = new PwaRuntimeState();
 		pwa.displayMode = 'browser';

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PwaRuntimeState } from '$lib/state/pwa.svelte';
 
+const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 describe('PWA update runtime state', () => {
 	it('shows user-controlled update states', () => {
 		const pwa = new PwaRuntimeState();
@@ -42,7 +44,7 @@ describe('PWA update runtime state', () => {
 		};
 
 		pwa.initialize(serviceWorker as unknown as ServiceWorkerContainer);
-		await Promise.resolve();
+		await flushPromises();
 
 		expect(pwa.updateState).toBe('pending');
 		pwa.requestUpdateActivation();

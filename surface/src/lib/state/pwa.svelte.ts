@@ -94,6 +94,10 @@ export class PwaRuntimeState {
 		this.activeTextEntry = isActiveTextEntry();
 	}
 
+	refreshActiveTextEntry() {
+		this.activeTextEntry = isActiveTextEntry();
+	}
+
 	captureInstallEvent(event: Event) {
 		event.preventDefault();
 		this.installEvent = event as BeforeInstallPromptEvent;

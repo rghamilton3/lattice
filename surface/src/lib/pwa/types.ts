@@ -12,8 +12,7 @@ export type DegradedKind =
 	| 'offline'
 	| 'service-unavailable'
 	| 'authorization-required'
-	| 'missing-resource'
-	| 'generic';
+	| 'missing-resource';
 
 export interface BeforeInstallPromptEvent extends Event {
 	prompt: () => Promise<void>;

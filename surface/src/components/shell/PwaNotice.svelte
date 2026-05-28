@@ -4,7 +4,7 @@
 	let { notice }: { notice: PwaNoticeModel } = $props();
 </script>
 
-<section class="pwa-notice" data-tone={notice.tone} role="status" aria-live="polite">
+<section class="pwa-notice" data-tone={notice.tone} role="status">
 	<div class="pwa-notice-copy">
 		<strong>{notice.title}</strong>
 		<span>{notice.message}</span>

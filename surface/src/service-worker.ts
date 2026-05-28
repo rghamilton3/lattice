@@ -10,7 +10,7 @@ const CACHE = `lattice-surface-shell-${version}`;
 const SHELL_ASSETS = [...build, ...files, ...prerendered].filter(isShellAsset);
 
 function isShellAsset(pathname: string): boolean {
-	return !pathname.startsWith('/api/') && !pathname.includes('/api/');
+	return !pathname.includes('/api/');
 }
 
 function isShellNavigation(request: Request): boolean {

@@ -72,20 +72,20 @@ function Resolve-InstallerDownloads {
 
 $allAssetsRelease = New-TestRelease -AssetNames @($agentAsset, $captureAsset, $trayAsset)
 
-$agentTaskRun = Resolve-ScheduledTaskRunCommand -ExePath 'C:\lattice\lattice-agent.exe'
-Assert-Equal -Actual $agentTaskRun -Expected '"C:\lattice\lattice-agent.exe"' -Message 'Task run command should quote executable path.'
+$agentShortcutPath = Resolve-StartupShortcutPath -StartupDir 'C:\Users\Bob Smith\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup' -ShortcutName 'LatticeAgent'
+Assert-Equal -Actual $agentShortcutPath -Expected 'C:\Users\Bob Smith\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\LatticeAgent.lnk' -Message 'Startup shortcut path should support user paths containing spaces.'
 
-$promptTaskRun = Resolve-ScheduledTaskRunCommand -ExePath 'C:\lattice\lattice-capture.exe' -Arguments '--prompt'
-Assert-Equal -Actual $promptTaskRun -Expected '"C:\lattice\lattice-capture.exe" --prompt' -Message 'Task run command should preserve arguments.'
+$agentShortcutProperties = Resolve-ShortcutProperties -ExePath 'C:\lattice\lattice-agent.exe'
+Assert-Equal -Actual $agentShortcutProperties.TargetPath -Expected 'C:\lattice\lattice-agent.exe' -Message 'Startup shortcut should target the executable path.'
+Assert-Equal -Actual $agentShortcutProperties.Arguments -Expected '' -Message 'Startup shortcut should omit empty arguments.'
+Assert-Equal -Actual $agentShortcutProperties.WorkingDirectory -Expected 'C:\lattice' -Message 'Startup shortcut should use executable directory as working directory.'
 
-$spacePathTaskRun = Resolve-ScheduledTaskRunCommand -ExePath 'C:\Users\Bob Smith\AppData\Local\lattice\lattice-agent.exe'
-Assert-Equal -Actual $spacePathTaskRun -Expected '"C:\Users\Bob Smith\AppData\Local\lattice\lattice-agent.exe"' -Message 'Task run command should quote paths containing spaces.'
+$promptShortcutProperties = Resolve-ShortcutProperties -ExePath 'C:\lattice\lattice-capture.exe' -Arguments '--prompt'
+Assert-Equal -Actual $promptShortcutProperties.TargetPath -Expected 'C:\lattice\lattice-capture.exe' -Message 'Startup shortcut with arguments should target the executable path.'
+Assert-Equal -Actual $promptShortcutProperties.Arguments -Expected '--prompt' -Message 'Startup shortcut should preserve arguments separately from target path.'
 
-$schtasksArgs = Resolve-SchtasksCreateArguments -TaskName 'LatticeAgent' -TaskRun $agentTaskRun
-Assert-Equal -Actual ($schtasksArgs -join ' ') -Expected '/Create /TN LatticeAgent /TR "C:\lattice\lattice-agent.exe" /SC ONLOGON /F' -Message 'Task registration should use schtasks logon create-or-update arguments.'
-
-$schtasksFailureMessage = Format-SchtasksFailureMessage -TaskName 'LatticeAgent' -Output 'Access is denied.'
-Assert-Equal -Actual $schtasksFailureMessage -Expected "Failed to register scheduled task 'LatticeAgent': Access is denied." -Message 'Schtasks failure message should include task name and output.'
+$spacePathShortcutProperties = Resolve-ShortcutProperties -ExePath 'C:\Users\Bob Smith\AppData\Local\lattice\lattice-agent.exe'
+Assert-Equal -Actual $spacePathShortcutProperties.WorkingDirectory -Expected 'C:\Users\Bob Smith\AppData\Local\lattice' -Message 'Shortcut working directory should support paths containing spaces.'
 
 Assert-Equal `
     -Actual (Get-ReleaseAssetUrl -Release $allAssetsRelease -Asset $agentAsset) `

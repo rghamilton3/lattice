@@ -76,21 +76,33 @@ function Resolve-ScheduledTaskActionParameters {
     $actionParams
 }
 
+function Resolve-ScheduledTaskRegistrationParameters {
+    param([string]$TaskName, [object]$Action, [object]$Trigger, [object]$Settings)
+
+    @{
+        TaskName = $TaskName
+        Action = $Action
+        Trigger = $Trigger
+        Settings = $Settings
+        ErrorAction = 'Stop'
+    }
+}
+
 function Register-LogonTask {
     param([string]$TaskName, [string]$ExePath, [string]$Arguments = '')
     $trigger  = New-ScheduledTaskTrigger -AtLogon
     $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
     $actionParams = Resolve-ScheduledTaskActionParameters -ExePath $ExePath -Arguments $Arguments
     $action   = New-ScheduledTaskAction @actionParams
-    $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
+    $registrationParams = Resolve-ScheduledTaskRegistrationParameters -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings
 
     $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     if ($existing) {
         Write-Host "  Updating existing task: $TaskName"
-        Set-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal | Out-Null
+        Set-ScheduledTask @registrationParams | Out-Null
     } else {
         Write-Host "  Creating task: $TaskName"
-        Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal | Out-Null
+        Register-ScheduledTask @registrationParams | Out-Null
     }
 }
 

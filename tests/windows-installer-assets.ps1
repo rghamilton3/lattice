@@ -72,21 +72,20 @@ function Resolve-InstallerDownloads {
 
 $allAssetsRelease = New-TestRelease -AssetNames @($agentAsset, $captureAsset, $trayAsset)
 
-$emptyArgumentActionParams = Resolve-ScheduledTaskActionParameters -ExePath 'C:\lattice\lattice-agent.exe'
-Assert-Equal -Actual $emptyArgumentActionParams.Execute -Expected 'C:\lattice\lattice-agent.exe' -Message 'Task action should include executable path.'
-Assert-Equal -Actual $emptyArgumentActionParams.ContainsKey('Argument') -Expected $false -Message 'Task action should omit empty Argument parameter.'
+$agentTaskRun = Resolve-ScheduledTaskRunCommand -ExePath 'C:\lattice\lattice-agent.exe'
+Assert-Equal -Actual $agentTaskRun -Expected '"C:\lattice\lattice-agent.exe"' -Message 'Task run command should quote executable path.'
 
-$promptActionParams = Resolve-ScheduledTaskActionParameters -ExePath 'C:\lattice\lattice-capture.exe' -Arguments '--prompt'
-Assert-Equal -Actual $promptActionParams.Execute -Expected 'C:\lattice\lattice-capture.exe' -Message 'Task action with arguments should include executable path.'
-Assert-Equal -Actual $promptActionParams.Argument -Expected '--prompt' -Message 'Task action should preserve non-empty arguments.'
+$promptTaskRun = Resolve-ScheduledTaskRunCommand -ExePath 'C:\lattice\lattice-capture.exe' -Arguments '--prompt'
+Assert-Equal -Actual $promptTaskRun -Expected '"C:\lattice\lattice-capture.exe" --prompt' -Message 'Task run command should preserve arguments.'
 
-$taskRegistrationParams = Resolve-ScheduledTaskRegistrationParameters -TaskName 'LatticeAgent' -Action 'action' -Trigger 'trigger' -Settings 'settings'
-Assert-Equal -Actual $taskRegistrationParams.TaskName -Expected 'LatticeAgent' -Message 'Task registration should include task name.'
-Assert-Equal -Actual $taskRegistrationParams.Action -Expected 'action' -Message 'Task registration should include action.'
-Assert-Equal -Actual $taskRegistrationParams.Trigger -Expected 'trigger' -Message 'Task registration should include trigger.'
-Assert-Equal -Actual $taskRegistrationParams.Settings -Expected 'settings' -Message 'Task registration should include settings.'
-Assert-Equal -Actual $taskRegistrationParams.ErrorAction -Expected 'Stop' -Message 'Task registration should fail fast on scheduler errors.'
-Assert-Equal -Actual $taskRegistrationParams.ContainsKey('Principal') -Expected $false -Message 'Task registration should use the current user instead of an explicit principal.'
+$spacePathTaskRun = Resolve-ScheduledTaskRunCommand -ExePath 'C:\Users\Bob Smith\AppData\Local\lattice\lattice-agent.exe'
+Assert-Equal -Actual $spacePathTaskRun -Expected '"C:\Users\Bob Smith\AppData\Local\lattice\lattice-agent.exe"' -Message 'Task run command should quote paths containing spaces.'
+
+$schtasksArgs = Resolve-SchtasksCreateArguments -TaskName 'LatticeAgent' -TaskRun $agentTaskRun
+Assert-Equal -Actual ($schtasksArgs -join ' ') -Expected '/Create /TN LatticeAgent /TR "C:\lattice\lattice-agent.exe" /SC ONLOGON /F' -Message 'Task registration should use schtasks logon create-or-update arguments.'
+
+$schtasksFailureMessage = Format-SchtasksFailureMessage -TaskName 'LatticeAgent' -Output 'Access is denied.'
+Assert-Equal -Actual $schtasksFailureMessage -Expected "Failed to register scheduled task 'LatticeAgent': Access is denied." -Message 'Schtasks failure message should include task name and output.'
 
 Assert-Equal `
     -Actual (Get-ReleaseAssetUrl -Release $allAssetsRelease -Asset $agentAsset) `

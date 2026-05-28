@@ -5,7 +5,7 @@
 **Created**: 2026-05-28
 **Severity**: [ ] Critical | [x] High | [ ] Medium | [ ] Low
 **Component**: Windows installer / release binary download
-**Status**: [x] Investigating | [ ] Root Cause Found | [ ] Fixed | [ ] Verified
+**Status**: [ ] Investigating | [x] Root Cause Found | [x] Fixed | [x] Verified
 
 ## Input
 User description: "Windows installer produces an Invoke-WebRequest error while downloading lattice-agent-x86_64-pc-windows-msvc.exe for latest release tag agent-v0.10.0. The response body is GitHub's Page not found HTML instead of the expected binary asset."
@@ -61,28 +61,30 @@ Update `install.ps1` to resolve asset download URLs from the latest release API 
 ## Regression Test
 *Created during /speckit.tasks and /speckit.implement (BEFORE applying fix)*
 
-- [ ] Test written that reproduces bug (fails before fix)
-- [ ] Test passes after fix applied
-- [ ] Test added to test suite (not orphaned)
-- [ ] Test covers edge cases identified during investigation
+- [x] Test written that reproduces bug (fails before fix)
+- [x] Test passes after fix applied
+- [x] Test added to test suite (not orphaned)
+- [x] Test covers edge cases identified during investigation
 
-**Test File**:
-**Test Description**:
+**Test File**: `tests/windows-installer-assets.ps1`
+**Test Description**: Loads the installer helper behavior without running the installer, verifies agent, capture, and tray assets resolve to release metadata `browser_download_url` values, verifies missing required assets fail with the asset name and release tag before download, and verifies `-SkipTray` skips tray asset lookup.
+
+PowerShell regression execution passed with `pwsh -NoProfile -File tests/windows-installer-assets.ps1`. PowerShell parser validation for `install.ps1` passed. Repository-level `just lint` and `just check` passed after installing existing Surface lockfile dependencies locally.
 
 ## Verification Checklist
 - [ ] Bug reproduced in clean environment
-- [ ] Root cause identified and documented
-- [ ] Fix implemented
-- [ ] Regression test passes
-- [ ] Existing tests still pass
+- [x] Root cause identified and documented
+- [x] Fix implemented
+- [x] Regression test passes
+- [x] Existing tests still pass
 - [ ] Manual verification complete
-- [ ] Related documentation updated (if needed)
+- [x] Related documentation updated (if needed)
 
 ## Related Issues/Bugs
 None identified yet.
 
 ## Prevention
-To be determined after root cause analysis.
+The Windows installer now resolves release assets by exact name from GitHub release metadata and uses API-provided `browser_download_url` values. The regression test covers present assets, missing required assets, and skipped optional tray lookup so manual URL construction regressions are easier to catch.
 
 ---
 *Bug report created using `/bugfix` workflow - See .specify/extensions/workflows/bugfix/*

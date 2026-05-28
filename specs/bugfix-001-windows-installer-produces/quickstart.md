@@ -45,3 +45,12 @@ just check
 ```
 
 If only installer script logic changes, record PowerShell parser validation and targeted regression results in the implementation notes.
+
+## Implementation Notes
+
+- Added `tests/windows-installer-assets.ps1` for release metadata asset resolution, missing required asset failures, and `-SkipTray` tray lookup behavior.
+- Updated `install.ps1` to fetch latest release metadata once, print the selected release tag, and pass exact-match `browser_download_url` values to `Invoke-WebRequest`.
+- `pwsh -NoProfile -File tests/windows-installer-assets.ps1` passed.
+- PowerShell parser validation for `install.ps1` passed.
+- `just lint` passed after installing existing Surface lockfile dependencies locally.
+- `just check` passed after installing existing Surface lockfile dependencies locally.

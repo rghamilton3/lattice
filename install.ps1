@@ -36,22 +36,38 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $Repo    = 'rghamilton3/lattice'
-$BinDir  = Join-Path $env:LOCALAPPDATA 'lattice'
-$CfgDir  = Join-Path $env:APPDATA      'lattice'
-$CfgFile = Join-Path $CfgDir           'config.toml'
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-function Get-LatestTag {
+function Get-LatestReleaseMetadata {
     $api = "https://api.github.com/repos/$Repo/releases/latest"
-    (Invoke-RestMethod -Uri $api -Headers @{ 'User-Agent' = 'lattice-installer' }).tag_name
+    $release = Invoke-RestMethod -Uri $api -Headers @{ 'User-Agent' = 'lattice-installer' }
+    if (-not $release.tag_name) {
+        throw 'Latest release metadata did not include a tag_name.'
+    }
+    $release
+}
+
+function Get-ReleaseAssetUrl {
+    param([object]$Release, [string]$Asset)
+
+    $tag = $Release.tag_name
+    if (-not $tag) {
+        $tag = 'unknown'
+    }
+
+    $match = $Release.assets | Where-Object { $_.name -eq $Asset } | Select-Object -First 1
+    if (-not $match -or -not $match.browser_download_url) {
+        throw "Release asset not found: $Asset in release $tag."
+    }
+
+    $match.browser_download_url
 }
 
 function Download-Asset {
-    param([string]$Tag, [string]$Asset, [string]$Dest)
-    $url = "https://github.com/$Repo/releases/download/$Tag/$Asset"
+    param([string]$Url, [string]$Asset, [string]$Dest)
     Write-Host "  Downloading $Asset ..."
-    Invoke-WebRequest -Uri $url -OutFile $Dest -UseBasicParsing
+    Invoke-WebRequest -Uri $Url -OutFile $Dest -UseBasicParsing
 }
 
 function Register-LogonTask {
@@ -71,14 +87,23 @@ function Register-LogonTask {
     }
 }
 
+if ($env:LATTICE_INSTALLER_IMPORT_ONLY -eq '1') {
+    return
+}
+
+$BinDir  = Join-Path $env:LOCALAPPDATA 'lattice'
+$CfgDir  = Join-Path $env:APPDATA      'lattice'
+$CfgFile = Join-Path $CfgDir           'config.toml'
+
 # ── Install ───────────────────────────────────────────────────────────────────
 
 Write-Host "Lattice Agent installer"
 Write-Host "========================"
 
-Write-Host "`nFetching latest release tag ..."
-$tag = Get-LatestTag
-Write-Host "  Tag: $tag"
+Write-Host "`nFetching latest release metadata ..."
+$release = Get-LatestReleaseMetadata
+$tag = $release.tag_name
+Write-Host "  Release tag: $tag"
 
 Write-Host "`nCreating install directories ..."
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
@@ -87,12 +112,15 @@ New-Item -ItemType Directory -Force -Path $CfgDir | Out-Null
 Write-Host "`nDownloading binaries ..."
 $agentExe  = Join-Path $BinDir 'lattice-agent.exe'
 $captureExe = Join-Path $BinDir 'lattice-capture.exe'
-Download-Asset -Tag $tag -Asset 'lattice-agent-x86_64-pc-windows-msvc.exe'  -Dest $agentExe
-Download-Asset -Tag $tag -Asset 'lattice-capture-x86_64-pc-windows-msvc.exe' -Dest $captureExe
+$agentAsset = 'lattice-agent-x86_64-pc-windows-msvc.exe'
+$captureAsset = 'lattice-capture-x86_64-pc-windows-msvc.exe'
+Download-Asset -Url (Get-ReleaseAssetUrl -Release $release -Asset $agentAsset) -Asset $agentAsset -Dest $agentExe
+Download-Asset -Url (Get-ReleaseAssetUrl -Release $release -Asset $captureAsset) -Asset $captureAsset -Dest $captureExe
 
 if (-not $SkipTray) {
     $trayExe = Join-Path $BinDir 'lattice-tray.exe'
-    Download-Asset -Tag $tag -Asset 'lattice-tray-x86_64-pc-windows-msvc.exe' -Dest $trayExe
+    $trayAsset = 'lattice-tray-x86_64-pc-windows-msvc.exe'
+    Download-Asset -Url (Get-ReleaseAssetUrl -Release $release -Asset $trayAsset) -Asset $trayAsset -Dest $trayExe
 }
 
 Write-Host "`nWriting config ..."

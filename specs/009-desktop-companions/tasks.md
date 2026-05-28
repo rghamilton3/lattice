@@ -113,6 +113,7 @@
 - [x] T025 Run GUI-feature Rust tests/build checks with `cd agent && cargo test --features gui`
 - [x] T026 Run installer script syntax checks with `bash -n install.sh` and PowerShell parser validation for `install.ps1` where available
 - [x] T027 Mark all completed desktop-companions tasks in `specs/009-desktop-companions/tasks.md`
+- [x] T028 Track 009-mod-001 picker-assisted config watch paths in `specs/009-desktop-companions/modifications/001-agents-config-ui/tasks.md`, `agent/src/bin/lattice-config.rs`, `agent/src/config_edit.rs`, `agent/Cargo.toml`, `docs/accessibility/desktop-companions.md`, and `specs/009-desktop-companions/contracts/desktop-companions.md`
 
 ---
 

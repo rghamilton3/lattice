@@ -51,14 +51,9 @@ function Get-LatestReleaseMetadata {
 function Get-ReleaseAssetUrl {
     param([object]$Release, [string]$Asset)
 
-    $tag = $Release.tag_name
-    if (-not $tag) {
-        $tag = 'unknown'
-    }
-
     $match = $Release.assets | Where-Object { $_.name -eq $Asset } | Select-Object -First 1
     if (-not $match -or -not $match.browser_download_url) {
-        throw "Release asset not found: $Asset in release $tag."
+        throw "Release asset not found: $Asset in release $($Release.tag_name)."
     }
 
     $match.browser_download_url

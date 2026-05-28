@@ -57,6 +57,7 @@ function Assert-ThrowsLike {
 function Resolve-InstallerDownloads {
     param([object]$Release, [switch]$SkipTray)
 
+    # Keep this in step with the installer download callsites so option-level behavior is covered.
     $downloads = @(
         [pscustomobject]@{ Asset = $agentAsset; Url = Get-ReleaseAssetUrl -Release $Release -Asset $agentAsset }
         [pscustomobject]@{ Asset = $captureAsset; Url = Get-ReleaseAssetUrl -Release $Release -Asset $captureAsset }
@@ -91,9 +92,30 @@ Assert-ThrowsLike `
     -ExpectedFragments @('Release asset not found', $captureAsset, 'agent-v0.10.0') `
     -Message 'Missing capture asset should fail before download.'
 
+$emptyUrlRelease = [pscustomobject]@{
+    tag_name = 'agent-v0.10.0'
+    assets = @(
+        [pscustomobject]@{
+            name = $agentAsset
+            browser_download_url = ''
+        }
+    )
+}
+
+Assert-ThrowsLike `
+    -ScriptBlock { Get-ReleaseAssetUrl -Release $emptyUrlRelease -Asset $agentAsset } `
+    -ExpectedFragments @('Release asset not found', $agentAsset, 'agent-v0.10.0') `
+    -Message 'Asset with empty browser_download_url should fail before download.'
+
+$allDownloads = Resolve-InstallerDownloads -Release $allAssetsRelease
+Assert-Equal -Actual $allDownloads.Count -Expected 3 -Message 'Default install should resolve all three assets.'
+Assert-Equal -Actual (($allDownloads | ForEach-Object Asset) -contains $agentAsset) -Expected $true -Message 'Default install should include agent asset.'
+Assert-Equal -Actual (($allDownloads | ForEach-Object Asset) -contains $captureAsset) -Expected $true -Message 'Default install should include capture asset.'
+Assert-Equal -Actual (($allDownloads | ForEach-Object Asset) -contains $trayAsset) -Expected $true -Message 'Default install should include tray asset.'
+
 $skipTrayDownloads = Resolve-InstallerDownloads -Release (New-TestRelease -AssetNames @($agentAsset, $captureAsset)) -SkipTray
 Assert-Equal -Actual $skipTrayDownloads.Count -Expected 2 -Message 'SkipTray should resolve only required assets.'
-if ($skipTrayDownloads.Asset -contains $trayAsset) {
+if (($skipTrayDownloads | ForEach-Object Asset) -contains $trayAsset) {
     throw 'SkipTray should skip tray asset lookup.'
 }
 

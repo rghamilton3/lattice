@@ -1,10 +1,15 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { onMount } from 'svelte';
 	import { createQuery } from '@tanstack/svelte-query';
 	import { browser } from '$app/environment';
+	import { ApiError } from '$lib/api/client';
+	import { getPwaContext } from '$lib/state/pwa.svelte';
+	import type { PwaNoticeModel } from '$lib/pwa/types';
 	import { getWorkbenchContext, type View } from '$lib/state/workbench.svelte';
 	import Icon from '$components/icons/Icon.svelte';
 	import NavBtn from './NavBtn.svelte';
+	import PwaNotice from './PwaNotice.svelte';
 	import { fetchStatus, statusKeys } from '$lib/api/status';
 	import { relTime } from '$lib/utils/relTime';
 	import CommandPalette from '$components/overlays/CommandPalette.svelte';
@@ -17,12 +22,14 @@
 	let { oncapture, onnav, children }: Props = $props();
 
 	const wb = getWorkbenchContext();
+	const pwa = getPwaContext();
 
 	const statusQuery = createQuery(() => ({
 		queryKey: statusKeys.all(),
 		queryFn: fetchStatus,
 		enabled: browser,
-		refetchInterval: 30_000
+		refetchInterval: 30_000,
+		retry: false
 	}));
 
 	let now = $state(Date.now());
@@ -34,7 +41,11 @@
 	const agentCount = $derived(statusQuery.data?.active_agent_count ?? null);
 	const statusState = $derived(statusQuery.isError ? 'warn' : 'ok');
 	const agentLabel = $derived(
-		statusQuery.isError ? 'unavailable' : agentCount !== null ? String(agentCount) : 'unknown'
+		statusQuery.isError
+			? 'temporarily unavailable'
+			: agentCount !== null
+				? String(agentCount)
+				: 'unknown'
 	);
 	const latestScan = $derived(
 		(statusQuery.data?.agents ?? [])
@@ -43,7 +54,79 @@
 			.sort()
 			.at(-1) ?? null
 	);
+
+	$effect(() => {
+		if (statusQuery.isError) {
+			const status = statusQuery.error instanceof ApiError ? statusQuery.error.status : undefined;
+			pwa.classifyServiceError(status);
+		} else if (statusQuery.isSuccess) {
+			pwa.markServiceLive();
+		}
+	});
+
+	const pwaNotice = $derived.by<PwaNoticeModel | null>(() => {
+		if (pwa.installAvailable) {
+			return {
+				kind: 'install',
+				tone: 'info',
+				title: 'Install Surface',
+				message: 'Add Lattice Surface to your launcher for a focused workbench window.',
+				actions: [{ label: 'Install', onclick: () => pwa.promptInstall(), variant: 'primary' }],
+				ondismiss: () => pwa.dismissInstall()
+			};
+		}
+		if (pwa.degradedKind) {
+			const authorization = pwa.degradedKind === 'authorization-required';
+			const missing = pwa.degradedKind === 'missing-resource';
+			return {
+				kind: 'degraded',
+				tone: 'warn',
+				title: authorization ? 'Sign-in needs attention' : 'Surface is in recovery mode',
+				message: authorization
+					? 'The shell is available, but live content needs a fresh authenticated request.'
+					: missing
+						? 'This route is not available from the cached shell. Your saved data has not been removed.'
+						: 'The shell is available, but live services are temporarily unreachable. Your data has not been deleted.',
+				actions: [
+					{
+						label: authorization ? 'Reauthenticate' : 'Retry',
+						onclick: () => (authorization ? pwa.reauthenticate() : pwa.retry()),
+						variant: 'primary'
+					},
+					{ label: 'Home', onclick: () => pwa.returnHome() }
+				]
+			};
+		}
+		if (pwa.showUpdateNotice && wb.activeOverlay === 'none') {
+			return {
+				kind: 'update',
+				tone: pwa.updateState === 'failed' ? 'warn' : 'info',
+				title: pwa.updateState === 'failed' ? 'Update needs a reload' : 'A Surface update is ready',
+				message:
+					pwa.updateState === 'failed'
+						? 'Reload to recover the newest app shell. No cache clearing or reinstall is needed.'
+						: 'Reload when you are ready. Surface will not interrupt typing or modal work.',
+				actions: [{ label: 'Reload', onclick: () => pwa.reloadForUpdate(), variant: 'primary' }]
+			};
+		}
+		return null;
+	});
+
+	onMount(() => {
+		const markInstalled = () => pwa.markInstalled();
+		window.addEventListener('appinstalled', markInstalled);
+		return () => window.removeEventListener('appinstalled', markInstalled);
+	});
 </script>
+
+<svelte:window
+	onbeforeinstallprompt={(event) => pwa.captureInstallEvent(event)}
+	ononline={() => pwa.setNetworkState(true)}
+	onoffline={() => pwa.setNetworkState(false)}
+	onfocus={() => pwa.refreshBrowserState()}
+	onpointerdown={() => pwa.refreshBrowserState()}
+	onkeyup={() => pwa.refreshBrowserState()}
+/>
 
 <div class="shell" data-focus={wb.focusMode ? 'on' : 'off'}>
 	<!-- TOP TOOLBAR -->
@@ -204,6 +287,9 @@
 
 	<!-- MAIN -->
 	<main class="main">
+		{#if pwaNotice}
+			<PwaNotice notice={pwaNotice} />
+		{/if}
 		{@render children()}
 	</main>
 

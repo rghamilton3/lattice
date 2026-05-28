@@ -6,6 +6,9 @@ Dockerfile*
 *.log*
 .env*
 coverage/
+**/coverage/
+**/dist/
+**/build/
 spine/captures/
 spine/*.db
 spine/*.db-shm

@@ -58,3 +58,13 @@ Create or update `docs/accessibility/surface-pwa.md` with:
 - Do not verify push notifications; they are out of scope.
 - Do not verify background sync; it is out of scope.
 - Do not verify full offline reading/search/editing of protected knowledge content; the planned cache is app-shell-only.
+
+## Implementation Validation Results
+
+- `cd surface && bun run build`: PASS. Static output wrote `build/`, included `manifest.webmanifest`, `pwa-icon.svg`, and generated `service-worker.js`.
+- `cd surface && bun run check`: PASS. `svelte-check` reported 0 errors and 0 warnings.
+- `cd surface && bun run test:unit -- --run`: PASS. 7 test files and 37 tests passed.
+- `cd surface && bun run test:e2e`: PASS. 17 Playwright tests passed. Playwright reported missing optional host dependencies (`libxml2`, `libflite1`) while still completing with the fallback browser build.
+- `just check`: PASS. Spine TypeScript validation and Surface check completed successfully.
+- Dependency/security review: PASS. `surface/package.json` has no new runtime dependency, no Workbox/Vite PWA plugin, and no push notification or background sync package; source search found no Workbox, Vite PWA plugin, push, or background sync usage.
+- Service worker contract review: PASS. `surface/src/service-worker.ts` uses a versioned app-shell cache, removes obsolete shell caches, ignores non-GET/cross-origin `/api/*` requests, avoids protected content caching, and uses network-first navigation fallback to the cached SPA shell.

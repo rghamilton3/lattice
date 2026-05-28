@@ -80,6 +80,14 @@ $promptActionParams = Resolve-ScheduledTaskActionParameters -ExePath 'C:\lattice
 Assert-Equal -Actual $promptActionParams.Execute -Expected 'C:\lattice\lattice-capture.exe' -Message 'Task action with arguments should include executable path.'
 Assert-Equal -Actual $promptActionParams.Argument -Expected '--prompt' -Message 'Task action should preserve non-empty arguments.'
 
+$taskRegistrationParams = Resolve-ScheduledTaskRegistrationParameters -TaskName 'LatticeAgent' -Action 'action' -Trigger 'trigger' -Settings 'settings'
+Assert-Equal -Actual $taskRegistrationParams.TaskName -Expected 'LatticeAgent' -Message 'Task registration should include task name.'
+Assert-Equal -Actual $taskRegistrationParams.Action -Expected 'action' -Message 'Task registration should include action.'
+Assert-Equal -Actual $taskRegistrationParams.Trigger -Expected 'trigger' -Message 'Task registration should include trigger.'
+Assert-Equal -Actual $taskRegistrationParams.Settings -Expected 'settings' -Message 'Task registration should include settings.'
+Assert-Equal -Actual $taskRegistrationParams.ErrorAction -Expected 'Stop' -Message 'Task registration should fail fast on scheduler errors.'
+Assert-Equal -Actual $taskRegistrationParams.ContainsKey('Principal') -Expected $false -Message 'Task registration should use the current user instead of an explicit principal.'
+
 Assert-Equal `
     -Actual (Get-ReleaseAssetUrl -Release $allAssetsRelease -Asset $agentAsset) `
     -Expected 'https://downloads.example.test/agent-v0.10.0/lattice-agent-x86_64-pc-windows-msvc.exe' `

@@ -37,6 +37,12 @@ enum AppState {
     LoadError(String),
 }
 
+enum PickerResult {
+    Selected(PathBuf),
+    Canceled,
+    Failed(String),
+}
+
 // ── ConfigApp ─────────────────────────────────────────────────────────────────
 
 struct ConfigApp {
@@ -91,6 +97,76 @@ impl ConfigApp {
             self.reindex_rx = None;
         }
     }
+
+    fn choose_watch_folder() -> PickerResult {
+        if let Some(message) = folder_picker_unavailable_message() {
+            return PickerResult::Failed(message);
+        }
+
+        match std::panic::catch_unwind(|| {
+            rfd::FileDialog::new()
+                .set_title("Choose watch folder")
+                .pick_folder()
+        }) {
+            Ok(Some(path)) => PickerResult::Selected(path),
+            Ok(None) => PickerResult::Canceled,
+            Err(_) => PickerResult::Failed(
+                "Could not open the folder picker. Type the watch path manually and try saving again."
+                    .into(),
+            ),
+        }
+    }
+
+    fn apply_watch_path_picker_result(
+        watch_rows: &mut [WatchRow],
+        row_index: usize,
+        result: PickerResult,
+    ) -> Option<String> {
+        match result {
+            PickerResult::Selected(path) => match watch_rows.get_mut(row_index) {
+                Some(row) => {
+                    match path.to_str() {
+                        Some(path) => {
+                            row.path = path.to_owned();
+                            None
+                        }
+                        None => Some(
+                            "The selected watch path is not valid UTF-8. Type the path manually and try saving again."
+                                .into(),
+                        ),
+                    }
+                }
+                None => Some("The selected watch path row no longer exists.".into()),
+            },
+            PickerResult::Canceled => None,
+            PickerResult::Failed(message) => Some(message),
+        }
+    }
+}
+
+#[cfg(unix)]
+fn folder_picker_unavailable_message() -> Option<String> {
+    if has_display_session(
+        std::env::var_os("WAYLAND_DISPLAY").is_some(),
+        std::env::var_os("DISPLAY").is_some(),
+    ) {
+        None
+    } else {
+        Some(
+            "Could not open the folder picker because no desktop display session was detected. Type the watch path manually and try saving again."
+                .into(),
+        )
+    }
+}
+
+#[cfg(unix)]
+fn has_display_session(has_wayland_display: bool, has_x11_display: bool) -> bool {
+    has_wayland_display || has_x11_display
+}
+
+#[cfg(not(unix))]
+fn folder_picker_unavailable_message() -> Option<String> {
+    None
 }
 
 impl eframe::App for ConfigApp {
@@ -220,6 +296,7 @@ impl eframe::App for ConfigApp {
 
         let mut save_clicked = false;
         let mut cancel_clicked = false;
+        let mut browse_row_index: Option<usize> = None;
 
         // Button row must be reserved before CentralPanel so ScrollArea doesn't
         // consume all vertical space and push the buttons off screen.
@@ -310,12 +387,15 @@ impl eframe::App for ConfigApp {
                         egui::Frame::group(ui.style()).show(ui, |ui| {
                             ui.horizontal(|ui| {
                                 ui.label("Path:");
-                                // Reserve ~70 px for the Remove button; field gets the rest.
-                                let field_w = (ui.available_width() - 70.0).max(60.0);
+                                // Reserve room for Browse and Remove; field gets the rest.
+                                let field_w = (ui.available_width() - 150.0).max(60.0);
                                 ui.add(
                                     egui::TextEdit::singleline(&mut row.path)
                                         .desired_width(field_w),
                                 );
+                                if ui.button("Browse...").clicked() {
+                                    browse_row_index = Some(i);
+                                }
                                 if ui.button("Remove").clicked() {
                                     to_remove = Some(i);
                                 }
@@ -359,6 +439,15 @@ impl eframe::App for ConfigApp {
 
         if cancel_clicked {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+        if let Some(row_index) = browse_row_index {
+            if let Some(message) = Self::apply_watch_path_picker_result(
+                form.watch_rows.as_mut_slice(),
+                row_index,
+                Self::choose_watch_folder(),
+            ) {
+                *modal = ModalState::Error(message);
+            }
         }
         if save_clicked {
             match config_edit::validate(form) {
@@ -438,4 +527,116 @@ fn main() {
         Box::new(|_cc| Ok(Box::new(ConfigApp::new()))),
     )
     .expect("eframe failed to start");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rows() -> Vec<WatchRow> {
+        vec![
+            WatchRow {
+                path: "/before/one".into(),
+                patterns: "**/*.md".into(),
+            },
+            WatchRow {
+                path: "/before/two".into(),
+                patterns: "**/*.txt".into(),
+            },
+        ]
+    }
+
+    #[test]
+    fn picker_selection_updates_only_target_watch_row() {
+        let mut rows = rows();
+
+        let message = ConfigApp::apply_watch_path_picker_result(
+            rows.as_mut_slice(),
+            1,
+            PickerResult::Selected(PathBuf::from("/picked/folder")),
+        );
+
+        assert!(message.is_none());
+        assert_eq!(rows[0].path, "/before/one");
+        assert_eq!(rows[1].path, "/picked/folder");
+    }
+
+    #[test]
+    fn picker_cancel_preserves_existing_watch_path() {
+        let mut rows = rows();
+
+        let message = ConfigApp::apply_watch_path_picker_result(
+            rows.as_mut_slice(),
+            0,
+            PickerResult::Canceled,
+        );
+
+        assert!(message.is_none());
+        assert_eq!(rows[0].path, "/before/one");
+        assert_eq!(rows[1].path, "/before/two");
+    }
+
+    #[test]
+    fn picker_failure_preserves_path_and_returns_text_feedback() {
+        let mut rows = rows();
+
+        let message = ConfigApp::apply_watch_path_picker_result(
+            rows.as_mut_slice(),
+            0,
+            PickerResult::Failed("Folder picker is unavailable.".into()),
+        );
+
+        assert_eq!(message.as_deref(), Some("Folder picker is unavailable."));
+        assert_eq!(rows[0].path, "/before/one");
+    }
+
+    #[test]
+    fn picker_result_for_removed_row_reports_error_without_mutation() {
+        let mut rows = rows();
+
+        let message = ConfigApp::apply_watch_path_picker_result(
+            rows.as_mut_slice(),
+            9,
+            PickerResult::Selected(PathBuf::from("/picked/folder")),
+        );
+
+        assert_eq!(
+            message.as_deref(),
+            Some("The selected watch path row no longer exists.")
+        );
+        assert_eq!(rows[0].path, "/before/one");
+        assert_eq!(rows[1].path, "/before/two");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn picker_selection_rejects_non_utf8_paths() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        let mut rows = rows();
+        let path = PathBuf::from(OsString::from_vec(vec![0xff, b'f', b'o', b'o']));
+
+        let message = ConfigApp::apply_watch_path_picker_result(
+            rows.as_mut_slice(),
+            0,
+            PickerResult::Selected(path),
+        );
+
+        assert_eq!(
+            message.as_deref(),
+            Some(
+                "The selected watch path is not valid UTF-8. Type the path manually and try saving again."
+            )
+        );
+        assert_eq!(rows[0].path, "/before/one");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn display_session_detection_requires_wayland_or_x11_display() {
+        assert!(!has_display_session(false, false));
+        assert!(has_display_session(true, false));
+        assert!(has_display_session(false, true));
+    }
 }

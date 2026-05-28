@@ -6,6 +6,7 @@
 	import '$components/process/process.css';
 	import { QueryClient, QueryClientProvider } from '@tanstack/svelte-query';
 	import { browser } from '$app/environment';
+	import { PwaRuntimeState, setPwaContext } from '$lib/state/pwa.svelte';
 	import { WorkbenchStore, setWorkbenchContext } from '$lib/state/workbench.svelte';
 
 	const { children } = $props();
@@ -16,6 +17,12 @@
 
 	const workbench = new WorkbenchStore();
 	setWorkbenchContext(workbench);
+	const pwa = new PwaRuntimeState();
+	setPwaContext(pwa);
+
+	$effect(() => {
+		pwa.initialize();
+	});
 
 	$effect(() => {
 		const root = document.documentElement;
@@ -49,7 +56,14 @@
 	});
 </script>
 
-<svelte:head><link rel="icon" href="/favicon.svg" type="image/svg+xml" /></svelte:head>
+<svelte:head>
+	<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+	<link rel="manifest" href="/manifest.webmanifest" />
+	<meta name="theme-color" content="#1f2937" />
+	<meta name="application-name" content="Lattice Surface" />
+	<meta name="apple-mobile-web-app-capable" content="yes" />
+	<meta name="apple-mobile-web-app-title" content="Surface" />
+</svelte:head>
 
 <QueryClientProvider client={queryClient}>
 	{@render children()}

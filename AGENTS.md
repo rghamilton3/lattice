@@ -2,5 +2,6 @@
 
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/012-product-updates/plan.md`
+`specs/013-surface-pwa/plan.md`
+
 <!-- SPECKIT END -->

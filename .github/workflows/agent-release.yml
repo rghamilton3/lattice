@@ -55,6 +55,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lattice-agent-${{ matrix.target }}
+          if-no-files-found: error
           path: |
             lattice-agent-${{ matrix.target }}
             lattice-tray-${{ matrix.target }}
@@ -94,6 +95,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lattice-agent-windows
+          if-no-files-found: error
           path: |
             lattice-agent-x86_64-pc-windows-msvc.exe
             lattice-tray-x86_64-pc-windows-msvc.exe
@@ -127,6 +129,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lattice-config-x86_64
+          if-no-files-found: error
           path: lattice-config-x86_64-unknown-linux-gnu
 
   release:
@@ -148,6 +151,31 @@ jobs:
           cp agent/lattice-agent.service lattice-agent.service
           cp agent/lattice-tray.service  lattice-tray.service
           cp install.ps1                  install.ps1
+
+      - name: Verify release assets
+        run: |
+          expected=(
+            lattice-agent-x86_64-unknown-linux-musl
+            lattice-agent-aarch64-unknown-linux-musl
+            lattice-tray-x86_64-unknown-linux-musl
+            lattice-tray-aarch64-unknown-linux-musl
+            lattice-capture-x86_64-unknown-linux-musl
+            lattice-capture-aarch64-unknown-linux-musl
+            lattice-agent-x86_64-pc-windows-msvc.exe
+            lattice-tray-x86_64-pc-windows-msvc.exe
+            lattice-capture-x86_64-pc-windows-msvc.exe
+            lattice-config-x86_64-unknown-linux-gnu
+            lattice-agent.service
+            lattice-tray.service
+            install.ps1
+          )
+
+          for asset in "${expected[@]}"; do
+            if [[ ! -f "$asset" ]]; then
+              echo "Missing release asset: $asset" >&2
+              exit 1
+            fi
+          done
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

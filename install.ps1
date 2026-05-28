@@ -79,7 +79,15 @@ function Resolve-ScheduledTaskRunCommand {
 function Resolve-SchtasksCreateArguments {
     param([string]$TaskName, [string]$TaskRun)
 
+    # schtasks avoids Register-ScheduledTask access-denied failures for normal users.
+    # It intentionally uses default runtime/retry settings; next-login restart is acceptable.
     @('/Create', '/TN', $TaskName, '/TR', $TaskRun, '/SC', 'ONLOGON', '/F')
+}
+
+function Format-SchtasksFailureMessage {
+    param([string]$TaskName, [object]$Output)
+
+    "Failed to register scheduled task '$TaskName': $Output"
 }
 
 function Invoke-Schtasks {
@@ -87,7 +95,7 @@ function Invoke-Schtasks {
 
     $output = & schtasks.exe @Arguments 2>&1
     if ($LASTEXITCODE -ne 0) {
-        throw "Failed to register scheduled task '$TaskName': $output"
+        throw (Format-SchtasksFailureMessage -TaskName $TaskName -Output $output)
     }
 }
 

@@ -152,6 +152,14 @@ jobs:
           cp agent/lattice-tray.service  lattice-tray.service
           cp install.ps1                  install.ps1
 
+      - name: Install BLAKE3 checksum tool
+        uses: taiki-e/install-action@v2
+        with:
+          tool: b3sum
+
+      - name: Generate updater checksum manifest
+        run: b3sum lattice-agent-* lattice-tray-* lattice-capture-* lattice-config-* > checksums.blake3
+
       - name: Verify release assets
         run: |
           expected=(
@@ -168,6 +176,7 @@ jobs:
             lattice-agent.service
             lattice-tray.service
             install.ps1
+            checksums.blake3
           )
 
           for asset in "${expected[@]}"; do
@@ -195,3 +204,4 @@ jobs:
             lattice-agent.service
             lattice-tray.service
             install.ps1
+            checksums.blake3

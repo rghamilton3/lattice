@@ -4,11 +4,12 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
-use crate::{config, platform};
+use crate::{config, platform, time};
 
 const REPO_RELEASES_API: &str = "https://api.github.com/repos/rghamilton3/lattice/releases/latest";
+const UPDATE_HTTP_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProductKind {
@@ -186,9 +187,14 @@ async fn apply(args: &[String]) -> Result<i32> {
     let products = discover_products();
     let requested = select_products(args, &products)?;
     if requested.is_empty() {
+        let mut attempt = base_attempt("apply", &products, &started_at);
+        attempt.outcome = AttemptOutcome::Unsupported;
+        attempt.message = "No installed supported products matched the update request.".to_owned();
+        record_attempt(&attempt)?;
         eprintln!("No installed supported products matched the update request.");
         return Ok(3);
     }
+    let requested_products = requested.clone();
 
     let release = match fetch_release_metadata().await {
         Ok(release) => release,
@@ -206,6 +212,14 @@ async fn apply(args: &[String]) -> Result<i32> {
     let mut plan = Vec::new();
     for product in requested {
         if !product.automatic_update {
+            let mut attempt = base_attempt("apply", std::slice::from_ref(&product), &started_at);
+            attempt.outcome = AttemptOutcome::ManualActionRequired;
+            attempt.message = format!(
+                "{} cannot be updated automatically. {}",
+                product.display_name,
+                next_action(&product, None, ProductStatus::ManualUpdateRequired)
+            );
+            record_attempt(&attempt)?;
             eprintln!(
                 "{} cannot be updated automatically. {}",
                 product.display_name,
@@ -214,6 +228,13 @@ async fn apply(args: &[String]) -> Result<i32> {
             return Ok(3);
         }
         let Some(update) = release.update_for(&product) else {
+            let mut attempt = base_attempt("apply", std::slice::from_ref(&product), &started_at);
+            attempt.outcome = AttemptOutcome::Unsupported;
+            attempt.message = format!(
+                "{} has no matching artifact for this platform. No files were changed.",
+                product.display_name
+            );
+            record_attempt(&attempt)?;
             eprintln!(
                 "{} has no matching artifact for this platform. No files were changed.",
                 product.display_name
@@ -230,12 +251,25 @@ async fn apply(args: &[String]) -> Result<i32> {
                 product.display_name
             ),
             ProductStatus::UpdateAvailable | ProductStatus::Unknown => plan.push((product, update)),
+            ProductStatus::Unsupported | ProductStatus::ManualUpdateRequired => {
+                let mut attempt =
+                    base_attempt("apply", std::slice::from_ref(&product), &started_at);
+                attempt.outcome = AttemptOutcome::Unsupported;
+                attempt.message = format!(
+                    "{} is not eligible for automatic update. {}",
+                    product.display_name,
+                    next_action(&product, Some(&update), ProductStatus::Unsupported)
+                );
+                record_attempt(&attempt)?;
+                eprintln!("{}", attempt.message);
+                return Ok(3);
+            }
             _ => {}
         }
     }
 
     if plan.is_empty() {
-        let mut attempt = base_attempt("apply", &products, &started_at);
+        let mut attempt = base_attempt("apply", &requested_products, &started_at);
         attempt.outcome = AttemptOutcome::AlreadyCurrent;
         attempt.message = "All requested supported products are already current or are development builds. No files were changed.".to_owned();
         record_attempt(&attempt)?;
@@ -257,7 +291,7 @@ async fn apply(args: &[String]) -> Result<i32> {
         );
     }
     if !confirm()? {
-        let mut attempt = base_attempt("apply", &products, &started_at);
+        let mut attempt = base_attempt("apply", &requested_products, &started_at);
         attempt.outcome = AttemptOutcome::DeclinedConfirmation;
         attempt.message =
             "Operator confirmation was declined or unavailable. No files were changed.".to_owned();
@@ -268,7 +302,8 @@ async fn apply(args: &[String]) -> Result<i32> {
 
     let state = user_state();
     preserve_state(&state)?;
-    let mut attempt = base_attempt("apply", &products, &started_at);
+    let mut attempt = base_attempt("apply", &requested_products, &started_at);
+    let mut applied_products = Vec::new();
     for (product, update) in &plan {
         attempt
             .target_versions
@@ -281,15 +316,24 @@ async fn apply(args: &[String]) -> Result<i32> {
             } else {
                 AttemptOutcome::FailedInstallation
             };
-            attempt.message = format!(
-                "{} update failed. Installed files were preserved when replacement had not started; rerun the update after fixing the reported issue.",
-                product.display_name
-            );
+            attempt.message = if applied_products.is_empty() {
+                format!(
+                    "{} update failed before any requested files were replaced. Rerun the update after fixing the reported issue.",
+                    product.display_name
+                )
+            } else {
+                format!(
+                    "{} update failed after these products were already replaced: {}. Rerun the update after fixing the reported issue.",
+                    product.display_name,
+                    applied_products.join(",")
+                )
+            };
             attempt.error_detail = Some(err.to_string());
             record_attempt(&attempt)?;
             eprintln!("{}", attempt.message);
             return Ok(1);
         }
+        applied_products.push(product.id.clone());
     }
 
     attempt.outcome = AttemptOutcome::Success;
@@ -408,7 +452,9 @@ fn discover_products() -> Vec<Product> {
 
 fn binary_product(id: &str, display: &str, kind: ProductKind, automatic_update: bool) -> Product {
     let path = platform::install_path(id);
-    let installed_version = if path.exists() {
+    let installed_version = if !path.exists() {
+        Version::Unknown
+    } else if id == "lattice-agent" {
         current_version()
     } else {
         Version::Unknown
@@ -450,6 +496,9 @@ fn current_version() -> Version {
 fn classify(product: &Product, update: Option<&AvailableUpdate>, offline: bool) -> ProductStatus {
     if offline {
         return ProductStatus::Offline;
+    }
+    if product.automatic_update && product.install_path.is_none() {
+        return ProductStatus::Unsupported;
     }
     if !product.automatic_update {
         return ProductStatus::ManualUpdateRequired;
@@ -510,7 +559,8 @@ fn next_action(
         ProductStatus::Current => "No action is required.".to_owned(),
         ProductStatus::UpdateAvailable if product.kind == ProductKind::DesktopCompanion => "Run `lattice-agent update apply desktop-companions` or `lattice-agent update apply --all-supported` to update installed desktop companions.".to_owned(),
         ProductStatus::UpdateAvailable => format!("Run `lattice-agent update apply {}` to update.", product.id),
-        ProductStatus::ManualUpdateRequired | ProductStatus::Unsupported => product.manual_guidance.clone().unwrap_or_else(|| "Update this product manually from the release notes.".to_owned()),
+        ProductStatus::ManualUpdateRequired => product.manual_guidance.clone().unwrap_or_else(|| "Update this product manually from the release notes.".to_owned()),
+        ProductStatus::Unsupported => product.manual_guidance.clone().unwrap_or_else(|| "Install this product first, then rerun `lattice-agent update check`.".to_owned()),
         ProductStatus::Offline => "Try again when release metadata is reachable; no local files were changed.".to_owned(),
         ProductStatus::Unknown => "Review the installed product before applying an update.".to_owned(),
         ProductStatus::DevBuild => "Development builds are not downgraded automatically; install a stable release manually if desired.".to_owned(),
@@ -520,6 +570,7 @@ fn next_action(
 async fn fetch_release_metadata() -> Result<ReleaseMetadata> {
     let client = reqwest::Client::builder()
         .user_agent("lattice-agent-updater")
+        .timeout(UPDATE_HTTP_TIMEOUT)
         .build()?;
     let release: GithubRelease = client
         .get(REPO_RELEASES_API)
@@ -570,7 +621,13 @@ async fn stage_verify_replace(product: &Product, update: &AvailableUpdate) -> Re
     let stage_dir = staging_dir();
     fs::create_dir_all(&stage_dir)?;
     let staged_path = stage_dir.join(&artifact.asset_name);
-    let bytes = reqwest::get(&artifact.download_url)
+    let client = reqwest::Client::builder()
+        .user_agent("lattice-agent-updater")
+        .timeout(UPDATE_HTTP_TIMEOUT)
+        .build()?;
+    let bytes = client
+        .get(&artifact.download_url)
+        .send()
         .await?
         .error_for_status()?
         .bytes()
@@ -606,7 +663,33 @@ fn replace_file(staged: &Path, target: &Path) -> Result<()> {
     {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&replacement, fs::Permissions::from_mode(0o755))?;
+        fs::rename(&replacement, target)?;
     }
+    #[cfg(windows)]
+    {
+        let backup = target.with_extension("update-backup");
+        if backup.exists() {
+            fs::remove_file(&backup)?;
+        }
+        if target.exists() {
+            fs::rename(target, &backup).with_context(|| {
+                format!(
+                    "could not prepare existing file for replacement; close any running process using {}",
+                    target.display()
+                )
+            })?;
+        }
+        if let Err(err) = fs::rename(&replacement, target) {
+            if backup.exists() && !target.exists() {
+                let _ = fs::rename(&backup, target);
+            }
+            return Err(err).with_context(|| format!("replacing {}", target.display()));
+        }
+        if backup.exists() {
+            fs::remove_file(&backup)?;
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
     fs::rename(&replacement, target)?;
     Ok(())
 }
@@ -618,8 +701,22 @@ fn preserve_state(state: &UserState) -> Result<()> {
         &state.capture_queue_path,
         &state.history_path,
     ] {
+        if path.is_dir() {
+            bail!(
+                "state path {} is a directory; refusing update until it is corrected",
+                path.display()
+            );
+        }
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
+        }
+    }
+    for service in &state.service_definitions {
+        if service.is_dir() {
+            bail!(
+                "service definition path {} is a directory; refusing update until it is corrected",
+                service.display()
+            );
         }
     }
     Ok(())
@@ -717,11 +814,7 @@ pub fn history_path() -> PathBuf {
 }
 
 fn now_string() -> String {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    format!("{secs}")
+    time::now_iso()
 }
 
 fn current_target() -> String {
@@ -969,6 +1062,68 @@ mod tests {
     }
 
     #[test]
+    fn classifies_uninstalled_automatic_products_as_unsupported() {
+        let product = Product {
+            id: "lattice-capture".to_owned(),
+            display_name: "lattice-capture".to_owned(),
+            kind: ProductKind::DesktopCompanion,
+            install_path: None,
+            version_source: "companion install".to_owned(),
+            installed_version: Version::Unknown,
+            automatic_update: true,
+            manual_guidance: None,
+        };
+        let update = AvailableUpdate {
+            product_id: product.id.clone(),
+            release_tag: "agent-v0.11.0".to_owned(),
+            target_version: Version::parse("0.11.0"),
+            channel: "stable".to_owned(),
+            summary: None,
+            artifacts: vec![],
+            eligibility: "test".to_owned(),
+            published_at: None,
+        };
+
+        assert_eq!(
+            classify(&product, Some(&update), false),
+            ProductStatus::Unsupported
+        );
+        assert!(
+            status_line(&product, Some(&update), ProductStatus::Unsupported)
+                .contains("Install this product first")
+        );
+    }
+
+    #[test]
+    fn classifies_installed_unknown_companion_as_update_available() {
+        let product = Product {
+            id: "lattice-capture".to_owned(),
+            display_name: "lattice-capture".to_owned(),
+            kind: ProductKind::DesktopCompanion,
+            install_path: Some(PathBuf::from("/tmp/lattice-capture")),
+            version_source: "companion install".to_owned(),
+            installed_version: Version::Unknown,
+            automatic_update: true,
+            manual_guidance: None,
+        };
+        let update = AvailableUpdate {
+            product_id: product.id.clone(),
+            release_tag: "agent-v0.11.0".to_owned(),
+            target_version: Version::parse("0.11.0"),
+            channel: "stable".to_owned(),
+            summary: None,
+            artifacts: vec![],
+            eligibility: "test".to_owned(),
+            published_at: None,
+        };
+
+        assert_eq!(
+            classify(&product, Some(&update), false),
+            ProductStatus::UpdateAvailable
+        );
+    }
+
+    #[test]
     fn staging_and_history_paths_stay_under_data_dir() {
         assert!(staging_dir().starts_with(platform::data_dir()));
         assert!(history_path().starts_with(platform::data_dir()));
@@ -1071,6 +1226,47 @@ mod tests {
         let expected = blake3::hash(b"good").to_hex().to_string();
         assert!(verify_file(&file, &expected).is_ok());
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn replacement_overwrites_existing_target() {
+        let dir = std::env::temp_dir().join(format!("lattice-replace-test-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let staged = dir.join("staged");
+        let target = dir.join("target");
+        fs::write(&staged, "new").unwrap();
+        fs::write(&target, "old").unwrap();
+
+        replace_file(&staged, &target).unwrap();
+
+        assert_eq!(fs::read_to_string(&target).unwrap(), "new");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn state_preservation_refuses_directory_in_file_slot() {
+        let dir = std::env::temp_dir().join(format!("lattice-state-test-{}", std::process::id()));
+        let config_path = dir.join("config.toml");
+        fs::create_dir_all(&config_path).unwrap();
+        let state = UserState {
+            config_path,
+            agent_cache_path: dir.join("agent.db"),
+            capture_queue_path: dir.join("queue.db"),
+            history_path: dir.join("history.jsonl"),
+            service_definitions: vec![],
+            customized_service_definitions: false,
+        };
+
+        assert!(preserve_state(&state).is_err());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn update_attempt_timestamps_are_iso_utc() {
+        let ts = now_string();
+
+        assert!(ts.contains('T'));
+        assert!(ts.ends_with('Z'));
     }
 
     #[test]

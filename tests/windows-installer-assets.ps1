@@ -84,6 +84,9 @@ $promptShortcutProperties = Resolve-ShortcutProperties -ExePath 'C:\lattice\latt
 Assert-Equal -Actual $promptShortcutProperties.TargetPath -Expected 'C:\lattice\lattice-capture.exe' -Message 'Startup shortcut with arguments should target the executable path.'
 Assert-Equal -Actual $promptShortcutProperties.Arguments -Expected '--prompt' -Message 'Startup shortcut should preserve arguments separately from target path.'
 
+$spacePathShortcutProperties = Resolve-ShortcutProperties -ExePath 'C:\Users\Bob Smith\AppData\Local\lattice\lattice-agent.exe'
+Assert-Equal -Actual $spacePathShortcutProperties.WorkingDirectory -Expected 'C:\Users\Bob Smith\AppData\Local\lattice' -Message 'Shortcut working directory should support paths containing spaces.'
+
 Assert-Equal `
     -Actual (Get-ReleaseAssetUrl -Release $allAssetsRelease -Asset $agentAsset) `
     -Expected 'https://downloads.example.test/agent-v0.10.0/lattice-agent-x86_64-pc-windows-msvc.exe' `

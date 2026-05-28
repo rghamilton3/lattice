@@ -5,7 +5,7 @@
 .DESCRIPTION
     Downloads the latest lattice-agent release binaries, installs them to
     %LOCALAPPDATA%\lattice\, writes a starter config to %APPDATA%\lattice\,
-    and registers two Task Scheduler tasks that run at logon:
+    and places shortcuts in the current-user Startup folder for:
       - LatticeAgent     : the background indexer
       - LatticeTray      : the system-tray monitor
 
@@ -96,6 +96,10 @@ function Register-StartupShortcut {
     param([string]$ShortcutName, [string]$ExePath, [string]$Arguments = '')
 
     $startupDir = [Environment]::GetFolderPath('Startup')
+    if ([string]::IsNullOrEmpty($startupDir)) {
+        throw 'Could not resolve the Startup folder path.'
+    }
+
     $shortcutPath = Resolve-StartupShortcutPath -StartupDir $startupDir -ShortcutName $ShortcutName
     $shortcutProperties = Resolve-ShortcutProperties -ExePath $ExePath -Arguments $Arguments
 

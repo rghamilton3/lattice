@@ -142,26 +142,14 @@ impl ConfigApp {
             PickerResult::Failed(message) => Some(message),
         }
     }
-
-    fn browse_watch_folder<F>(
-        watch_rows: &mut [WatchRow],
-        row_index: usize,
-        choose_folder: F,
-    ) -> Option<String>
-    where
-        F: FnOnce() -> PickerResult,
-    {
-        Self::apply_watch_path_picker_result(watch_rows, row_index, choose_folder())
-    }
 }
 
 #[cfg(unix)]
 fn folder_picker_unavailable_message() -> Option<String> {
-    let has_display = std::env::var_os("WAYLAND_DISPLAY").is_some()
-        || std::env::var_os("DISPLAY").is_some()
-        || std::env::var_os("XDG_CURRENT_DESKTOP").is_some();
-
-    if has_display {
+    if has_display_session(
+        std::env::var_os("WAYLAND_DISPLAY").is_some(),
+        std::env::var_os("DISPLAY").is_some(),
+    ) {
         None
     } else {
         Some(
@@ -169,6 +157,11 @@ fn folder_picker_unavailable_message() -> Option<String> {
                 .into(),
         )
     }
+}
+
+#[cfg(unix)]
+fn has_display_session(has_wayland_display: bool, has_x11_display: bool) -> bool {
+    has_wayland_display || has_x11_display
 }
 
 #[cfg(not(unix))]
@@ -448,10 +441,10 @@ impl eframe::App for ConfigApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
         if let Some(row_index) = browse_row_index {
-            if let Some(message) = Self::browse_watch_folder(
+            if let Some(message) = Self::apply_watch_path_picker_result(
                 form.watch_rows.as_mut_slice(),
                 row_index,
-                Self::choose_watch_folder,
+                Self::choose_watch_folder(),
             ) {
                 *modal = ModalState::Error(message);
             }
@@ -639,16 +632,11 @@ mod tests {
         assert_eq!(rows[0].path, "/before/one");
     }
 
+    #[cfg(unix)]
     #[test]
-    fn browse_action_invokes_picker_and_applies_result() {
-        let mut rows = rows();
-
-        let message = ConfigApp::browse_watch_folder(rows.as_mut_slice(), 0, || {
-            PickerResult::Selected(PathBuf::from("/picked/from/browse"))
-        });
-
-        assert!(message.is_none());
-        assert_eq!(rows[0].path, "/picked/from/browse");
-        assert_eq!(rows[1].path, "/before/two");
+    fn display_session_detection_requires_wayland_or_x11_display() {
+        assert!(!has_display_session(false, false));
+        assert!(has_display_session(true, false));
+        assert!(has_display_session(false, true));
     }
 }

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Lattice Surface app icon">
+	<rect width="512" height="512" rx="112" fill="#111827" />
+	<rect x="72" y="72" width="368" height="368" rx="72" fill="#f8f7f3" />
+	<g fill="none" stroke="#1f2937" stroke-width="24" stroke-linecap="round">
+		<path d="M144 144h224M144 256h224M144 368h224" />
+		<path d="M144 144v224M256 144v224M368 144v224" />
+	</g>
+	<g fill="#2563eb">
+		<circle cx="144" cy="144" r="24" />
+		<circle cx="256" cy="144" r="24" />
+		<circle cx="368" cy="144" r="24" />
+		<circle cx="144" cy="256" r="24" />
+		<circle cx="256" cy="256" r="24" />
+		<circle cx="368" cy="256" r="24" />
+		<circle cx="144" cy="368" r="24" />
+		<circle cx="256" cy="368" r="24" />
+		<circle cx="368" cy="368" r="24" />
+	</g>
+</svg>

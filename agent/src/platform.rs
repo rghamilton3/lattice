@@ -21,6 +21,36 @@ pub fn data_dir() -> PathBuf {
     data_root().join("lattice")
 }
 
+/// Lattice's per-user config root.
+pub fn config_dir() -> PathBuf {
+    #[cfg(unix)]
+    return std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/root".to_owned()))
+                .join(".config")
+        });
+    #[cfg(windows)]
+    return std::env::var_os("APPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"C:\Users\Default\AppData\Roaming"));
+    #[cfg(not(any(unix, windows)))]
+    PathBuf::from(".")
+}
+
+/// Default install location for a Lattice binary managed by the local updater.
+pub fn install_path(binary_name: &str) -> PathBuf {
+    #[cfg(unix)]
+    return PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/root".to_owned()))
+        .join(".local")
+        .join("bin")
+        .join(binary_name);
+    #[cfg(windows)]
+    return data_dir().join(format!("{binary_name}.exe"));
+    #[cfg(not(any(unix, windows)))]
+    PathBuf::from(binary_name)
+}
+
 #[cfg(unix)]
 fn data_root() -> PathBuf {
     if let Some(v) = std::env::var_os("XDG_DATA_HOME") {

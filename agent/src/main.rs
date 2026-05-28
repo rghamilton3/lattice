@@ -22,7 +22,12 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    let force = std::env::args().any(|a| a == "--force");
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|arg| arg == "update") {
+        std::process::exit(lattice_agent::update::run_cli(&args[1..]).await?);
+    }
+
+    let force = args.iter().any(|a| a == "--force");
 
     let cfg = Arc::new(config::load()?);
     info!(

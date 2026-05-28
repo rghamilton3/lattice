@@ -65,11 +65,23 @@ function Download-Asset {
     Invoke-WebRequest -Uri $Url -OutFile $Dest -UseBasicParsing
 }
 
+function Resolve-ScheduledTaskActionParameters {
+    param([string]$ExePath, [string]$Arguments = '')
+
+    $actionParams = @{ Execute = $ExePath }
+    if (-not [string]::IsNullOrEmpty($Arguments)) {
+        $actionParams.Argument = $Arguments
+    }
+
+    $actionParams
+}
+
 function Register-LogonTask {
     param([string]$TaskName, [string]$ExePath, [string]$Arguments = '')
     $trigger  = New-ScheduledTaskTrigger -AtLogon
     $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-    $action   = New-ScheduledTaskAction -Execute $ExePath -Argument $Arguments
+    $actionParams = Resolve-ScheduledTaskActionParameters -ExePath $ExePath -Arguments $Arguments
+    $action   = New-ScheduledTaskAction @actionParams
     $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
 
     $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue

@@ -1,0 +1,4 @@
+spine: installed unknown, latest unavailable, manual update required. Update the self-hosted spine deployment manually from the project release notes and your Docker deployment files.
+surface: installed unknown, latest unavailable, manual update required. Build and deploy the surface static assets with the self-hosted spine deployment.
+installer scripts and service units: installed unknown, latest unavailable, manual update required. Review release notes and rerun the installer only when you are ready to preserve or reapply local customizations.
+unknown product: installed unknown, latest unavailable, unsupported. Identify the product owner and update it manually; the local updater will not replace unknown files.

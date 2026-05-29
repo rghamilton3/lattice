@@ -333,13 +333,6 @@
 		<div class="row" style="gap:4px; min-width:0">
 			<button
 				class="btn btn-ghost"
-				title="Add a note to the selected passage"
-				onclick={startAnnotation}
-			>
-				<Icon name="quote" size={14} /> Annotate
-			</button>
-			<button
-				class="btn btn-ghost"
 				title="Back to library"
 				onclick={() => wb.openInPane(paneIndex, { kind: 'library', query: '' })}
 			>
@@ -363,6 +356,13 @@
 				onclick={openMentions}
 			>
 				<Icon name="quote" size={14} /> Mentions
+			</button>
+			<button
+				class="btn btn-ghost"
+				title="Add a note to the selected passage"
+				onclick={startAnnotation}
+			>
+				<Icon name="notebook-pen" size={14} /> Annotate
 			</button>
 			{#if timestamp}
 				<button class="btn btn-ghost" title="Items from ±72h around this doc" onclick={openNearby}>

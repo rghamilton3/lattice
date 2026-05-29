@@ -27,9 +27,8 @@ export function getReadingSelection(container: HTMLElement | null): ReadingSelec
 	const text = rawText.trim();
 	if (!selection || selection.rangeCount === 0 || !text) return null;
 	const range = selection.getRangeAt(0);
-	if (!container?.contains(range.commonAncestorContainer)) {
-		return { text, start: null, end: null };
-	}
+	if (!container?.contains(range.startContainer) || !container.contains(range.endContainer))
+		return null;
 	const rawStart = nodeOffsetWithin(container, range.startContainer, range.startOffset);
 	const rawEnd = nodeOffsetWithin(container, range.endContainer, range.endOffset);
 	if (rawStart === null || rawEnd === null) return { text, start: null, end: null };

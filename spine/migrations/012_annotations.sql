@@ -11,6 +11,10 @@ CREATE TABLE IF NOT EXISTS annotations (
   CHECK (
     (selection_start IS NULL AND selection_end IS NULL)
     OR (selection_start IS NOT NULL AND selection_end IS NOT NULL AND selection_end > selection_start)
+  ),
+  CHECK (
+    target_kind = 'working'
+    OR (target_id NOT GLOB '*[^0-9]*' AND CAST(target_id AS INTEGER) > 0)
   )
 );
 

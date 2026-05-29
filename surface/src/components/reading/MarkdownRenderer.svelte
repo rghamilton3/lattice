@@ -2,23 +2,20 @@
 	import { Marked, type Token } from 'marked';
 	import markedKatex from 'marked-katex-extension';
 	import DOMPurify from 'dompurify';
-	import { onMount } from 'svelte';
+	import 'katex/dist/katex.min.css';
+	import type { Annotation } from '$lib/types';
 
-	const { content }: { content: string } = $props();
+	const {
+		content,
+		annotations = [],
+		revealAnnotationId
+	}: { content: string; annotations?: Annotation[]; revealAnnotationId?: string } = $props();
 
 	let html = $state('');
+	let root: HTMLDivElement | null = $state(null);
 	let mermaidInitialized = false;
 	let uid = 0;
 	let renderSeq = 0;
-
-	onMount(() => {
-		if (document.getElementById('katex-css')) return;
-		const link = document.createElement('link');
-		link.id = 'katex-css';
-		link.rel = 'stylesheet';
-		link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css';
-		document.head.appendChild(link);
-	});
 
 	async function renderMarkdown(md: string): Promise<string> {
 		// Local non-reactive collection inside an async function — SvelteMap would add
@@ -93,9 +90,99 @@
 				html = `<pre><code>${escapeHtml(md)}</code></pre>`;
 			});
 	});
+
+	$effect(() => {
+		const el = root;
+		const rendered = html;
+		const activeAnnotations = annotations;
+		const revealedId = revealAnnotationId;
+		if (!el) return;
+		el.innerHTML = rendered;
+		applyAnnotationHighlights(el, activeAnnotations, revealedId);
+	});
+
+	function applyAnnotationHighlights(
+		el: HTMLElement,
+		activeAnnotations: Annotation[],
+		revealedId: string | undefined
+	) {
+		const ranges = activeAnnotations
+			.filter(
+				(annotation) => annotation.selection_start !== null && annotation.selection_end !== null
+			)
+			.sort((a, b) => (b.selection_start ?? 0) - (a.selection_start ?? 0));
+		if (ranges.length === 0) return;
+
+		const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+			acceptNode(node) {
+				const parent = node.parentElement;
+				if (!parent || ['SCRIPT', 'STYLE', 'SVG'].includes(parent.tagName)) {
+					return NodeFilter.FILTER_REJECT;
+				}
+				return NodeFilter.FILTER_ACCEPT;
+			}
+		});
+		const spans: { node: Text; start: number; end: number }[] = [];
+		let offset = 0;
+		let current = walker.nextNode();
+		while (current) {
+			const text = current.textContent ?? '';
+			spans.push({ node: current as Text, start: offset, end: offset + text.length });
+			offset += text.length;
+			current = walker.nextNode();
+		}
+
+		for (const annotation of ranges) {
+			const start = annotation.selection_start ?? 0;
+			const end = annotation.selection_end ?? 0;
+			for (const span of spans) {
+				if (!span.node.parentNode || span.end <= start || span.start >= end) continue;
+				wrapTextSegment(
+					span.node,
+					Math.max(0, start - span.start),
+					Math.min(span.end, end) - span.start,
+					annotation.id,
+					annotation.id === revealedId
+				);
+			}
+		}
+	}
+
+	function wrapTextSegment(
+		node: Text,
+		start: number,
+		end: number,
+		annotationId: string,
+		revealed: boolean
+	) {
+		if (end <= start) return;
+		const middle = node.splitText(start);
+		middle.splitText(end - start);
+		const mark = document.createElement('mark');
+		mark.className = revealed
+			? 'annotation-highlight annotation-highlight-revealed'
+			: 'annotation-highlight';
+		mark.dataset.annotationId = annotationId;
+		middle.parentNode?.insertBefore(mark, middle);
+		mark.appendChild(middle);
+	}
 </script>
 
-<div class="prose prose-sm h-full max-w-none overflow-y-auto p-4 prose-invert">
-	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-	{@html html}
-</div>
+<div
+	bind:this={root}
+	class="prose prose-sm h-full max-w-none overflow-y-auto p-4 prose-invert"
+></div>
+
+<style>
+	:global(.annotation-highlight) {
+		background: color-mix(in srgb, var(--color-accent) 28%, transparent);
+		border-bottom: 2px solid var(--color-accent);
+		color: inherit;
+		padding: 0 2px;
+	}
+
+	:global(.annotation-highlight-revealed) {
+		outline: 2px solid var(--color-accent);
+		outline-offset: 2px;
+	}
+</style>

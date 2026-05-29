@@ -16,6 +16,7 @@
 	import { vim, Vim } from '@replit/codemirror-vim';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { workingKeys, fetchWorking, updateWorking, deleteWorking } from '$lib/api/working';
+	import { mermaidTemplate } from '$lib/utils/diagram';
 	import Icon from '$components/icons/Icon.svelte';
 	import VimToggle from './VimToggle.svelte';
 
@@ -32,7 +33,6 @@
 	let saveStatus = $state<'' | 'saved' | 'error' | 'deleting'>('');
 	let saveErrorMsg = $state('');
 	let statusTimer: ReturnType<typeof setTimeout> | null = null;
-	const mermaidTemplate = '```mermaid\nflowchart TD\n  A[Start] --> B[Next]\n```\n';
 
 	const docQuery = createQuery(() => ({
 		queryKey: workingKeys.detail(slug),
@@ -109,7 +109,6 @@
 			selection: { anchor: selection.from + mermaidTemplate.length }
 		});
 		view.focus();
-		scheduleAutosave(view.state.doc.toString());
 	}
 
 	// Wire vim ex commands (global registry — last-mounted editor wins when two are open simultaneously)

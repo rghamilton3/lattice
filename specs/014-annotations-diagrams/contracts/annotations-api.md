@@ -11,7 +11,7 @@ Request body:
 ```json
 {
   "target_kind": "capture",
-  "target_id": "cap_123",
+  "target_id": "123",
   "selection_start": 10,
   "selection_end": 42,
   "selection_text": "selected source passage",
@@ -33,7 +33,7 @@ Success response `201`:
   "annotation": {
     "id": "ann_123",
     "target_kind": "capture",
-    "target_id": "cap_123",
+    "target_id": "123",
     "selection_start": 10,
     "selection_end": 42,
     "selection_text": "selected source passage",

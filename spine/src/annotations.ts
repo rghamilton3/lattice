@@ -65,6 +65,9 @@ export function validateAnnotationInput(input: AnnotationCreateInput): Annotatio
 
 	const targetId = String(input.target_id ?? '').trim();
 	if (!targetId) throw new AnnotationValidationError('Target id is required');
+	if (input.target_kind !== 'working' && !isPositiveIntegerString(targetId)) {
+		throw new AnnotationValidationError('Target id is invalid');
+	}
 
 	const comment = String(input.comment ?? '').trim();
 	if (!comment) throw new AnnotationValidationError('Comment is required');
@@ -99,6 +102,12 @@ export function validateAnnotationInput(input: AnnotationCreateInput): Annotatio
 	};
 }
 
+function isPositiveIntegerString(value: string): boolean {
+	if (!/^\d+$/.test(value)) return false;
+	const n = Number(value);
+	return Number.isSafeInteger(n) && n > 0;
+}
+
 function targetExists(db: Database, kind: AnnotationTargetKind, id: string): boolean {
 	if (kind === 'capture') {
 		return Boolean(db.query('SELECT 1 FROM captures WHERE id = ?').get(Number(id)));
@@ -128,6 +137,9 @@ export function listAnnotations(
 		throw new AnnotationValidationError('Invalid target kind');
 	const id = String(targetId ?? '').trim();
 	if (!id) throw new AnnotationValidationError('Target id is required');
+	if (targetKind !== 'working' && !isPositiveIntegerString(id)) {
+		throw new AnnotationValidationError('Target id is invalid');
+	}
 	return db
 		.query(
 			`SELECT id, target_kind, target_id, selection_start, selection_end, selection_text, comment, created_at, updated_at
@@ -146,26 +158,42 @@ export function createAnnotation(db: Database, rawInput: AnnotationCreateInput):
 
 	const id = `ann_${crypto.randomUUID()}`;
 	const now = new Date().toISOString();
-	const annotation = db.transaction(() => {
-		db.prepare(
-			`INSERT INTO annotations
-			 (id, target_kind, target_id, selection_start, selection_end, selection_text, comment, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		).run(
-			id,
-			input.target_kind,
-			input.target_id,
-			input.selection_start,
-			input.selection_end,
-			input.selection_text,
-			input.comment,
-			now,
-			now,
-		);
-		return db.query('SELECT * FROM annotations WHERE id = ?').get(id) as AnnotationRow;
-	})();
+	const annotation: AnnotationRow = {
+		id,
+		target_kind: input.target_kind,
+		target_id: input.target_id,
+		selection_start: input.selection_start,
+		selection_end: input.selection_end,
+		selection_text: input.selection_text,
+		comment: input.comment,
+		created_at: now,
+		updated_at: now,
+	};
 
 	writeAnnotationIndex(annotation);
+	try {
+		db.transaction(() => {
+			db.prepare(
+				`INSERT INTO annotations
+			 (id, target_kind, target_id, selection_start, selection_end, selection_text, comment, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			).run(
+				id,
+				input.target_kind,
+				input.target_id,
+				input.selection_start,
+				input.selection_end,
+				input.selection_text,
+				input.comment,
+				now,
+				now,
+			);
+		})();
+	} catch (e) {
+		deleteAnnotationIndex(id);
+		throw e;
+	}
+
 	refreshIndex();
 	return annotation;
 }
@@ -173,7 +201,7 @@ export function createAnnotation(db: Database, rawInput: AnnotationCreateInput):
 export function deleteAnnotation(db: Database, id: string): void {
 	const row = db.query('SELECT id FROM annotations WHERE id = ?').get(id) as { id: string } | null;
 	if (!row) throw new AnnotationNotFoundError();
-	db.prepare('DELETE FROM annotations WHERE id = ?').run(id);
 	deleteAnnotationIndex(id);
+	db.prepare('DELETE FROM annotations WHERE id = ?').run(id);
 	refreshIndex();
 }

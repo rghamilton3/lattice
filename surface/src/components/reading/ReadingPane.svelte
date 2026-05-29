@@ -162,7 +162,7 @@
 	// Derive id/slug/kind for lateral queries
 	const lateralRef = $derived<{
 		id: number | string;
-		docKind: 'capture' | 'local-file' | 'working';
+		docKind: 'capture' | 'local-file' | 'working' | 'archive';
 	}>(
 		ref.kind === 'capture'
 			? { id: ref.id, docKind: 'capture' }
@@ -170,7 +170,7 @@
 				? { id: ref.id, docKind: 'local-file' }
 				: ref.kind === 'working'
 					? { id: ref.slug, docKind: 'working' }
-					: { id: ref.id, docKind: 'local-file' }
+					: { id: ref.id, docKind: 'archive' }
 	);
 
 	const chipClass = $derived(
@@ -401,17 +401,21 @@
 						'error loading document'}
 				</p>
 			{:else if ref.kind === 'capture' && captureQuery.data}
-				<MarkdownRenderer content={captureQuery.data.text} />
+				<MarkdownRenderer content={captureQuery.data.text} {annotations} {revealAnnotationId} />
 			{:else if ref.kind === 'file' && fileQuery.data}
 				{#if fileQuery.data.mime_type === 'application/pdf'}
 					<PdfViewer fileId={ref.id} />
 				{:else}
-					<MarkdownRenderer content={fileQuery.data.text} />
+					<MarkdownRenderer content={fileQuery.data.text} {annotations} {revealAnnotationId} />
 				{/if}
 			{:else if ref.kind === 'working' && workingQuery.data}
-				<MarkdownRenderer content={workingQuery.data.content} />
+				<MarkdownRenderer content={workingQuery.data.content} {annotations} {revealAnnotationId} />
 			{:else if ref.kind === 'archive' && archiveQuery.data}
-				<MarkdownRenderer content={archiveQuery.data.extracted_text} />
+				<MarkdownRenderer
+					content={archiveQuery.data.extracted_text}
+					{annotations}
+					{revealAnnotationId}
+				/>
 			{/if}
 		</div>
 		{#if annotations.length > 0}

@@ -60,7 +60,9 @@
 						? ('capture' as const)
 						: r.target_kind === 'working'
 							? ('working' as const)
-							: ('local-file' as const)
+							: r.target_kind === 'archive'
+								? ('archive' as const)
+								: ('local-file' as const)
 			};
 		}
 		if (r.kind === 'capture-attachment') {
@@ -72,7 +74,7 @@
 		return {
 			kind: 'similar' as const,
 			id: r.id,
-			docKind: r.kind === 'archive' ? 'local-file' : r.kind
+			docKind: r.kind
 		};
 	}
 

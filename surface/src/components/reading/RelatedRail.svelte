@@ -11,7 +11,7 @@
 		lateralRef
 	}: {
 		paneIndex: 0 | 1;
-		lateralRef: { id: number | string; docKind: 'capture' | 'local-file' | 'working' };
+		lateralRef: { id: number | string; docKind: 'capture' | 'local-file' | 'working' | 'archive' };
 	} = $props();
 
 	const wb = getWorkbenchContext();
@@ -48,6 +48,21 @@
 		}
 		window.addEventListener('mousemove', onMove);
 		window.addEventListener('mouseup', onUp);
+	}
+
+	function resizeBy(delta: number) {
+		height = Math.max(80, Math.min(600, height + delta));
+		localStorage.setItem('lattice:related-rail-h', String(height));
+	}
+
+	function onResizeKeydown(e: KeyboardEvent) {
+		if (e.key === 'ArrowUp') {
+			e.preventDefault();
+			resizeBy(16);
+		} else if (e.key === 'ArrowDown') {
+			e.preventDefault();
+			resizeBy(-16);
+		}
 	}
 
 	function toRef(r: SearchResult): DocRef {
@@ -93,11 +108,18 @@
 {#if wb.featureFlags.relatedRail && hasContent}
 	<div class="related-rail" style={minimized ? '' : `height:${height}px; overflow:hidden`}>
 		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 		<div
 			class="related-resize-handle"
 			role="separator"
+			tabindex="0"
 			aria-orientation="horizontal"
+			aria-label="Resize related notes"
+			aria-valuemin="80"
+			aria-valuemax="600"
+			aria-valuenow={height}
 			onmousedown={startResize}
+			onkeydown={onResizeKeydown}
 		></div>
 		<div class="related-head">
 			<span class="related-title">Related notes</span>

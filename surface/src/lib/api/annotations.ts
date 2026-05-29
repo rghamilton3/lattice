@@ -1,4 +1,4 @@
-import { ApiError, apiFetch } from './client';
+import { apiFetch } from './client';
 import type {
 	Annotation,
 	AnnotationCreateInput,
@@ -30,8 +30,5 @@ export function createAnnotation(
 }
 
 export async function deleteAnnotation(id: string): Promise<void> {
-	const res = await fetch(`/api/annotations/${encodeURIComponent(id)}`, { method: 'DELETE' });
-	if (!res.ok) {
-		throw new ApiError(res.status, await res.text());
-	}
+	return apiFetch(`/api/annotations/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }

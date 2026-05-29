@@ -241,7 +241,11 @@ export type DocRef =
 // ── Lateral action source ─────────────────────────────────────────────────────
 
 export type LateralSource =
-	| { kind: 'similar'; id: number | string; docKind: 'capture' | 'local-file' | 'working' }
+	| {
+			kind: 'similar';
+			id: number | string;
+			docKind: 'capture' | 'local-file' | 'working' | 'archive';
+	  }
 	| { kind: 'mentions'; q: string }
 	| { kind: 'nearby'; timestamp: string; window_hours: number };
 

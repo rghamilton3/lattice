@@ -7,6 +7,9 @@ node_modules
 .wrangler
 /.svelte-kit
 /build
+/dist
+/coverage
+*.min.js
 
 # OS
 .DS_Store

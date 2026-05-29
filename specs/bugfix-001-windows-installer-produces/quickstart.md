@@ -50,6 +50,8 @@ If only installer script logic changes, record PowerShell parser validation and 
 
 - Added `tests/windows-installer-assets.ps1` for release metadata asset resolution, missing required asset failures, and `-SkipTray` tray lookup behavior.
 - Updated `install.ps1` to fetch latest release metadata once, print the selected release tag, and pass exact-match `browser_download_url` values to `Invoke-WebRequest`.
+- Reviewed changed installer output for plain-text, copyable diagnostics that do not rely on color, ANSI formatting, or glyph-only meaning.
+- Confirmed bilingual delivery remains out of scope for this bugfix because installer prompts and documentation are currently English-only and no translation resource exists.
 - `pwsh -NoProfile -File tests/windows-installer-assets.ps1` passed.
 - PowerShell parser validation for `install.ps1` passed.
 - `just lint` passed after installing existing Surface lockfile dependencies locally.

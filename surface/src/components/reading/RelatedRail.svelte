@@ -3,7 +3,6 @@
 	import { browser } from '$app/environment';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { searchKeys, fetchSimilar } from '$lib/api/search';
-	import { archiveRawUrl } from '$lib/api/archives';
 	import type { DocRef, SearchResult } from '$lib/types';
 	import Icon from '$components/icons/Icon.svelte';
 
@@ -52,20 +51,26 @@
 	}
 
 	function toRef(r: SearchResult): DocRef {
+		if (r.kind === 'annotation') {
+			if (r.target_kind === 'capture') return { kind: 'capture', id: Number(r.target_id) };
+			if (r.target_kind === 'local_file') return { kind: 'file', id: Number(r.target_id) };
+			if (r.target_kind === 'archive') return { kind: 'archive', id: Number(r.target_id) };
+			return { kind: 'working', slug: r.target_id };
+		}
 		if (r.kind === 'capture') return { kind: 'capture', id: r.id };
 		if (r.kind === 'local-file') return { kind: 'file', id: r.id };
 		if (r.kind === 'capture-attachment') return { kind: 'capture', id: r.capture_id };
 		if (r.kind === 'working-attachment') return { kind: 'working', slug: r.slug };
-		if (r.kind === 'archive') return { kind: 'file', id: r.id };
+		if (r.kind === 'archive') return { kind: 'archive', id: r.id };
 		return { kind: 'working', slug: r.slug };
 	}
 
 	function openRelated(r: SearchResult) {
-		if (r.kind === 'archive') {
-			window.open(archiveRawUrl(r.id), '_blank', 'noopener,noreferrer');
-			return;
-		}
-		wb.openInPane(paneIndex, { kind: 'doc', ref: toRef(r) });
+		wb.openInPane(paneIndex, {
+			kind: 'doc',
+			ref: toRef(r),
+			revealAnnotationId: r.kind === 'annotation' ? r.annotation_id : undefined
+		});
 	}
 
 	function chipClass(kind: SearchResult['kind']): string {

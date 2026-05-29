@@ -38,12 +38,19 @@
 						mermaidInitialized = true;
 					}
 					const id = `mermaid-${uid++}`;
+					const source = (token as { text: string }).text;
 					try {
-						const { svg } = await mermaid.render(id, (token as { text: string }).text);
+						const { svg } = await mermaid.render(id, source);
 						mermaidBlocks.set(id, svg);
 						(token as unknown as { mermaidId: string }).mermaidId = id;
-					} catch {
-						// leave as code block on render failure
+					} catch (error) {
+						const message =
+							error instanceof Error ? error.message : 'Unable to render Mermaid diagram';
+						mermaidBlocks.set(
+							id,
+							`<figure class="mermaid-error" role="alert" tabindex="0" aria-label="Mermaid diagram error"><figcaption>Mermaid diagram could not be rendered. The markdown source is still editable.</figcaption><pre><code>${escapeHtml(message)}\n\n${escapeHtml(source)}</code></pre></figure>`
+						);
+						(token as unknown as { mermaidId: string }).mermaidId = id;
 					}
 				}
 			},

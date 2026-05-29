@@ -1,4 +1,8 @@
 node_modules
+dist/
+coverage/
+*.log
+*.min.js
 
 # Output
 .output

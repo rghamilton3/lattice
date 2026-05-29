@@ -25,13 +25,14 @@
 	const qc = useQueryClient();
 
 	let editorContainer: HTMLDivElement | undefined = $state();
-	let view: EditorView | null = null;
+	let view: EditorView | null = $state(null);
 	const vimCompartment = new Compartment();
 	let isDirty = $state(false);
 	let saveTimer: ReturnType<typeof setTimeout> | null = null;
 	let saveStatus = $state<'' | 'saved' | 'error' | 'deleting'>('');
 	let saveErrorMsg = $state('');
 	let statusTimer: ReturnType<typeof setTimeout> | null = null;
+	const mermaidTemplate = '```mermaid\nflowchart TD\n  A[Start] --> B[Next]\n```\n';
 
 	const docQuery = createQuery(() => ({
 		queryKey: workingKeys.detail(slug),
@@ -100,6 +101,17 @@
 		deleteMutation.mutate();
 	}
 
+	function insertDiagram() {
+		if (!view) return;
+		const selection = view.state.selection.main;
+		view.dispatch({
+			changes: { from: selection.from, to: selection.to, insert: mermaidTemplate },
+			selection: { anchor: selection.from + mermaidTemplate.length }
+		});
+		view.focus();
+		scheduleAutosave(view.state.doc.toString());
+	}
+
 	// Wire vim ex commands (global registry — last-mounted editor wins when two are open simultaneously)
 	Vim.defineEx('write', 'w', () => saveNow());
 	Vim.defineEx('wq', 'wq', () => {
@@ -134,6 +146,13 @@
 				oneDark,
 				vimCompartment.of(buildVimExtension(wb.vimMode)),
 				keymap.of([
+					{
+						key: 'Ctrl-Alt-m',
+						run: () => {
+							insertDiagram();
+							return true;
+						}
+					},
 					{
 						key: 'Ctrl-s',
 						run: () => {
@@ -202,6 +221,15 @@
 			{/if}
 		</span>
 		<span class="row" style="margin-left:auto; gap:6px">
+			<button
+				class="btn btn-ghost"
+				title="Insert Mermaid diagram block"
+				aria-label="Insert Mermaid diagram block"
+				disabled={!view || saveMutation.isPending || deleteMutation.isPending}
+				onclick={insertDiagram}
+			>
+				Diagram
+			</button>
 			<button
 				class="btn btn-ghost"
 				title="Save working document"

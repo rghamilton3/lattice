@@ -42,6 +42,19 @@ export type SearchResult =
 			modified_at: string;
 	  }
 	| {
+			kind: 'annotation';
+			id: string;
+			score: number;
+			snippet: string;
+			body: string;
+			path: string;
+			title: string | null;
+			target_kind: AnnotationTargetKind;
+			target_id: string;
+			annotation_id: string;
+			modified_at: string;
+	  }
+	| {
 			kind: 'capture-attachment';
 			id: number;
 			score: number;
@@ -125,6 +138,15 @@ export interface ArchiveActionResponse {
 	url: string;
 }
 
+export interface ArchiveDetail {
+	id: number;
+	url: string;
+	title: string | null;
+	archived_at: string;
+	extracted_text: string;
+	quality: ArchiveQuality;
+}
+
 export type TaskPriority = 'high' | 'medium' | 'low';
 
 export interface Task {
@@ -181,12 +203,40 @@ export interface WorkingDocListItem {
 	modified_at: string;
 }
 
+export type AnnotationTargetKind = 'capture' | 'local_file' | 'working' | 'archive';
+
+export interface Annotation {
+	id: string;
+	target_kind: AnnotationTargetKind;
+	target_id: string;
+	selection_start: number | null;
+	selection_end: number | null;
+	selection_text: string | null;
+	comment: string;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface AnnotationCreateInput {
+	target_kind: AnnotationTargetKind;
+	target_id: string;
+	selection_start?: number | null;
+	selection_end?: number | null;
+	selection_text?: string | null;
+	comment: string;
+}
+
+export interface AnnotationListResponse {
+	annotations: Annotation[];
+}
+
 // ── Document reference ────────────────────────────────────────────────────────
 
 export type DocRef =
 	| { kind: 'capture'; id: number }
 	| { kind: 'file'; id: number }
-	| { kind: 'working'; slug: string };
+	| { kind: 'working'; slug: string }
+	| { kind: 'archive'; id: number };
 
 // ── Lateral action source ─────────────────────────────────────────────────────
 
@@ -201,7 +251,7 @@ export type PaneContent =
 	| { kind: 'home' }
 	| { kind: 'library'; query: string }
 	| { kind: 'results'; source: LateralSource }
-	| { kind: 'doc'; ref: DocRef }
+	| { kind: 'doc'; ref: DocRef; revealAnnotationId?: string }
 	| { kind: 'editor'; slug: string }
 	| { kind: 'tasks' };
 

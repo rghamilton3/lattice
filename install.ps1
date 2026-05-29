@@ -5,7 +5,7 @@
 .DESCRIPTION
     Downloads the latest lattice-agent release binaries, installs them to
     %LOCALAPPDATA%\lattice\, writes a starter config to %APPDATA%\lattice\,
-    and places shortcuts in the current-user Startup folder for:
+    and registers two Task Scheduler tasks that run at logon:
       - LatticeAgent     : the background indexer
       - LatticeTray      : the system-tray monitor
 
@@ -65,51 +65,47 @@ function Download-Asset {
     Invoke-WebRequest -Uri $Url -OutFile $Dest -UseBasicParsing
 }
 
-function Resolve-StartupShortcutPath {
-    param([string]$StartupDir, [string]$ShortcutName)
-
-    "$($StartupDir.TrimEnd('\'))\$ShortcutName.lnk"
-}
-
-function Resolve-WindowsParentPath {
-    param([string]$Path)
-
-    $lastSlash = $Path.LastIndexOf('\')
-    if ($lastSlash -lt 0) {
-        return ''
-    }
-
-    $Path.Substring(0, $lastSlash)
-}
-
-function Resolve-ShortcutProperties {
+function Resolve-ScheduledTaskRunCommand {
     param([string]$ExePath, [string]$Arguments = '')
 
-    @{
-        TargetPath = $ExePath
-        Arguments = $Arguments
-        WorkingDirectory = Resolve-WindowsParentPath -Path $ExePath
+    $taskRun = "`"$ExePath`""
+    if (-not [string]::IsNullOrEmpty($Arguments)) {
+        $taskRun = "$taskRun $Arguments"
+    }
+
+    $taskRun
+}
+
+function Resolve-SchtasksCreateArguments {
+    param([string]$TaskName, [string]$TaskRun)
+
+    # schtasks avoids Register-ScheduledTask access-denied failures for normal users.
+    # It intentionally uses default runtime/retry settings; next-login restart is acceptable.
+    @('/Create', '/TN', $TaskName, '/TR', $TaskRun, '/SC', 'ONLOGON', '/F')
+}
+
+function Format-SchtasksFailureMessage {
+    param([string]$TaskName, [object]$Output)
+
+    "Failed to register scheduled task '$TaskName': $Output"
+}
+
+function Invoke-Schtasks {
+    param([string[]]$Arguments, [string]$TaskName)
+
+    $output = & schtasks.exe @Arguments 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw (Format-SchtasksFailureMessage -TaskName $TaskName -Output $output)
     }
 }
 
-function Register-StartupShortcut {
-    param([string]$ShortcutName, [string]$ExePath, [string]$Arguments = '')
+function Register-LogonTask {
+    param([string]$TaskName, [string]$ExePath, [string]$Arguments = '')
+    $taskRun = Resolve-ScheduledTaskRunCommand -ExePath $ExePath -Arguments $Arguments
+    $schtasksArgs = Resolve-SchtasksCreateArguments -TaskName $TaskName -TaskRun $taskRun
 
-    $startupDir = [Environment]::GetFolderPath('Startup')
-    if ([string]::IsNullOrEmpty($startupDir)) {
-        throw 'Could not resolve the Startup folder path.'
-    }
-
-    $shortcutPath = Resolve-StartupShortcutPath -StartupDir $startupDir -ShortcutName $ShortcutName
-    $shortcutProperties = Resolve-ShortcutProperties -ExePath $ExePath -Arguments $Arguments
-
-    Write-Host "  Creating or updating startup shortcut: $ShortcutName"
-    $shell = New-Object -ComObject WScript.Shell
-    $shortcut = $shell.CreateShortcut($shortcutPath)
-    $shortcut.TargetPath = $shortcutProperties.TargetPath
-    $shortcut.Arguments = $shortcutProperties.Arguments
-    $shortcut.WorkingDirectory = $shortcutProperties.WorkingDirectory
-    $shortcut.Save()
+    Write-Host "  Creating or updating task: $TaskName"
+    Invoke-Schtasks -Arguments $schtasksArgs -TaskName $TaskName
 }
 
 if ($env:LATTICE_INSTALLER_IMPORT_ONLY -eq '1') {
@@ -172,20 +168,20 @@ max_file_bytes        = 10485760
     Write-Host "  Config already exists, skipping: $CfgFile"
 }
 
-Write-Host "`nRegistering startup shortcuts ..."
-Register-StartupShortcut -ShortcutName 'LatticeAgent' -ExePath $agentExe
+Write-Host "`nRegistering Task Scheduler tasks ..."
+Register-LogonTask -TaskName 'LatticeAgent' -ExePath $agentExe
 
 if (-not $SkipTray) {
-    Register-StartupShortcut -ShortcutName 'LatticeTray' -ExePath $trayExe
+    Register-LogonTask -TaskName 'LatticeTray' -ExePath $trayExe
 }
 
 Write-Host "`nDone! Edit your config at:"
 Write-Host "  $CfgFile"
 Write-Host ""
 Write-Host "Then start the agent now with:"
-Write-Host "  & '$agentExe'"
+Write-Host "  schtasks /Run /TN LatticeAgent"
 if (-not $SkipTray) {
-    Write-Host "  & '$trayExe'"
+    Write-Host "  schtasks /Run /TN LatticeTray"
 }
 
 Write-Host ""

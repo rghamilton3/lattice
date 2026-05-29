@@ -29,6 +29,13 @@ export function createAnnotation(
 	});
 }
 
+export function updateAnnotation(id: string, comment: string): Promise<{ annotation: Annotation }> {
+	return apiFetch(`/api/annotations/${encodeURIComponent(id)}`, {
+		method: 'PATCH',
+		body: JSON.stringify({ comment })
+	});
+}
+
 export async function deleteAnnotation(id: string): Promise<void> {
 	return apiFetch(`/api/annotations/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }

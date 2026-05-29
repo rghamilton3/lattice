@@ -26,6 +26,10 @@ export interface AnnotationCreateInput {
 	comment: string;
 }
 
+export interface AnnotationUpdateInput {
+	comment: string;
+}
+
 export class AnnotationValidationError extends Error {
 	constructor(message: string) {
 		super(message);
@@ -170,30 +174,53 @@ export function createAnnotation(db: Database, rawInput: AnnotationCreateInput):
 		updated_at: now,
 	};
 
-	writeAnnotationIndex(annotation);
-	try {
-		db.transaction(() => {
-			db.prepare(
-				`INSERT INTO annotations
+	db.transaction(() => {
+		db.prepare(
+			`INSERT INTO annotations
 			 (id, target_kind, target_id, selection_start, selection_end, selection_text, comment, created_at, updated_at)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			).run(
-				id,
-				input.target_kind,
-				input.target_id,
-				input.selection_start,
-				input.selection_end,
-				input.selection_text,
-				input.comment,
-				now,
-				now,
-			);
-		})();
-	} catch (e) {
-		deleteAnnotationIndex(id);
-		throw e;
-	}
+		).run(
+			id,
+			input.target_kind,
+			input.target_id,
+			input.selection_start,
+			input.selection_end,
+			input.selection_text,
+			input.comment,
+			now,
+			now,
+		);
+	})();
 
+	writeAnnotationIndex(annotation);
+	refreshIndex();
+	return annotation;
+}
+
+export function updateAnnotation(
+	db: Database,
+	id: string,
+	rawInput: AnnotationUpdateInput,
+): AnnotationRow {
+	const comment = String(rawInput.comment ?? '').trim();
+	if (!comment) throw new AnnotationValidationError('Comment is required');
+
+	const now = new Date().toISOString();
+	const result = db
+		.prepare('UPDATE annotations SET comment = ?, updated_at = ? WHERE id = ?')
+		.run(comment, now, id);
+	if (result.changes === 0) throw new AnnotationNotFoundError();
+
+	const annotation = db
+		.query(
+			`SELECT id, target_kind, target_id, selection_start, selection_end, selection_text, comment, created_at, updated_at
+			 FROM annotations
+			 WHERE id = ?`,
+		)
+		.get(id) as AnnotationRow | null;
+	if (!annotation) throw new AnnotationNotFoundError();
+
+	writeAnnotationIndex(annotation);
 	refreshIndex();
 	return annotation;
 }
@@ -201,7 +228,7 @@ export function createAnnotation(db: Database, rawInput: AnnotationCreateInput):
 export function deleteAnnotation(db: Database, id: string): void {
 	const row = db.query('SELECT id FROM annotations WHERE id = ?').get(id) as { id: string } | null;
 	if (!row) throw new AnnotationNotFoundError();
-	deleteAnnotationIndex(id);
 	db.prepare('DELETE FROM annotations WHERE id = ?').run(id);
+	deleteAnnotationIndex(id);
 	refreshIndex();
 }

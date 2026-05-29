@@ -11,6 +11,9 @@ coverage/
 .wrangler
 /.svelte-kit
 /build
+/dist
+/coverage
+*.min.js
 
 # OS
 .DS_Store

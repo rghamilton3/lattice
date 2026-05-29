@@ -65,21 +65,47 @@ function Download-Asset {
     Invoke-WebRequest -Uri $Url -OutFile $Dest -UseBasicParsing
 }
 
+function Resolve-ScheduledTaskRunCommand {
+    param([string]$ExePath, [string]$Arguments = '')
+
+    $taskRun = "`"$ExePath`""
+    if (-not [string]::IsNullOrEmpty($Arguments)) {
+        $taskRun = "$taskRun $Arguments"
+    }
+
+    $taskRun
+}
+
+function Resolve-SchtasksCreateArguments {
+    param([string]$TaskName, [string]$TaskRun)
+
+    # schtasks avoids Register-ScheduledTask access-denied failures for normal users.
+    # It intentionally uses default runtime/retry settings; next-login restart is acceptable.
+    @('/Create', '/TN', $TaskName, '/TR', $TaskRun, '/SC', 'ONLOGON', '/F')
+}
+
+function Format-SchtasksFailureMessage {
+    param([string]$TaskName, [object]$Output)
+
+    "Failed to register scheduled task '$TaskName': $Output"
+}
+
+function Invoke-Schtasks {
+    param([string[]]$Arguments, [string]$TaskName)
+
+    $output = & schtasks.exe @Arguments 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw (Format-SchtasksFailureMessage -TaskName $TaskName -Output $output)
+    }
+}
+
 function Register-LogonTask {
     param([string]$TaskName, [string]$ExePath, [string]$Arguments = '')
-    $trigger  = New-ScheduledTaskTrigger -AtLogon
-    $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-    $action   = New-ScheduledTaskAction -Execute $ExePath -Argument $Arguments
-    $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
+    $taskRun = Resolve-ScheduledTaskRunCommand -ExePath $ExePath -Arguments $Arguments
+    $schtasksArgs = Resolve-SchtasksCreateArguments -TaskName $TaskName -TaskRun $taskRun
 
-    $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    if ($existing) {
-        Write-Host "  Updating existing task: $TaskName"
-        Set-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal | Out-Null
-    } else {
-        Write-Host "  Creating task: $TaskName"
-        Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal | Out-Null
-    }
+    Write-Host "  Creating or updating task: $TaskName"
+    Invoke-Schtasks -Arguments $schtasksArgs -TaskName $TaskName
 }
 
 if ($env:LATTICE_INSTALLER_IMPORT_ONLY -eq '1') {

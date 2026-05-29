@@ -16,9 +16,10 @@
 	import { vim, Vim } from '@replit/codemirror-vim';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { workingKeys, fetchWorking, updateWorking, deleteWorking } from '$lib/api/working';
-	import { mermaidTemplate } from '$lib/utils/diagram';
 	import Icon from '$components/icons/Icon.svelte';
 	import VimToggle from './VimToggle.svelte';
+
+	const mermaidTemplate = '```mermaid\nflowchart TD\n  A[Start] --> B[Next]\n```\n';
 
 	const { slug, paneIndex }: { slug: string; paneIndex: 0 | 1 } = $props();
 

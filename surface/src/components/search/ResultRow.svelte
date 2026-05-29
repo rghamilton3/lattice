@@ -13,7 +13,7 @@
 		result.kind === 'local-file'
 			? 'chip chip-file'
 			: result.kind === 'annotation'
-				? 'chip chip-working'
+				? 'chip chip-annotation'
 				: result.kind === 'archive'
 					? 'chip chip-working'
 					: result.kind === 'capture' || result.kind === 'capture-attachment'

@@ -9,9 +9,11 @@ captures/
 *.db
 *.db-shm
 *.db-wal
-*.log*
 .env*
+*.log*
 coverage/
+dist/
+build/
 tsconfig.json
 mise.toml
 skills-lock.json

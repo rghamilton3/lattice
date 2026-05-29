@@ -72,6 +72,21 @@ function Resolve-InstallerDownloads {
 
 $allAssetsRelease = New-TestRelease -AssetNames @($agentAsset, $captureAsset, $trayAsset)
 
+$agentTaskRun = Resolve-ScheduledTaskRunCommand -ExePath 'C:\lattice\lattice-agent.exe'
+Assert-Equal -Actual $agentTaskRun -Expected '"C:\lattice\lattice-agent.exe"' -Message 'Task run command should quote executable path.'
+
+$promptTaskRun = Resolve-ScheduledTaskRunCommand -ExePath 'C:\lattice\lattice-capture.exe' -Arguments '--prompt'
+Assert-Equal -Actual $promptTaskRun -Expected '"C:\lattice\lattice-capture.exe" --prompt' -Message 'Task run command should preserve arguments.'
+
+$spacePathTaskRun = Resolve-ScheduledTaskRunCommand -ExePath 'C:\Users\Bob Smith\AppData\Local\lattice\lattice-agent.exe'
+Assert-Equal -Actual $spacePathTaskRun -Expected '"C:\Users\Bob Smith\AppData\Local\lattice\lattice-agent.exe"' -Message 'Task run command should quote paths containing spaces.'
+
+$schtasksArgs = Resolve-SchtasksCreateArguments -TaskName 'LatticeAgent' -TaskRun $agentTaskRun
+Assert-Equal -Actual ($schtasksArgs -join ' ') -Expected '/Create /TN LatticeAgent /TR "C:\lattice\lattice-agent.exe" /SC ONLOGON /F' -Message 'Task registration should use schtasks logon create-or-update arguments.'
+
+$schtasksFailureMessage = Format-SchtasksFailureMessage -TaskName 'LatticeAgent' -Output 'Access is denied.'
+Assert-Equal -Actual $schtasksFailureMessage -Expected "Failed to register scheduled task 'LatticeAgent': Access is denied." -Message 'Schtasks failure message should include task name and output.'
+
 Assert-Equal `
     -Actual (Get-ReleaseAssetUrl -Release $allAssetsRelease -Asset $agentAsset) `
     -Expected 'https://downloads.example.test/agent-v0.10.0/lattice-agent-x86_64-pc-windows-msvc.exe' `

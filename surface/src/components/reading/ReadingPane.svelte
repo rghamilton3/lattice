@@ -10,7 +10,8 @@
 		annotationKeys,
 		createAnnotation,
 		deleteAnnotation,
-		fetchAnnotations
+		fetchAnnotations,
+		updateAnnotation
 	} from '$lib/api/annotations';
 	import { getPendingSelection, getReadingSelection } from '$lib/utils/selection';
 	import type { AnnotationTargetKind, DocRef } from '$lib/types';
@@ -32,8 +33,12 @@
 	const qc = useQueryClient();
 
 	let promoteError = $state('');
-	let annotationError = $state('');
+	let createAnnotationError = $state('');
+	let updateAnnotationError = $state('');
+	let deleteAnnotationError = $state('');
 	let annotationDraft = $state('');
+	let editingAnnotationId = $state<string | null>(null);
+	let editAnnotationDraft = $state('');
 	let pendingSelection = $state<{
 		text: string;
 		start: number | null;
@@ -112,10 +117,13 @@
 
 	const createAnnotationMutation = createMutation(() => ({
 		mutationFn: createAnnotation,
+		onMutate: () => {
+			createAnnotationError = '';
+		},
 		onSuccess: () => {
 			annotationDraft = '';
 			pendingSelection = null;
-			annotationError = '';
+			createAnnotationError = '';
 			if (annotationTarget) {
 				qc.invalidateQueries({
 					queryKey: annotationKeys.list(annotationTarget.kind, annotationTarget.id)
@@ -123,13 +131,37 @@
 			}
 		},
 		onError: (err) => {
-			annotationError = err instanceof Error ? err.message : 'Could not save annotation';
+			createAnnotationError = err instanceof Error ? err.message : 'Could not save annotation';
+		}
+	}));
+
+	const updateAnnotationMutation = createMutation(() => ({
+		mutationFn: ({ id, comment }: { id: string; comment: string }) => updateAnnotation(id, comment),
+		onMutate: () => {
+			updateAnnotationError = '';
+		},
+		onSuccess: () => {
+			editingAnnotationId = null;
+			editAnnotationDraft = '';
+			updateAnnotationError = '';
+			if (annotationTarget) {
+				qc.invalidateQueries({
+					queryKey: annotationKeys.list(annotationTarget.kind, annotationTarget.id)
+				});
+			}
+		},
+		onError: (err) => {
+			updateAnnotationError = err instanceof Error ? err.message : 'Could not update annotation';
 		}
 	}));
 
 	const deleteAnnotationMutation = createMutation(() => ({
 		mutationFn: deleteAnnotation,
+		onMutate: () => {
+			deleteAnnotationError = '';
+		},
 		onSuccess: () => {
+			deleteAnnotationError = '';
 			if (annotationTarget) {
 				qc.invalidateQueries({
 					queryKey: annotationKeys.list(annotationTarget.kind, annotationTarget.id)
@@ -137,7 +169,7 @@
 			}
 		},
 		onError: (err) => {
-			annotationError = err instanceof Error ? err.message : 'Could not delete annotation';
+			deleteAnnotationError = err instanceof Error ? err.message : 'Could not delete annotation';
 		}
 	}));
 
@@ -225,10 +257,10 @@
 	}
 
 	function startAnnotation() {
-		annotationError = '';
+		createAnnotationError = '';
 		const selection = getReadingSelection(readingBody);
 		if (!selection) {
-			annotationError = 'Select text in this document before adding a note.';
+			createAnnotationError = 'Select text in this document before adding a note.';
 			return;
 		}
 		pendingSelection = selection;
@@ -236,11 +268,11 @@
 	}
 
 	function saveAnnotation() {
-		annotationError = '';
+		createAnnotationError = '';
 		if (!annotationTarget || !pendingSelection) return;
 		const comment = annotationDraft.trim();
 		if (!comment) {
-			annotationError = 'Write a note before saving.';
+			createAnnotationError = 'Write a note before saving.';
 			return;
 		}
 		createAnnotationMutation.mutate({
@@ -251,6 +283,23 @@
 			selection_text: pendingSelection.text,
 			comment
 		});
+	}
+
+	function startEditingAnnotation(annotation: { id: string; comment: string }) {
+		updateAnnotationError = '';
+		editingAnnotationId = annotation.id;
+		editAnnotationDraft = annotation.comment;
+	}
+
+	function saveAnnotationEdit() {
+		updateAnnotationError = '';
+		if (!editingAnnotationId) return;
+		const comment = editAnnotationDraft.trim();
+		if (!comment) {
+			updateAnnotationError = 'Write a note before saving.';
+			return;
+		}
+		updateAnnotationMutation.mutate({ id: editingAnnotationId, comment });
 	}
 
 	async function promoteToWorking() {
@@ -369,8 +418,10 @@
 	{#if promoteError}
 		<div class="px-3 py-1 text-xs" style="color:var(--c-alarm)">{promoteError}</div>
 	{/if}
-	{#if annotationError}
-		<div class="px-3 py-1 text-xs" style="color:var(--c-alarm)" role="alert">{annotationError}</div>
+	{#if createAnnotationError || updateAnnotationError || deleteAnnotationError}
+		<div class="px-3 py-1 text-xs" style="color:var(--c-alarm)" role="alert">
+			{createAnnotationError || updateAnnotationError || deleteAnnotationError}
+		</div>
 	{/if}
 	{#if pendingSelection}
 		<section class="annotation-compose" aria-label="New annotation">
@@ -429,15 +480,48 @@
 						{#if annotation.selection_text}
 							<p class="annotation-selection"><mark>{annotation.selection_text}</mark></p>
 						{/if}
-						<p>{annotation.comment}</p>
-						<button
-							class="btn btn-ghost"
-							disabled={deleteAnnotationMutation.isPending}
-							aria-label="Delete annotation"
-							onclick={() => deleteAnnotationMutation.mutate(annotation.id)}
-						>
-							Delete
-						</button>
+						{#if editingAnnotationId === annotation.id}
+							<label class="annotation-edit">
+								<span>Edit note</span>
+								<textarea bind:value={editAnnotationDraft} rows="3"></textarea>
+							</label>
+							<div class="row" style="gap:6px">
+								<button
+									class="btn"
+									disabled={updateAnnotationMutation.isPending}
+									onclick={saveAnnotationEdit}
+								>
+									Save
+								</button>
+								<button
+									class="btn btn-ghost"
+									disabled={updateAnnotationMutation.isPending}
+									onclick={() => (editingAnnotationId = null)}
+								>
+									Cancel
+								</button>
+							</div>
+						{:else}
+							<p>{annotation.comment}</p>
+							<div class="row" style="gap:6px">
+								<button
+									class="btn btn-ghost"
+									disabled={updateAnnotationMutation.isPending}
+									aria-label="Edit annotation"
+									onclick={() => startEditingAnnotation(annotation)}
+								>
+									Edit
+								</button>
+								<button
+									class="btn btn-ghost"
+									disabled={deleteAnnotationMutation.isPending}
+									aria-label="Delete annotation"
+									onclick={() => deleteAnnotationMutation.mutate(annotation.id)}
+								>
+									Delete
+								</button>
+							</div>
+						{/if}
 					</article>
 				{/each}
 			</aside>
@@ -459,7 +543,8 @@
 		padding: 10px 12px;
 	}
 
-	.annotation-compose textarea {
+	.annotation-compose textarea,
+	.annotation-edit textarea {
 		background: var(--color-surface);
 		border: 1px solid var(--border-strong);
 		border-radius: 8px;
@@ -468,6 +553,12 @@
 		margin-top: 4px;
 		padding: 8px;
 		width: min(100%, 560px);
+	}
+
+	.annotation-edit span {
+		display: block;
+		font-size: 12px;
+		margin-bottom: 4px;
 	}
 
 	.annotation-rail {

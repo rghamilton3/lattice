@@ -5,6 +5,8 @@
 	import 'katex/dist/katex.min.css';
 	import type { Annotation } from '$lib/types';
 
+	let mermaidInitialized = false;
+
 	const {
 		content,
 		annotations = [],
@@ -13,7 +15,7 @@
 
 	let html = $state('');
 	let root: HTMLDivElement | null = $state(null);
-	let mermaidInitialized = false;
+	const mermaidPrefix = `mermaid-${crypto.randomUUID()}`;
 	let uid = 0;
 	let renderSeq = 0;
 
@@ -34,7 +36,7 @@
 						mermaid.initialize({ startOnLoad: false, theme: 'dark' });
 						mermaidInitialized = true;
 					}
-					const id = `mermaid-${uid++}`;
+					const id = `${mermaidPrefix}-${uid++}`;
 					const source = (token as { text: string }).text;
 					try {
 						const { svg } = await mermaid.render(id, source);
@@ -156,6 +158,7 @@
 		revealed: boolean
 	) {
 		if (end <= start) return;
+		if (start < 0 || end > node.length) return;
 		const middle = node.splitText(start);
 		middle.splitText(end - start);
 		const mark = document.createElement('mark');

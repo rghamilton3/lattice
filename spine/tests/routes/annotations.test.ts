@@ -21,6 +21,14 @@ function postJson(path: string, body: unknown) {
 	});
 }
 
+function patchJson(path: string, body: unknown) {
+	return req(path, {
+		method: 'PATCH',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify(body),
+	});
+}
+
 function insertCapture(): number {
 	return (
 		app.db
@@ -122,6 +130,59 @@ describe('GET /api/annotations', () => {
 	it('requires a valid target kind', async () => {
 		const res = await app.app.handle(req('/api/annotations?target_kind=bad&target_id=1'));
 		expect(res.status).toBe(400);
+	});
+
+	it('reports missing query parameters specifically', async () => {
+		const missingKind = await app.app.handle(req('/api/annotations?target_id=1'));
+		expect(missingKind.status).toBe(400);
+		expect((await json(missingKind)).error).toBe('Target kind is required');
+
+		const missingId = await app.app.handle(req('/api/annotations?target_kind=capture'));
+		expect(missingId.status).toBe(400);
+		expect((await json(missingId)).error).toBe('Target id is required');
+	});
+});
+
+describe('PATCH /api/annotations/:id', () => {
+	it('updates an annotation comment and its index document', async () => {
+		const captureId = insertCapture();
+		const create = await app.app.handle(
+			postJson('/api/annotations', {
+				target_kind: 'capture',
+				target_id: String(captureId),
+				comment: 'old comment',
+			}),
+		);
+		const { annotation } = await json(create);
+
+		const res = await app.app.handle(
+			patchJson(`/api/annotations/${annotation.id}`, { comment: 'updated comment' }),
+		);
+
+		expect(res.status).toBe(200);
+		expect((await json(res)).annotation.comment).toBe('updated comment');
+		expect(
+			(
+				app.db.query('SELECT comment FROM annotations WHERE id = ?').get(annotation.id) as {
+					comment: string;
+				}
+			).comment,
+		).toBe('updated comment');
+		const indexPath = join(dirname(app.env.dbPath), 'annotation-index', `${annotation.id}.md`);
+		expect(readFileSync(indexPath, 'utf8')).toContain('updated comment');
+	});
+
+	it('rejects empty comments and missing annotations', async () => {
+		const empty = await app.app.handle(
+			patchJson('/api/annotations/ann_missing', { comment: '   ' }),
+		);
+		expect(empty.status).toBe(400);
+		expect((await json(empty)).error).toBe('Comment is required');
+
+		const missing = await app.app.handle(
+			patchJson('/api/annotations/ann_missing', { comment: 'new comment' }),
+		);
+		expect(missing.status).toBe(404);
 	});
 });
 

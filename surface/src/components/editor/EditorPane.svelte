@@ -32,6 +32,7 @@
 	let view: EditorView | null = null;
 	let editorReady = $state(false);
 	let mountedSlug: string | null = null;
+	let loadedContent = '';
 	const vimCompartment = new Compartment();
 	const themeCompartment = new Compartment();
 	let themeKey = $state('dark');
@@ -209,14 +210,25 @@
 	// Mount editor once we have content
 	$effect(() => {
 		if (!browser || !slug || !editorContainer || !docQuery.data) return;
-		if (view && mountedSlug === slug) return;
 		const container = editorContainer;
 
+		if (view && mountedSlug === slug) {
+			const content = docQuery.data.content;
+			if (content !== loadedContent && !isDirty && view.state.doc.toString() !== content) {
+				view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
+			}
+			loadedContent = content;
+			return;
+		}
+
+		// Reuse the component instance across editor slugs, but not the CodeMirror view.
 		if (view) {
 			view.destroy();
 			view = null;
 			editorReady = false;
 		}
+		mountedSlug = slug;
+		loadedContent = docQuery.data.content;
 
 		const state = EditorState.create({
 			doc: docQuery.data.content,

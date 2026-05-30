@@ -319,6 +319,20 @@ describe('POST /api/captures', () => {
 			expect(typeof row.triaged_at).toBe('string');
 		});
 
+		it('/todo stores stripped text with triage_action=task', async () => {
+			const res = await app.app.handle(
+				req('/api/captures', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ text: '/todo buy oat milk', source: 'browser' }),
+				}),
+			);
+			expect(res.status).toBe(200);
+			const body = await json(res);
+			expect(body.triage_action).toBe('task');
+			expect(body.text).toBe('buy oat milk');
+		});
+
 		it('/note stores stripped text with triage_action=keep', async () => {
 			const res = await app.app.handle(
 				req('/api/captures', {

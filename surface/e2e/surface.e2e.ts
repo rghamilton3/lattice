@@ -1,7 +1,45 @@
 import { expect, test } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 const isMac = process.platform === 'darwin';
 const mod = isMac ? 'Meta' : 'Control';
+const editorSlug = 'vim-mode-test';
+
+async function stubWorkingEditor(page: Page) {
+	await page.route(`**/api/working/${editorSlug}`, (route) => {
+		if (route.request().method() === 'GET') {
+			return route.fulfill({
+				status: 200,
+				body: JSON.stringify({
+					slug: editorSlug,
+					title: 'Vim mode test',
+					content: 'Seed editor body'
+				})
+			});
+		}
+		return route.fulfill({ status: 200, body: JSON.stringify({ ok: true }) });
+	});
+	await page.route('**/api/working', (route) => {
+		if (route.request().method() === 'POST') {
+			return route.fulfill({
+				status: 200,
+				body: JSON.stringify({ slug: editorSlug })
+			});
+		}
+		return route.fulfill({ status: 200, body: '[]' });
+	});
+}
+
+async function openWorkingEditor(page: Page) {
+	await stubWorkingEditor(page);
+	await page.goto('/');
+	await page.getByRole('heading', { name: /Where you were/i }).waitFor();
+	await page.keyboard.press(`${mod}+Shift+J`);
+	const dialog = page.getByRole('dialog', { name: 'New working doc' });
+	await dialog.getByRole('textbox').fill('Vim mode test');
+	await dialog.getByRole('button', { name: 'create' }).click();
+	await expect(page.getByLabel(`Markdown editor for ${editorSlug}.md`)).toBeVisible();
+}
 
 test.beforeEach(async ({ page }) => {
 	await page.addInitScript(() => {
@@ -70,6 +108,45 @@ test('invalid document deep link falls back with a visible status message', asyn
 	await page.goto('/?view=doc&ref=not-a-ref');
 	await expect(page.getByRole('heading', { name: /Where you were/i })).toBeVisible();
 	await expect(page.getByRole('status').filter({ hasText: 'Invalid link' })).toBeVisible();
+});
+
+test('working editor shows the editor-local default Vim off state', async ({ page }) => {
+	await openWorkingEditor(page);
+
+	await expect(page.getByRole('button', { name: /Vim mode: off/i })).toBeVisible();
+});
+
+test('working editor Vim control toggles the editor-local state on', async ({ page }) => {
+	await openWorkingEditor(page);
+
+	await page.getByRole('button', { name: /Vim mode: off/i }).click();
+	await expect(page.getByRole('button', { name: /Vim mode: on/i })).toBeVisible();
+});
+
+test('settings Vim mode control updates the editor indicator', async ({ page }) => {
+	await openWorkingEditor(page);
+
+	await page.getByRole('button', { name: 'Settings' }).click();
+	const drawer = page.getByRole('dialog', { name: 'Settings' });
+	await drawer.getByLabel('Vim mode').check();
+
+	await expect(page.getByRole('button', { name: /Vim mode: on/i })).toBeVisible();
+});
+
+test('Ctrl+Alt+V updates the editor indicator', async ({ page }) => {
+	await openWorkingEditor(page);
+
+	await page.keyboard.press('Control+Alt+V');
+	await expect(page.getByRole('button', { name: /Vim mode: on/i })).toBeVisible();
+});
+
+test('global shortcut keys stay suppressed while focus is in CodeMirror', async ({ page }) => {
+	await openWorkingEditor(page);
+
+	await page.locator('.cm-content').click();
+	await page.keyboard.press('c');
+
+	await expect(page.getByRole('dialog', { name: 'Quick capture' })).toBeHidden();
 });
 
 test('shortcut keys do not open capture while typing in library search', async ({ page }) => {

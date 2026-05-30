@@ -33,7 +33,7 @@
 		// triage owns the keyboard; ProcessMode binds its own listener.
 		if (wb.activeOverlay === 'triage') return;
 
-		if (e.ctrlKey && e.altKey && e.key === 'v') {
+		if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'v') {
 			e.preventDefault();
 			wb.toggleVim();
 			return;

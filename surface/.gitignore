@@ -10,6 +10,7 @@ node_modules
 /dist
 /coverage
 *.min.js
+*.log
 
 # OS
 .DS_Store

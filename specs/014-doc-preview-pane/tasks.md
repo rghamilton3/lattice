@@ -35,36 +35,36 @@
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Add shared preview state and renderer support that all user stories rely on.
+**Purpose**: Add split-preview status and renderer support that all user stories rely on.
 
 **CRITICAL**: No user story work can begin until this phase is complete.
 
-- [X] T005 Import the existing markdown renderer and add a local `PreviewFreshnessState` union for `current`, `stale`, `refreshing`, and `unavailable` in `surface/src/components/editor/EditorPane.svelte`
-- [X] T006 Add local `savedPreviewContent`, `previewFreshness`, and preview status text state derived from loaded document content, dirty edits, successful saves, save failures, and render failures in `surface/src/components/editor/EditorPane.svelte`
-- [X] T007 Update successful save handling so `savedPreviewContent` advances only after `updateWorking(slug, content)` succeeds and preserves previous preview content on save failure in `surface/src/components/editor/EditorPane.svelte`
-- [X] T008 Add an optional render-error callback or equivalent recoverable error signal while keeping sanitized output and escaped fallback behavior intact in `surface/src/components/reading/MarkdownRenderer.svelte`
+- [X] T005 Add editor preview-status text for saved-only split preview behavior in `surface/src/components/editor/EditorPane.svelte`
+- [X] T006 Derive visible split-preview status from dirty edits, successful saves, and save failures in `surface/src/components/editor/EditorPane.svelte`
+- [X] T007 Update successful save handling so the reading-pane preview refreshes only after `updateWorking(slug, content)` succeeds and preserves previous preview content on save failure in `surface/src/components/editor/EditorPane.svelte`
+- [X] T008 Add an optional render-error callback or equivalent recoverable error signal while keeping sanitized output and escaped fallback behavior intact in `surface/src/components/reading/MarkdownRenderer.svelte` and `surface/src/components/reading/ReadingPane.svelte`
 
-**Checkpoint**: Preview content and freshness state can be updated without changing spine APIs, storage shape, or working-document fetch/save contracts.
+**Checkpoint**: Split-preview freshness state can be communicated without changing spine APIs, storage shape, or working-document fetch/save contracts.
 
 ---
 
 ## Phase 3: User Story 1 - Preview Saved Markdown Beside Editor (Priority: P1) MVP
 
-**Goal**: Show rendered saved markdown beside the source editor on sufficiently wide layouts and refresh the preview after a successful save.
+**Goal**: Open rendered saved markdown beside the source editor through the workbench split-pane layout and refresh the preview after a successful save.
 
-**Independent Test**: Open a working document with headings, lists, links, emphasis, block quotes, and code blocks; confirm source and rendered preview are visible side by side on desktop width; edit and save; confirm the preview reflects the saved markdown within 2 seconds.
+**Independent Test**: Open a working document with headings, lists, links, emphasis, block quotes, and code blocks; use Split to confirm source and rendered preview are visible side by side on desktop width; edit and save; confirm the preview reflects the saved markdown within 2 seconds.
 
 ### Validation Coverage for User Story 1
 
-- [X] T009 [P] [US1] Add a Playwright smoke test that stubs `/api/working/:slug`, opens a working document, and expects source and preview regions with markdown rendering in `surface/e2e/surface.e2e.ts`
+- [X] T009 [P] [US1] Add a Playwright smoke test that stubs `/api/working/:slug`, opens a working document, uses Split, and expects source and preview regions with markdown rendering in `surface/e2e/surface.e2e.ts`
 - [X] T010 [P] [US1] Add a Playwright save-refresh assertion that edits markdown, fulfills the PUT save, and expects the preview to show the saved rendered result in `surface/e2e/surface.e2e.ts`
 
 ### Implementation for User Story 1
 
-- [X] T011 [US1] Replace the single editor body with a source-plus-preview body that keeps the existing CodeMirror container bound for the source pane in `surface/src/components/editor/EditorPane.svelte`
-- [X] T012 [US1] Render `MarkdownRenderer` with `savedPreviewContent` inside a labelled preview region for `${slug}.md` in `surface/src/components/editor/EditorPane.svelte`
-- [X] T013 [US1] Add an empty-preview state for blank saved content without treating empty markdown as an error in `surface/src/components/editor/EditorPane.svelte`
-- [X] T014 [US1] Add desktop split-pane CSS with independent editor and preview overflow, no source mutation side effects, and no page-level horizontal scrolling in `surface/src/components/editor/EditorPane.svelte`
+- [X] T011 [US1] Keep the CodeMirror editor as the primary source pane and add a Split action that opens the working document in the other workbench pane in `surface/src/components/editor/EditorPane.svelte`
+- [X] T012 [US1] Reuse the existing reading-pane `MarkdownRenderer` for `${slug}.md` preview content in `surface/src/components/reading/ReadingPane.svelte`
+- [X] T013 [US1] Preserve blank or incomplete markdown as readable saved content without treating empty markdown as an editor error in `surface/src/components/reading/MarkdownRenderer.svelte`
+- [X] T014 [US1] Preserve independent workbench pane overflow, editor controls, and no page-level horizontal scrolling in `surface/src/components/editor/EditorPane.svelte`
 - [X] T015 [US1] Adjust preview prose overflow for long lines, code blocks, Mermaid, KaTeX, and links without weakening DOMPurify sanitization in `surface/src/components/reading/MarkdownRenderer.svelte`
 - [X] T016 [US1] Verify `cd surface && bun run check` passes after preview composition changes for `surface/src/components/editor/EditorPane.svelte` and `surface/src/components/reading/MarkdownRenderer.svelte`
 
@@ -80,14 +80,14 @@
 
 ### Validation Coverage for User Story 2
 
-- [X] T017 [P] [US2] Add a Playwright narrow-viewport test that confirms Back, Save, Delete, Vim toggle, source editor, and preview region remain reachable without horizontal document overflow in `surface/e2e/surface.e2e.ts`
+- [X] T017 [P] [US2] Add a Playwright narrow-viewport test that confirms Back, Split, Save, Delete, Vim toggle, and source editor remain reachable without horizontal document overflow in `surface/e2e/surface.e2e.ts`
 - [X] T018 [P] [US2] Add a Playwright keyboard-navigation test for Back, editor, preview status or links, Save, Delete, and Vim toggle with no focus trap in `surface/e2e/surface.e2e.ts`
 
 ### Implementation for User Story 2
 
-- [X] T019 [US2] Add responsive layout CSS that stacks or otherwise adapts source and preview below the desktop split breakpoint in `surface/src/components/editor/EditorPane.svelte`
-- [X] T020 [US2] Keep the editor pane primary and minimum usable height on constrained displays while retaining access to preview content in `surface/src/components/editor/EditorPane.svelte`
-- [X] T021 [US2] Ensure toolbar wrapping, focus order, button labels, and preview region labelling keep Back, Save, Delete, and Vim toggle reachable at narrow widths in `surface/src/components/editor/EditorPane.svelte`
+- [X] T019 [US2] Add editor toolbar wrapping and split-action access below the desktop breakpoint in `surface/src/components/editor/EditorPane.svelte`
+- [X] T020 [US2] Keep the editor pane primary and minimum usable height on constrained displays while retaining access to Split preview in `surface/src/components/editor/EditorPane.svelte`
+- [X] T021 [US2] Ensure toolbar wrapping, focus order, button labels, and status text keep Back, Split, Save, Delete, and Vim toggle reachable at narrow widths in `surface/src/components/editor/EditorPane.svelte`
 - [X] T022 [US2] Document manual keyboard and reflow validation evidence for the preview editor in `docs/accessibility/working-docs.md`
 - [X] T023 [US2] Verify `cd surface && bun run test:e2e` includes the narrow viewport and keyboard scenarios for `surface/e2e/surface.e2e.ts`
 
@@ -108,10 +108,10 @@
 
 ### Implementation for User Story 3
 
-- [X] T026 [US3] Add visible preview freshness text for current, stale, refreshing, and unavailable states near the preview region in `surface/src/components/editor/EditorPane.svelte`
+- [X] T026 [US3] Add visible split-preview freshness text for saved, stale, refreshed, and save-failure states in `surface/src/components/editor/EditorPane.svelte`
 - [X] T027 [US3] Expose preview freshness updates through the existing polite live-region/status pattern without relying on color alone in `surface/src/components/editor/EditorPane.svelte`
-- [X] T028 [US3] Transition preview freshness to stale on CodeMirror document changes and back to current only after successful preview refresh from saved content in `surface/src/components/editor/EditorPane.svelte`
-- [X] T029 [US3] Show recoverable preview-unavailable copy when renderer failure is reported while preserving editor interaction and save controls in `surface/src/components/editor/EditorPane.svelte`
+- [X] T028 [US3] Transition preview freshness to stale on CodeMirror document changes and back to refreshed only after successful preview refresh from saved content in `surface/src/components/editor/EditorPane.svelte`
+- [X] T029 [US3] Show recoverable preview-render-failure copy when renderer failure is reported while preserving editor interaction and save controls in `surface/src/components/reading/ReadingPane.svelte`
 - [X] T030 [US3] Document status communication and render failure accessibility evidence in `docs/accessibility/working-docs.md`
 
 **Checkpoint**: All user stories are independently functional and preview status is understandable before and after save.
@@ -139,15 +139,15 @@
 - **Setup (Phase 1)**: No dependencies; can start immediately.
 - **Foundational (Phase 2)**: Depends on Setup completion; blocks user story implementation.
 - **User Story 1 (Phase 3)**: Depends on Foundational; delivers MVP preview rendering and save refresh.
-- **User Story 2 (Phase 4)**: Depends on Foundational and can proceed after US1 markup exists; validates responsive usability.
-- **User Story 3 (Phase 5)**: Depends on Foundational and integrates with US1 preview rendering; validates freshness communication.
+- **User Story 2 (Phase 4)**: Depends on Foundational and can proceed after the US1 Split action exists; validates responsive usability.
+- **User Story 3 (Phase 5)**: Depends on Foundational and integrates with US1 split-preview rendering; validates freshness communication.
 - **Polish (Phase 6)**: Depends on all desired user stories being complete.
 
 ### User Story Dependencies
 
 - **User Story 1 (P1)**: Start after Foundational; no dependency on US2 or US3.
-- **User Story 2 (P2)**: Start after Foundational and after the preview region markup from US1 is available; independently validates constrained layout.
-- **User Story 3 (P3)**: Start after Foundational and after the preview region from US1 is available; independently validates status and freshness behavior.
+- **User Story 2 (P2)**: Start after Foundational and after the Split preview action from US1 is available; independently validates constrained layout.
+- **User Story 3 (P3)**: Start after Foundational and after Split preview behavior from US1 is available; independently validates status and freshness behavior.
 
 ### Within Each User Story
 
@@ -159,7 +159,7 @@
 
 - T002, T003, and T004 can run in parallel with T001.
 - T009 and T010 can run in parallel once Foundational tasks are complete.
-- T017 and T018 can run in parallel once the responsive preview region exists.
+- T017 and T018 can run in parallel once the Split preview action exists.
 - T024 and T025 can run in parallel once freshness states are wired.
 - T031, T032, T035, and T036 can run in parallel during final polish.
 
@@ -168,14 +168,14 @@
 ## Parallel Example: User Story 1
 
 ```bash
-Task: "Add a Playwright smoke test that stubs /api/working/:slug, opens a working document, and expects source and preview regions with markdown rendering in surface/e2e/surface.e2e.ts"
+Task: "Add a Playwright smoke test that stubs /api/working/:slug, opens a working document, uses Split, and expects source and preview regions with markdown rendering in surface/e2e/surface.e2e.ts"
 Task: "Add a Playwright save-refresh assertion that edits markdown, fulfills the PUT save, and expects the preview to show the saved rendered result in surface/e2e/surface.e2e.ts"
 ```
 
 ## Parallel Example: User Story 2
 
 ```bash
-Task: "Add a Playwright narrow-viewport test that confirms Back, Save, Delete, Vim toggle, source editor, and preview region remain reachable without horizontal document overflow in surface/e2e/surface.e2e.ts"
+Task: "Add a Playwright narrow-viewport test that confirms Back, Split, Save, Delete, Vim toggle, and source editor remain reachable without horizontal document overflow in surface/e2e/surface.e2e.ts"
 Task: "Add a Playwright keyboard-navigation test for Back, editor, preview status or links, Save, Delete, and Vim toggle with no focus trap in surface/e2e/surface.e2e.ts"
 ```
 
@@ -193,9 +193,9 @@ Task: "Add a Playwright failure-state test that simulates save or render failure
 ### MVP First (User Story 1 Only)
 
 1. Complete Phase 1: Setup.
-2. Complete Phase 2: Foundational preview state and renderer support.
+2. Complete Phase 2: Foundational split-preview status and renderer support.
 3. Complete Phase 3: User Story 1.
-4. Stop and validate desktop split preview, save refresh, and common markdown rendering.
+4. Stop and validate desktop workbench split preview, save refresh, and common markdown rendering.
 5. Demo or merge MVP only if responsive and freshness scope is intentionally deferred.
 
 ### Incremental Delivery
@@ -210,7 +210,7 @@ Task: "Add a Playwright failure-state test that simulates save or render failure
 
 1. One developer handles `surface/src/components/editor/EditorPane.svelte` state and layout changes.
 2. One developer handles `surface/e2e/surface.e2e.ts` focused browser coverage.
-3. One developer handles `surface/src/components/reading/MarkdownRenderer.svelte` overflow/error support and `docs/accessibility/working-docs.md` evidence.
+3. One developer handles `surface/src/components/reading/MarkdownRenderer.svelte`, `surface/src/components/reading/ReadingPane.svelte` overflow/error support, and `docs/accessibility/working-docs.md` evidence.
 
 ---
 

@@ -17,10 +17,7 @@
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { workingKeys, fetchWorking, updateWorking, deleteWorking } from '$lib/api/working';
 	import Icon from '$components/icons/Icon.svelte';
-	import MarkdownRenderer from '$components/reading/MarkdownRenderer.svelte';
 	import VimToggle from './VimToggle.svelte';
-
-	type PreviewFreshnessState = 'current' | 'stale' | 'refreshing' | 'unavailable';
 
 	const { slug, paneIndex }: { slug: string; paneIndex: 0 | 1 } = $props();
 
@@ -35,17 +32,16 @@
 	let saveStatus = $state<'' | 'saved' | 'error' | 'deleting'>('');
 	let saveErrorMsg = $state('');
 	let statusTimer: ReturnType<typeof setTimeout> | null = null;
-	let savedPreviewContent = $state('');
-	let previewFreshness = $state<PreviewFreshnessState>('current');
-	let previewRenderErrorMsg = $state('');
 	let lastLoadedSlug = '';
-	let previewStatusText = $derived.by(() => {
-		if (previewFreshness === 'stale') return 'Preview waiting for save';
-		if (previewFreshness === 'refreshing') return 'Preview refreshing from saved content';
-		if (previewFreshness === 'unavailable')
-			return 'Preview unavailable; source editing still works';
-		return 'Preview current';
-	});
+	const previewStatusText = $derived(
+		saveStatus === 'error'
+			? 'Preview still shows last saved content. Save again to refresh it.'
+			: isDirty
+				? 'Preview shows saved content. Unsaved edits are not included until Save.'
+				: saveStatus === 'saved'
+					? 'Preview refreshed from saved content.'
+					: 'Preview opens in Split and shows saved content.'
+	);
 
 	const docQuery = createQuery(() => ({
 		queryKey: workingKeys.detail(slug),
@@ -55,16 +51,12 @@
 
 	const saveMutation = createMutation(() => ({
 		mutationFn: ({ content }: { content: string }) => updateWorking(slug, content),
-		onSuccess: (_data, variables) => {
+		onSuccess: () => {
 			isDirty = false;
 			saveStatus = 'saved';
-			savedPreviewContent = variables.content;
-			previewFreshness = 'refreshing';
-			previewRenderErrorMsg = '';
 			if (statusTimer) clearTimeout(statusTimer);
 			statusTimer = setTimeout(() => {
 				saveStatus = '';
-				if (previewFreshness === 'refreshing') previewFreshness = 'current';
 			}, 2000);
 			qc.invalidateQueries({ queryKey: workingKeys.detail(slug) });
 		},
@@ -72,7 +64,6 @@
 			console.error('[editor] save failed:', err);
 			saveStatus = 'error';
 			saveErrorMsg = err instanceof Error ? err.message : 'unknown error';
-			if (isDirty) previewFreshness = 'stale';
 		}
 	}));
 
@@ -102,15 +93,8 @@
 	function scheduleAutosave(content: string) {
 		isDirty = true;
 		saveStatus = '';
-		if (previewFreshness !== 'unavailable') previewFreshness = 'stale';
 		if (saveTimer) clearTimeout(saveTimer);
 		saveTimer = setTimeout(() => saveNow(content), 1500);
-	}
-
-	function onPreviewRenderError(error: unknown) {
-		previewFreshness = 'unavailable';
-		previewRenderErrorMsg =
-			error instanceof Error ? error.message : 'Markdown preview failed to render';
 	}
 
 	function buildVimExtension(enabled: boolean) {
@@ -124,6 +108,31 @@
 	function deleteDoc() {
 		if (!window.confirm(`Delete ${slug}.md? This cannot be undone.`)) return;
 		deleteMutation.mutate();
+	}
+
+	function openPreviewInSplit() {
+		const targetPane = Number(paneIndex) === 0 ? 1 : 0;
+		wb.openInPane(targetPane, { kind: 'doc', ref: { kind: 'working', slug } });
+	}
+
+	function insertDiagram() {
+		if (!view) return;
+		const { from, to } = view.state.selection.main;
+		const doc = view.state.doc;
+		const previousChar = from > 0 ? doc.sliceString(from - 1, from) : '\n';
+		const nextChar = to < doc.length ? doc.sliceString(to, to + 1) : '\n';
+		const prefix = previousChar === '\n' ? '' : '\n\n';
+		const suffix = nextChar === '\n' ? '' : '\n\n';
+		const diagramBody = '```mermaid\nflowchart TD\n\tA[Start] --> B[Next]\n```';
+		const insertion = `${prefix}${diagramBody}${suffix}`;
+		const labelStart = insertion.indexOf('A[Start]');
+
+		view.dispatch({
+			changes: { from, to, insert: insertion },
+			selection: { anchor: from + labelStart, head: from + labelStart + 'A[Start]'.length },
+			scrollIntoView: true
+		});
+		view.focus();
 	}
 
 	// Wire vim ex commands (global registry — last-mounted editor wins when two are open simultaneously)
@@ -144,9 +153,6 @@
 		const container = editorContainer;
 		if (lastLoadedSlug !== slug) {
 			lastLoadedSlug = slug;
-			savedPreviewContent = docQuery.data.content;
-			previewFreshness = 'current';
-			previewRenderErrorMsg = '';
 			isDirty = false;
 		}
 
@@ -234,8 +240,29 @@
 				<span class="mute">· deleting</span>
 			{/if}
 		</span>
+		<span role="status" aria-live="polite" class="editor-preview-status">· {previewStatusText}</span
+		>
 		<span class="row editor-actions">
 			<button
+				type="button"
+				class="btn btn-ghost"
+				title="Open preview in split pane"
+				aria-label="Open preview in split pane"
+				onclick={openPreviewInSplit}
+			>
+				<Icon name="split" size={14} /> Split
+			</button>
+			<button
+				type="button"
+				class="btn btn-ghost"
+				title="Insert diagram"
+				aria-label="Insert diagram"
+				onclick={insertDiagram}
+			>
+				<Icon name="plus" size={14} /> Diagram
+			</button>
+			<button
+				type="button"
 				class="btn btn-ghost"
 				title="Save working document"
 				aria-label="Save working document"
@@ -245,6 +272,7 @@
 				Save
 			</button>
 			<button
+				type="button"
 				class="btn btn-ghost"
 				title="Delete working document"
 				aria-label="Delete working document"
@@ -268,30 +296,11 @@
 				>
 			</div>
 		{:else}
-			<div class="editor-preview-layout">
-				<section class="editor-source-pane" aria-label={`Markdown editor for ${slug}.md`}>
-					<div bind:this={editorContainer} class="h-full"></div>
-				</section>
-				<section class="editor-preview-pane" aria-label={`Markdown preview for ${slug}.md`}>
-					<div class="editor-preview-header">
-						<span class="mono faint">Preview</span>
-						<span role="status" aria-live="polite" class="editor-preview-status">
-							{previewStatusText}
-						</span>
-					</div>
-					{#if previewFreshness === 'unavailable'}
-						<p class="editor-preview-message" role="alert" title={previewRenderErrorMsg}>
-							Markdown preview is unavailable. You can continue editing and save again.
-						</p>
-					{:else if savedPreviewContent.trim().length === 0}
-						<p class="editor-preview-message">
-							Preview is empty because the saved document is empty.
-						</p>
-					{:else}
-						<MarkdownRenderer content={savedPreviewContent} onRenderError={onPreviewRenderError} />
-					{/if}
-				</section>
-			</div>
+			<div
+				bind:this={editorContainer}
+				class="h-full"
+				aria-label={`Markdown editor for ${slug}.md`}
+			></div>
 		{/if}
 	</div>
 </div>
@@ -318,52 +327,9 @@
 		font-size: 12px;
 	}
 
-	.editor-preview-layout {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) minmax(280px, 0.95fr);
-		gap: 1px;
-		height: 100%;
-		min-width: 0;
-		overflow: hidden;
-		background: var(--border-subtle);
-	}
-
-	.editor-source-pane,
-	.editor-preview-pane {
-		min-width: 0;
-		min-height: 0;
-		overflow: hidden;
-		background: var(--color-surface);
-	}
-
-	.editor-source-pane {
-		height: 100%;
-	}
-
-	.editor-preview-pane {
-		display: flex;
-		flex-direction: column;
-	}
-
-	.editor-preview-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 8px;
-		border-bottom: 1px solid var(--border-subtle);
-		padding: 8px 10px;
-		font-size: 12px;
-	}
-
 	.editor-preview-status {
 		color: var(--text-mute);
-		text-align: right;
-	}
-
-	.editor-preview-message {
-		padding: 16px;
-		font-size: 0.875rem;
-		color: var(--text-mute);
+		font-size: 12px;
 	}
 
 	@media (max-width: 820px) {
@@ -373,12 +339,6 @@
 
 		.editor-actions {
 			margin-left: 0;
-		}
-
-		.editor-preview-layout {
-			grid-template-columns: 1fr;
-			grid-template-rows: minmax(340px, 55vh) minmax(220px, 45vh);
-			overflow-y: auto;
 		}
 	}
 </style>

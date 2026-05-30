@@ -43,7 +43,8 @@
 						const { svg } = await mermaid.render(id, (token as { text: string }).text);
 						mermaidBlocks.set(id, svg);
 						(token as unknown as { mermaidId: string }).mermaidId = id;
-					} catch {
+					} catch (error) {
+						onRenderError?.(error);
 						// leave as code block on render failure
 					}
 				}

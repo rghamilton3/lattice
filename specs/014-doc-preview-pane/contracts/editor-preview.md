@@ -7,18 +7,18 @@ This contract describes the user-facing behavior of the Surface working document
 ## Entry Point
 
 - Opening a working document editor for `slug` shows the existing editor shell.
-- When document content loads successfully, the editor shell exposes both source editing and preview regions when the viewport can support them.
+- When document content loads successfully, the editor shell exposes a Split action that opens the saved markdown preview in the other workbench pane.
 
 ## Required Regions And Labels
 
 - Source editor region: labelled as the markdown editor for `{slug}.md`.
-- Preview region: labelled as the markdown preview for `{slug}.md`.
-- Preview status: visible text that communicates one of the freshness states: current, stale/waiting for save, refreshing, or unavailable.
-- Existing editor actions remain available: Back, Save, Delete, Vim toggle.
+- Preview pane: labelled by the workbench pane and rendered with the existing reading view for `{slug}.md`.
+- Preview status: visible text that communicates saved-only, stale/waiting for save, refreshed, or recoverable failure states.
+- Existing editor actions remain available: Back, Split, Save, Delete, Vim toggle.
 
 ## Wide Layout Behavior
 
-- Source and preview appear side by side inside the editor body.
+- Source and preview appear side by side in the workbench after the user opens Split.
 - Required editor controls remain visible and reachable.
 - Each pane manages its own overflow; long preview content does not create page-level horizontal scrolling.
 
@@ -26,7 +26,7 @@ This contract describes the user-facing behavior of the Surface working document
 
 - The editor remains the primary usable area.
 - The preview remains available without hiding save/delete/back controls.
-- The layout may stack source and preview vertically or otherwise adapt, as long as keyboard and pointer users can reach both and no page-level horizontal scrolling is required.
+- The layout may keep only the editor visible until Split is requested or otherwise adapt, as long as keyboard and pointer users can reach required controls and no page-level horizontal scrolling is required.
 
 ## Refresh Behavior
 

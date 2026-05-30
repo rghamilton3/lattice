@@ -12,7 +12,7 @@
 
 ### User Story 1 - Preview Saved Markdown Beside Editor (Priority: P1)
 
-As an authenticated user editing a working document, I want to see a rendered preview beside the markdown source so I can confirm the document's readable form without leaving the editor.
+As an authenticated user editing a working document, I want to open a rendered preview beside the markdown source so I can confirm the document's readable form without leaving the workbench.
 
 **Why this priority**: A side-by-side preview is the core value of the feature; it reduces context switching and helps users validate formatting while continuing to work in the document editor.
 
@@ -20,7 +20,7 @@ As an authenticated user editing a working document, I want to see a rendered pr
 
 **Acceptance Scenarios**:
 
-1. **Given** a working document with markdown content is open in the editor, **When** the user views the editor area, **Then** the document source and rendered preview are both visible in a split-pane layout when there is enough screen space.
+1. **Given** a working document with markdown content is open in the editor, **When** the user opens the preview with the Split action, **Then** the document source and rendered preview are both visible in the workbench split-pane layout when there is enough screen space.
 2. **Given** a user edits markdown source and saves the document, **When** the save completes successfully, **Then** the preview refreshes to reflect the saved document content.
 3. **Given** a document includes common markdown structures such as headings, lists, links, emphasis, block quotes, and code blocks, **When** the preview is shown, **Then** those structures are rendered in a readable form that corresponds to the saved markdown source.
 
@@ -69,8 +69,8 @@ As a user making unsaved changes, I want to understand whether the preview refle
 
 ### Functional Requirements
 
-- **FR-001**: Authenticated users MUST be able to view a rendered markdown preview for the currently open working document from within the working document editor.
-- **FR-002**: The preview MUST be presented in a split-pane experience beside the editor when the available display area can support both panes without hiding required document controls.
+- **FR-001**: Authenticated users MUST be able to open a rendered markdown preview for the currently open working document from within the working document editor.
+- **FR-002**: The preview MUST be presented through the workbench split-pane experience beside the editor when the available display area can support both panes without hiding required document controls.
 - **FR-003**: The preview experience MUST adapt on constrained display areas so users can still edit, save, and navigate the document without horizontal page-level scrolling or inaccessible controls.
 - **FR-004**: The preview MUST refresh to match the saved document content after a successful save.
 - **FR-005**: The preview MAY refresh before save when doing so preserves editor responsiveness, accessibility, and clear saved-versus-unsaved status.
@@ -84,9 +84,9 @@ As a user making unsaved changes, I want to understand whether the preview refle
 ### Key Entities
 
 - **Working Document**: A markdown note managed inside the workbench; includes a title, markdown source, saved state, and last-updated information.
-- **Editor Pane**: The source-editing area where users write or revise markdown content and perform save actions.
-- **Preview Pane**: The rendered view of the current working document content, with an associated freshness state indicating whether it reflects saved content or current edits.
-- **Preview Freshness State**: User-facing status describing whether the preview is current, waiting for save, refreshing, or unable to render.
+- **Editor Pane**: The source-editing area where users write or revise markdown content, perform save actions, open Split preview, and see saved-preview freshness status.
+- **Preview Pane**: The rendered reading view of the current working document content opened in the other workbench pane.
+- **Preview Freshness State**: User-facing status in the editor describing whether the split preview reflects saved content, excludes unsaved edits, has refreshed after save, or could not update after a recoverable failure.
 
 ## Success Criteria *(mandatory)*
 

@@ -23,6 +23,7 @@
 	let promoteError = $state('');
 	let attachFileInput = $state<HTMLInputElement | null>(null);
 	let attachUploading = $state(false);
+	let renderError = $state<{ content: string | undefined; message: string } | null>(null);
 
 	async function onAttachFile(e: Event) {
 		const input = e.target as HTMLInputElement;
@@ -97,6 +98,16 @@
 				? (fileQuery.data?.path ?? '')
 				: `${ref.slug}.md`
 	);
+	const renderedContent = $derived(
+		ref.kind === 'capture'
+			? captureQuery.data?.text
+			: ref.kind === 'file'
+				? fileQuery.data?.text
+				: workingQuery.data?.content
+	);
+	const renderErrorMessage = $derived(
+		renderError && renderError.content === renderedContent ? renderError.message : ''
+	);
 
 	function openMoreLikeThis() {
 		wb.openInOther(paneIndex, {
@@ -145,6 +156,13 @@
 
 	function splitDoc() {
 		wb.openInOther(paneIndex, { kind: 'doc', ref });
+	}
+
+	function onRenderError(error: unknown) {
+		renderError = {
+			content: renderedContent,
+			message: error instanceof Error ? error.message : 'Preview render failed'
+		};
 	}
 </script>
 
@@ -231,6 +249,16 @@
 	{#if promoteError}
 		<div class="px-3 py-1 text-xs" style="color:var(--c-alarm)">{promoteError}</div>
 	{/if}
+	{#if renderErrorMessage}
+		<div
+			class="px-3 py-1 text-xs"
+			style="color:var(--c-alarm)"
+			role="alert"
+			title={renderErrorMessage}
+		>
+			Preview render failed. The source remains available to edit and save.
+		</div>
+	{/if}
 
 	<div class="doc-content">
 		<div class="doc-body">
@@ -244,15 +272,15 @@
 						'error loading document'}
 				</p>
 			{:else if ref.kind === 'capture' && captureQuery.data}
-				<MarkdownRenderer content={captureQuery.data.text} />
+				<MarkdownRenderer content={captureQuery.data.text} {onRenderError} />
 			{:else if ref.kind === 'file' && fileQuery.data}
 				{#if fileQuery.data.mime_type === 'application/pdf'}
 					<PdfViewer fileId={ref.id} />
 				{:else}
-					<MarkdownRenderer content={fileQuery.data.text} />
+					<MarkdownRenderer content={fileQuery.data.text} {onRenderError} />
 				{/if}
 			{:else if ref.kind === 'working' && workingQuery.data}
-				<MarkdownRenderer content={workingQuery.data.content} />
+				<MarkdownRenderer content={workingQuery.data.content} {onRenderError} />
 			{/if}
 		</div>
 		{#if ref.kind === 'capture'}

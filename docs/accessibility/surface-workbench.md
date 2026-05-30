@@ -6,10 +6,10 @@ Reviewed the Surface workbench shell, pane routing, reading view, command palett
 
 ## WCAG 2.2 AA Checks
 
-- Keyboard operation: primary shell actions use native buttons; command palette, quick capture, settings, and new-doc overlays support keyboard operation; Escape closes non-triage overlays; global shortcuts do not fire while focus is in inputs, ARIA textboxes, contenteditable regions, or CodeMirror editors.
-- Names, roles, values: shell icon buttons expose accessible names, pane regions include labels, command palette results use listbox/option semantics, quick capture icon buttons have explicit labels, and the settings drawer uses grouped labeled controls.
+- Keyboard operation: primary shell actions use native buttons; command palette, quick capture, settings, editor Vim controls, and new-doc overlays support keyboard operation; Escape closes non-triage overlays; global shortcuts do not fire while focus is in inputs, ARIA textboxes, contenteditable regions, or CodeMirror editors.
+- Names, roles, values: shell icon buttons expose accessible names, pane regions include labels, command palette results use listbox/option semantics, quick capture icon buttons have explicit labels, the settings drawer uses grouped labeled controls, and the editor Vim toggle exposes `Vim mode: off` / `Vim mode: on` with `aria-pressed`.
 - Status and errors: invalid deep links produce a visible status toast; Surface status text reports unavailable agents instead of relying on an icon; reading panes preserve loading and error text; capture failures remain inline in the dialog.
-- Color not alone: status, agent availability, capture validation, and settings state include text labels, not only color or icon changes.
+- Color not alone: status, agent availability, capture validation, settings state, and editor Vim mode state include text labels, not only color or icon changes.
 - Motion and responsiveness: existing reduced-motion styles remain in place, and narrow viewports wrap shell controls/status text so navigation, palette, capture, and settings remain reachable without horizontal-only interaction.
 - Rich content safety: markdown rendering remains sanitized and now falls back to escaped plain text if rich rendering fails or stale async rendering resolves out of order.
 
@@ -20,7 +20,7 @@ Reviewed the Surface workbench shell, pane routing, reading view, command palett
 - `cd surface && bun run test:e2e`
 - `cd surface && bun run lint`
 
-The E2E suite covers invalid deep-link status feedback, keyboard shortcut suppression while typing in library search, split-pane reading behavior, command palette navigation, quick capture success/failure, settings theme controls, process mode, and search facet filtering.
+The E2E suite covers invalid deep-link status feedback, keyboard shortcut suppression while typing in library search and CodeMirror, split-pane reading behavior, command palette navigation, quick capture success/failure, settings theme controls, editor Vim indicator off/on state, settings and keyboard-shortcut synchronization, process mode, and search facet filtering.
 
 ## Bilingual Delivery
 

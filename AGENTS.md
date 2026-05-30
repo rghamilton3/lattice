@@ -2,6 +2,6 @@
 
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/bugfix-002-the-keyboard-shortcut/plan.md`
+`specs/010-surface-workbench/modifications/001-add-vim-mode/plan.md`
 
 <!-- SPECKIT END -->

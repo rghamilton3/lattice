@@ -68,7 +68,7 @@ interface PersistedSession {
 export class WorkbenchStore {
 	panes = $state<[PaneContent] | [PaneContent, PaneContent]>([{ kind: 'home' }]);
 	focusedPane = $state<0 | 1>(0);
-	vimMode = $state(true);
+	vimMode = $state(false);
 
 	theme = $state<Theme>('light');
 	density = $state<Density>('comfortable');

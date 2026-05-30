@@ -92,7 +92,7 @@
 	}
 
 	function goBack() {
-		wb.openInPane(paneIndex, { kind: 'library', query: '' });
+		wb.goBackInPane(paneIndex);
 	}
 
 	function deleteDoc() {
@@ -183,8 +183,8 @@
 	<div class="editor-status">
 		<button
 			class="btn btn-ghost"
-			title="Back to library"
-			aria-label="Back to library"
+			title="Back to previous view"
+			aria-label="Back to previous view"
 			onclick={goBack}
 		>
 			<Icon name="arrow-right" size={14} class="rotate-180" /> Back
@@ -230,8 +230,11 @@
 		{:else if docQuery.isError}
 			<div class="p-3 text-xs" style="color:var(--c-alarm)" role="alert">
 				<p>{docQuery.error?.message ?? 'error loading doc'}</p>
-				<button class="btn btn-ghost" style="margin-top:8px" onclick={goBack}
-					>Back to library</button
+				<button
+					class="btn btn-ghost"
+					style="margin-top:8px"
+					aria-label="Back to previous view"
+					onclick={goBack}>Back</button
 				>
 			</div>
 		{:else}

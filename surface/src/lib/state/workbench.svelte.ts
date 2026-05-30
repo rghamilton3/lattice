@@ -14,6 +14,7 @@ function flagFromEnv(name: `PUBLIC_${string}`, fallback: boolean): boolean {
 
 const WORKBENCH_KEY = Symbol('workbench');
 const STORAGE_KEY = 'lattice.session';
+const DEFAULT_BACK_FALLBACK: PaneContent = { kind: 'home' };
 
 export type Theme = 'light' | 'dark' | 'sepia' | 'system';
 export type Density = 'compact' | 'comfortable' | 'spacious';
@@ -122,6 +123,11 @@ export class WorkbenchStore {
 
 	private toastTimer: ReturnType<typeof setTimeout> | null = null;
 	private toastSeq = 0;
+	private paneHistory: [PaneContent[], PaneContent[]] = [[], []];
+	private paneFallbacks: [PaneContent, PaneContent] = [
+		DEFAULT_BACK_FALLBACK,
+		DEFAULT_BACK_FALLBACK
+	];
 
 	constructor() {
 		if (typeof localStorage === 'undefined') return;
@@ -162,7 +168,23 @@ export class WorkbenchStore {
 		}
 	}
 
-	openInPane(index: 0 | 1, content: PaneContent) {
+	private paneContent(index: 0 | 1): PaneContent | null {
+		return this.panes[index] ?? null;
+	}
+
+	private isSameContent(a: PaneContent, b: PaneContent): boolean {
+		return JSON.stringify(a) === JSON.stringify(b);
+	}
+
+	private recordPaneHistory(index: 0 | 1, next: PaneContent) {
+		const current = this.paneContent(index);
+		if (!current || this.isSameContent(current, next)) return;
+		const history = this.paneHistory[index];
+		if (history.at(-1) && this.isSameContent(history.at(-1) as PaneContent, current)) return;
+		history.push(current);
+	}
+
+	private replacePane(index: 0 | 1, content: PaneContent) {
 		if (index === 0) {
 			this.panes = this.isSplit
 				? ([content, this.panes[1]] as [PaneContent, PaneContent])
@@ -173,6 +195,11 @@ export class WorkbenchStore {
 		this.focusedPane = index;
 	}
 
+	openInPane(index: 0 | 1, content: PaneContent, opts: { recordHistory?: boolean } = {}) {
+		if (opts.recordHistory !== false) this.recordPaneHistory(index, content);
+		this.replacePane(index, content);
+	}
+
 	openInOther(currentPane: 0 | 1, content: PaneContent) {
 		this.openInPane(currentPane === 0 ? 1 : 0, content);
 	}
@@ -180,6 +207,26 @@ export class WorkbenchStore {
 	closeRightPane() {
 		this.panes = [this.panes[0]];
 		if (this.focusedPane === 1) this.focusedPane = 0;
+	}
+
+	setBackFallback(index: 0 | 1, content: PaneContent) {
+		this.paneFallbacks[index] = content;
+	}
+
+	goBackInPane(index: 0 | 1) {
+		const current = this.paneContent(index);
+		const history = this.paneHistory[index];
+		while (history.length > 0) {
+			const previous = history.pop() as PaneContent;
+			if (!current || !this.isSameContent(previous, current)) {
+				this.replacePane(index, previous);
+				return;
+			}
+		}
+		const fallback = this.paneFallbacks[index];
+		if (!current || !this.isSameContent(fallback, current)) {
+			this.replacePane(index, fallback);
+		}
 	}
 
 	toggleVim() {

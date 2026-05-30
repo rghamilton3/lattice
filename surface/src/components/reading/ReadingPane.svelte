@@ -146,6 +146,10 @@
 	function splitDoc() {
 		wb.openInOther(paneIndex, { kind: 'doc', ref });
 	}
+
+	function goBack() {
+		wb.goBackInPane(paneIndex);
+	}
 </script>
 
 <div class="doc-view">
@@ -153,8 +157,9 @@
 		<div class="row" style="gap:4px; min-width:0">
 			<button
 				class="btn btn-ghost"
-				title="Back to library"
-				onclick={() => wb.openInPane(paneIndex, { kind: 'library', query: '' })}
+				title="Back to previous view"
+				aria-label="Back to previous view"
+				onclick={goBack}
 			>
 				<Icon name="arrow-right" size={14} class="rotate-180" /> Back
 			</button>

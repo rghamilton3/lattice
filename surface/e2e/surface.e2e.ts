@@ -1,7 +1,87 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const isMac = process.platform === 'darwin';
 const mod = isMac ? 'Meta' : 'Control';
+
+async function mockBackNavigationData(page: Page) {
+	const capture = {
+		id: 1,
+		text: 'Seed capture body',
+		source: 'test',
+		captured_at: '2026-05-21T11:00:00Z',
+		ingested_at: '2026-05-21T11:00:00Z',
+		triaged_at: null,
+		triage_action: null,
+		task_due_date: null,
+		task_priority: null,
+		task_notes: null,
+		first_image_id: null
+	};
+	const working = {
+		slug: 'notes',
+		title: 'Notes',
+		content: 'Working notes body',
+		modified_at: '2026-05-21T11:05:00Z'
+	};
+	const inboxItem = {
+		item_type: 'capture',
+		id: 'capture:1',
+		capture_id: 1,
+		title: capture.text,
+		summary: capture.text,
+		source: capture.source,
+		created_at: capture.ingested_at,
+		capture,
+		actions: [
+			{ action: 'keep', label: 'Keep', shortcut: 'k', tone: 'primary' },
+			{ action: 'archive', label: 'Archive', shortcut: 'a', tone: 'neutral' },
+			{ action: 'skip', label: 'Skip', shortcut: 'Space', tone: 'neutral' }
+		]
+	};
+
+	await page.route('**/api/inbox?**', (route) =>
+		route.fulfill({ status: 200, body: JSON.stringify({ items: [inboxItem], next_cursor: null }) })
+	);
+	await page.route('**/api/captures/1', (route) =>
+		route.fulfill({ status: 200, body: JSON.stringify(capture) })
+	);
+	await page.route('**/api/captures?**', (route) =>
+		route.fulfill({ status: 200, body: JSON.stringify({ items: [capture], next_cursor: null }) })
+	);
+	await page.route('**/api/working/notes', (route) =>
+		route.fulfill({ status: 200, body: JSON.stringify(working) })
+	);
+	await page.route('**/api/working', (route) =>
+		route.fulfill({
+			status: 200,
+			body: JSON.stringify([
+				{ slug: working.slug, title: working.title, modified_at: working.modified_at }
+			])
+		})
+	);
+	await page.route('**/api/files?**', (route) =>
+		route.fulfill({ status: 200, body: JSON.stringify({ items: [], next_cursor: null }) })
+	);
+	await page.route('**/api/search**', (route) =>
+		route.fulfill({
+			status: 200,
+			body: JSON.stringify({
+				results: [
+					{
+						kind: 'working',
+						id: 2,
+						score: 0.8,
+						snippet: 'Working notes body',
+						body: 'Working notes body',
+						path: '/w/notes',
+						slug: working.slug,
+						modified_at: working.modified_at
+					}
+				]
+			})
+		})
+	);
+}
 
 test.beforeEach(async ({ page }) => {
 	await page.addInitScript(() => {
@@ -70,6 +150,75 @@ test('invalid document deep link falls back with a visible status message', asyn
 	await page.goto('/?view=doc&ref=not-a-ref');
 	await expect(page.getByRole('heading', { name: /Where you were/i })).toBeVisible();
 	await expect(page.getByRole('status').filter({ hasText: 'Invalid link' })).toBeVisible();
+});
+
+test('back from a home-opened document returns to Home', async ({ page }) => {
+	await mockBackNavigationData(page);
+	await page.goto('/');
+
+	await page.getByRole('button', { name: 'Open capture: Seed capture body' }).click();
+	await expect(page.getByText('Seed capture body')).toBeVisible();
+
+	await page.getByRole('button', { name: 'Back to previous view' }).click();
+	await expect(page.getByRole('heading', { name: /Where you were/i })).toBeVisible();
+});
+
+test('back from a library search result restores the search context', async ({ page }) => {
+	await mockBackNavigationData(page);
+	await page.goto('/');
+	await page.getByRole('heading', { name: /Where you were/i }).waitFor();
+	await page.keyboard.press(`${mod}+/`);
+
+	const input = page.getByPlaceholder('Filter your library…');
+	await input.fill('alpha');
+	await page.getByRole('button', { name: 'Open notes.md', exact: true }).click();
+	await expect(page.getByText('Working notes body')).toBeVisible();
+
+	await page.getByRole('button', { name: 'Back to previous view' }).click();
+	await expect(input).toBeVisible();
+	await expect(input).toHaveValue('alpha');
+});
+
+test('direct document deep link back falls back inside Surface', async ({ page }) => {
+	await mockBackNavigationData(page);
+	await page.goto('/?view=doc&ref=capture:1');
+	await expect(page.getByText('Seed capture body')).toBeVisible();
+
+	await page.getByRole('button', { name: 'Back to previous view' }).click();
+	await expect(page.getByPlaceholder('Filter your library…')).toBeVisible();
+	await expect(page.getByText('Seed capture body')).toBeHidden();
+});
+
+test('back controls are named, keyboard-operable, and do not strand focus', async ({ page }) => {
+	await mockBackNavigationData(page);
+	await page.goto('/');
+	await page.getByRole('heading', { name: /Where you were/i }).waitFor();
+	await page.keyboard.press(`${mod}+/`);
+
+	const input = page.getByPlaceholder('Filter your library…');
+	await input.fill('alpha');
+	await page.getByRole('button', { name: 'Open notes.md', exact: true }).click();
+	await expect(page.getByText('Working notes body')).toBeVisible();
+
+	const readingBack = page.getByRole('button', { name: 'Back to previous view' });
+	await expect(readingBack).toBeVisible();
+	await page.getByRole('button', { name: 'Edit' }).click();
+
+	const editorBack = page.getByRole('button', { name: 'Back to previous view' });
+	await expect(editorBack).toBeVisible();
+	await editorBack.focus();
+	await page.keyboard.press('Space');
+	await expect(page.getByText('Working notes body')).toBeVisible();
+
+	const documentBack = page.getByRole('button', { name: 'Back to previous view' });
+	await documentBack.focus();
+	await page.keyboard.press('Enter');
+	await expect(input).toBeVisible();
+	await expect(input).toHaveValue('alpha');
+	await expect(documentBack).toBeHidden();
+	await expect
+		.poll(() => page.evaluate(() => document.activeElement?.getAttribute('aria-label')))
+		.not.toBe('Back to previous view');
 });
 
 test('shortcut keys do not open capture while typing in library search', async ({ page }) => {

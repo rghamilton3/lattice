@@ -143,6 +143,58 @@ describe('WorkbenchStore', () => {
 		expect(wb.focusedPane).toBe(1);
 	});
 
+	it('records per-pane history and returns to the immediately previous state', () => {
+		const wb = new WorkbenchStore();
+		wb.openInPane(0, { kind: 'library', query: 'alpha' });
+		wb.openInPane(0, { kind: 'doc', ref: { kind: 'capture', id: 1 } });
+		wb.openInPane(0, { kind: 'editor', slug: 'notes' });
+
+		wb.goBackInPane(0);
+		expect(wb.panes[0]).toEqual({ kind: 'doc', ref: { kind: 'capture', id: 1 } });
+
+		wb.goBackInPane(0);
+		expect(wb.panes[0]).toEqual({ kind: 'library', query: 'alpha' });
+	});
+
+	it('preserves split-pane state when navigating back in one pane', () => {
+		const wb = new WorkbenchStore();
+		wb.openInPane(0, { kind: 'library', query: 'left' });
+		wb.openInPane(1, { kind: 'doc', ref: { kind: 'working', slug: 'right' } });
+		wb.openInPane(1, { kind: 'editor', slug: 'right' });
+
+		wb.goBackInPane(1);
+
+		expect(wb.panes).toEqual([
+			{ kind: 'library', query: 'left' },
+			{ kind: 'doc', ref: { kind: 'working', slug: 'right' } }
+		]);
+		expect(wb.focusedPane).toBe(1);
+	});
+
+	it('falls back safely when no usable previous state exists', () => {
+		const wb = new WorkbenchStore();
+		wb.setBackFallback(0, { kind: 'library', query: '' });
+		wb.openInPane(0, { kind: 'doc', ref: { kind: 'capture', id: 9 } }, { recordHistory: false });
+
+		wb.goBackInPane(0);
+		expect(wb.panes[0]).toEqual({ kind: 'library', query: '' });
+
+		wb.goBackInPane(0);
+		expect(wb.panes[0]).toEqual({ kind: 'library', query: '' });
+	});
+
+	it('does not persist transient back history or fallback metadata', () => {
+		const a = new WorkbenchStore();
+		a.setBackFallback(0, { kind: 'library', query: '' });
+		a.openInPane(0, { kind: 'library', query: 'alpha' });
+		a.openInPane(0, { kind: 'doc', ref: { kind: 'capture', id: 1 } });
+		a.persist();
+
+		const b = new WorkbenchStore();
+		b.goBackInPane(0);
+		expect(b.panes[0]).toEqual({ kind: 'home' });
+	});
+
 	it('closeRightPane collapses to single pane and refocuses left', () => {
 		const wb = new WorkbenchStore();
 		wb.openInPane(1, { kind: 'library', query: 'x' });

@@ -1,7 +1,34 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const isMac = process.platform === 'darwin';
 const mod = isMac ? 'Meta' : 'Control';
+
+async function openWorkingEditor(page: Page, content: string) {
+	await page.addInitScript(() => {
+		localStorage.setItem('lattice.session', JSON.stringify({ vimMode: false }));
+	});
+	await page.route('**/api/lateral**', (route) =>
+		route.fulfill({ status: 200, body: JSON.stringify({ results: [] }) })
+	);
+	await page.route('**/api/working/preview-doc/attachments**', (route) =>
+		route.fulfill({ status: 200, body: '[]' })
+	);
+	await page.route('**/api/working/preview-doc', (route) => {
+		if (route.request().method() === 'PUT') {
+			return route.fulfill({ status: 200, body: JSON.stringify({ ok: true }) });
+		}
+		return route.fulfill({
+			status: 200,
+			body: JSON.stringify({ slug: 'preview-doc', title: 'Preview Doc', content })
+		});
+	});
+
+	await page.goto('/?ref=working:preview-doc');
+	await page.getByRole('button', { name: /Edit/i }).click();
+	await expect(page.getByLabel('Markdown editor for preview-doc.md')).toBeVisible();
+	await expect(page.getByLabel('Markdown preview for preview-doc.md')).toBeVisible();
+	return page.locator('.cm-content').first();
+}
 
 test.beforeEach(async ({ page }) => {
 	await page.addInitScript(() => {
@@ -253,4 +280,150 @@ test('quick capture: 500 keeps modal open with failure message', async ({ page }
 	// Modal stays open and surfaces the failure inline.
 	await expect(dialog).toBeVisible();
 	await expect(dialog.getByText('Save failed — try again')).toBeVisible();
+});
+
+test('working doc editor shows source and rendered saved markdown preview', async ({ page }) => {
+	await openWorkingEditor(
+		page,
+		'# Preview Title\n\n- first item\n- **second item**\n\n> quoted\n\n```ts\nconst ok = true;\n```\n\n[docs](https://example.com)'
+	);
+
+	const preview = page.getByLabel('Markdown preview for preview-doc.md');
+	await expect(preview.getByRole('heading', { name: 'Preview Title' })).toBeVisible();
+	await expect(preview.getByText('first item')).toBeVisible();
+	await expect(preview.getByText('second item')).toBeVisible();
+	await expect(preview.getByText('quoted')).toBeVisible();
+	await expect(preview.getByText('const ok = true;')).toBeVisible();
+	await expect(preview.getByRole('link', { name: 'docs' })).toBeVisible();
+});
+
+test('working doc preview refreshes after successful save', async ({ page }) => {
+	const editor = await openWorkingEditor(page, '# Old Title\n\nold body');
+
+	await editor.click();
+	await page.keyboard.press(`${mod}+a`);
+	await page.keyboard.type('# Saved Title\n\nnew body');
+	await page.getByRole('button', { name: 'Save working document' }).click();
+
+	const preview = page.getByLabel('Markdown preview for preview-doc.md');
+	await expect(preview.getByRole('heading', { name: 'Saved Title' })).toBeVisible({
+		timeout: 2000
+	});
+	await expect(preview.getByText('new body')).toBeVisible();
+});
+
+test('working doc preview layout remains reachable on narrow viewports', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 760 });
+	await openWorkingEditor(
+		page,
+		'# Narrow Title\n\nA long preview line that should stay inside the pane.'
+	);
+
+	await expect(page.getByRole('button', { name: 'Back to library' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Save working document' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Delete working document' })).toBeVisible();
+	await expect(page.getByRole('button', { name: /Vim/i })).toBeVisible();
+	await expect(page.getByLabel('Markdown editor for preview-doc.md')).toBeVisible();
+	await expect(page.getByLabel('Markdown preview for preview-doc.md')).toBeVisible();
+	await expect
+		.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+		.toBe(true);
+});
+
+test('working doc editor keyboard navigation reaches controls and preview without a trap', async ({
+	page
+}) => {
+	await openWorkingEditor(page, '# Keyboard Title\n\n[focus link](https://example.com)');
+
+	const reached = {
+		back: false,
+		save: false,
+		delete: false,
+		vim: false,
+		previewLink: false
+	};
+
+	for (let i = 0; i < 20; i += 1) {
+		await page.keyboard.press('Tab');
+		const active = await page.evaluate(() => {
+			const element = document.activeElement as HTMLElement | null;
+			return {
+				aria: element?.getAttribute('aria-label') ?? '',
+				text: element?.textContent ?? ''
+			};
+		});
+		reached.back ||= active.aria === 'Back to library';
+		reached.save ||= active.aria === 'Save working document';
+		reached.delete ||= active.aria === 'Delete working document';
+		reached.vim ||= /vim/i.test(active.text);
+		reached.previewLink ||= active.text.trim() === 'focus link';
+	}
+
+	expect(reached).toEqual({
+		back: true,
+		save: true,
+		delete: true,
+		vim: true,
+		previewLink: true
+	});
+});
+
+test('working doc preview status shows stale edits before save', async ({ page }) => {
+	const editor = await openWorkingEditor(page, '# Fresh Title\n\nbody');
+
+	await expect(page.getByText('Preview current')).toBeVisible();
+	await editor.click();
+	await page.keyboard.type('\nunsaved edit');
+
+	await expect(page.getByText('Preview waiting for save')).toBeVisible();
+});
+
+test('working doc save failure preserves editing and recoverable preview status', async ({
+	page
+}) => {
+	await page.addInitScript(() => {
+		localStorage.setItem('lattice.session', JSON.stringify({ vimMode: false }));
+	});
+	await page.route('**/api/lateral**', (route) =>
+		route.fulfill({ status: 200, body: JSON.stringify({ results: [] }) })
+	);
+	await page.route('**/api/working/preview-doc/attachments**', (route) =>
+		route.fulfill({ status: 200, body: '[]' })
+	);
+	await page.route('**/api/working/preview-doc', (route) => {
+		if (route.request().method() === 'PUT') {
+			return route.fulfill({ status: 500, body: 'save failed' });
+		}
+		return route.fulfill({
+			status: 200,
+			body: JSON.stringify({
+				slug: 'preview-doc',
+				title: 'Preview Doc',
+				content: '# Previous Preview'
+			})
+		});
+	});
+
+	await page.goto('/?ref=working:preview-doc');
+	await page.getByRole('button', { name: /Edit/i }).click();
+	const editor = page.locator('.cm-content').first();
+	await editor.click();
+	await page.keyboard.type('\nunsaved edit');
+	const saveButton = page.getByRole('button', { name: 'Save working document' });
+	await expect(saveButton).toBeEnabled();
+	const failedSave = page.waitForResponse(
+		(response) =>
+			response.url().includes('/api/working/preview-doc') &&
+			response.request().method() === 'PUT' &&
+			response.status() === 500
+	);
+	await saveButton.click();
+	await failedSave;
+
+	await expect(page.getByText('action failed')).toBeVisible();
+	await expect(page.getByText('Preview waiting for save')).toBeVisible();
+	await expect(
+		page.getByLabel('Markdown preview for preview-doc.md').getByRole('heading')
+	).toHaveText('Previous Preview');
+	await expect(page.getByRole('button', { name: 'Save working document' })).toBeEnabled();
 });

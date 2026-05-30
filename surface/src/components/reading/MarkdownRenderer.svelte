@@ -4,7 +4,8 @@
 	import DOMPurify from 'dompurify';
 	import { onMount } from 'svelte';
 
-	const { content }: { content: string } = $props();
+	const { content, onRenderError }: { content: string; onRenderError?: (error: unknown) => void } =
+		$props();
 
 	let html = $state('');
 	let mermaidInitialized = false;
@@ -81,14 +82,40 @@
 					USE_PROFILES: { html: true, svg: true, mathMl: true }
 				});
 			})
-			.catch(() => {
+			.catch((error) => {
 				if (seq !== renderSeq) return;
+				onRenderError?.(error);
 				html = `<pre><code>${escapeHtml(md)}</code></pre>`;
 			});
 	});
 </script>
 
-<div class="prose prose-sm h-full max-w-none overflow-y-auto p-4 prose-invert">
+<div class="markdown-renderer prose prose-sm h-full max-w-none overflow-y-auto p-4 prose-invert">
 	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 	{@html html}
 </div>
+
+<style>
+	.markdown-renderer {
+		overflow-wrap: anywhere;
+	}
+
+	.markdown-renderer :global(pre),
+	.markdown-renderer :global(code) {
+		max-width: 100%;
+	}
+
+	.markdown-renderer :global(pre) {
+		overflow-x: auto;
+	}
+
+	.markdown-renderer :global(svg),
+	.markdown-renderer :global(.katex-display) {
+		max-width: 100%;
+		overflow-x: auto;
+	}
+
+	.markdown-renderer :global(a) {
+		word-break: break-word;
+	}
+</style>

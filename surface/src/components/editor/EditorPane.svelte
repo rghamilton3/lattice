@@ -17,7 +17,10 @@
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { workingKeys, fetchWorking, updateWorking, deleteWorking } from '$lib/api/working';
 	import Icon from '$components/icons/Icon.svelte';
+	import MarkdownRenderer from '$components/reading/MarkdownRenderer.svelte';
 	import VimToggle from './VimToggle.svelte';
+
+	type PreviewFreshnessState = 'current' | 'stale' | 'refreshing' | 'unavailable';
 
 	const { slug, paneIndex }: { slug: string; paneIndex: 0 | 1 } = $props();
 
@@ -32,6 +35,17 @@
 	let saveStatus = $state<'' | 'saved' | 'error' | 'deleting'>('');
 	let saveErrorMsg = $state('');
 	let statusTimer: ReturnType<typeof setTimeout> | null = null;
+	let savedPreviewContent = $state('');
+	let previewFreshness = $state<PreviewFreshnessState>('current');
+	let previewRenderErrorMsg = $state('');
+	let lastLoadedSlug = '';
+	let previewStatusText = $derived.by(() => {
+		if (previewFreshness === 'stale') return 'Preview waiting for save';
+		if (previewFreshness === 'refreshing') return 'Preview refreshing from saved content';
+		if (previewFreshness === 'unavailable')
+			return 'Preview unavailable; source editing still works';
+		return 'Preview current';
+	});
 
 	const docQuery = createQuery(() => ({
 		queryKey: workingKeys.detail(slug),
@@ -41,12 +55,16 @@
 
 	const saveMutation = createMutation(() => ({
 		mutationFn: ({ content }: { content: string }) => updateWorking(slug, content),
-		onSuccess: () => {
+		onSuccess: (_data, variables) => {
 			isDirty = false;
 			saveStatus = 'saved';
+			savedPreviewContent = variables.content;
+			previewFreshness = 'refreshing';
+			previewRenderErrorMsg = '';
 			if (statusTimer) clearTimeout(statusTimer);
 			statusTimer = setTimeout(() => {
 				saveStatus = '';
+				if (previewFreshness === 'refreshing') previewFreshness = 'current';
 			}, 2000);
 			qc.invalidateQueries({ queryKey: workingKeys.detail(slug) });
 		},
@@ -54,6 +72,7 @@
 			console.error('[editor] save failed:', err);
 			saveStatus = 'error';
 			saveErrorMsg = err instanceof Error ? err.message : 'unknown error';
+			if (isDirty) previewFreshness = 'stale';
 		}
 	}));
 
@@ -83,8 +102,15 @@
 	function scheduleAutosave(content: string) {
 		isDirty = true;
 		saveStatus = '';
+		if (previewFreshness !== 'unavailable') previewFreshness = 'stale';
 		if (saveTimer) clearTimeout(saveTimer);
 		saveTimer = setTimeout(() => saveNow(content), 1500);
+	}
+
+	function onPreviewRenderError(error: unknown) {
+		previewFreshness = 'unavailable';
+		previewRenderErrorMsg =
+			error instanceof Error ? error.message : 'Markdown preview failed to render';
 	}
 
 	function buildVimExtension(enabled: boolean) {
@@ -116,6 +142,13 @@
 	$effect(() => {
 		if (!browser || !editorContainer || !docQuery.data) return;
 		const container = editorContainer;
+		if (lastLoadedSlug !== slug) {
+			lastLoadedSlug = slug;
+			savedPreviewContent = docQuery.data.content;
+			previewFreshness = 'current';
+			previewRenderErrorMsg = '';
+			isDirty = false;
+		}
 
 		// If view already exists, just update content if slug changed (destroy and recreate)
 		if (view) {
@@ -191,17 +224,17 @@
 		</button>
 		<span class="mono faint truncate" style="font-size:12px">{slug}.md</span>
 		<span role="status" aria-live="polite" class="editor-save-status">
-			{#if isDirty}
+			{#if saveStatus === 'error'}
+				<span style="color:var(--c-alarm)" title={saveErrorMsg}>· action failed</span>
+			{:else if isDirty}
 				<span class="mute">· unsaved</span>
 			{:else if saveStatus === 'saved'}
 				<span style="color:var(--c-ok)">· saved</span>
-			{:else if saveStatus === 'error'}
-				<span style="color:var(--c-alarm)" title={saveErrorMsg}>· action failed</span>
 			{:else if saveStatus === 'deleting'}
 				<span class="mute">· deleting</span>
 			{/if}
 		</span>
-		<span class="row" style="margin-left:auto; gap:6px">
+		<span class="row editor-actions">
 			<button
 				class="btn btn-ghost"
 				title="Save working document"
@@ -235,17 +268,117 @@
 				>
 			</div>
 		{:else}
-			<div
-				bind:this={editorContainer}
-				class="h-full"
-				aria-label={`Markdown editor for ${slug}.md`}
-			></div>
+			<div class="editor-preview-layout">
+				<section class="editor-source-pane" aria-label={`Markdown editor for ${slug}.md`}>
+					<div bind:this={editorContainer} class="h-full"></div>
+				</section>
+				<section class="editor-preview-pane" aria-label={`Markdown preview for ${slug}.md`}>
+					<div class="editor-preview-header">
+						<span class="mono faint">Preview</span>
+						<span role="status" aria-live="polite" class="editor-preview-status">
+							{previewStatusText}
+						</span>
+					</div>
+					{#if previewFreshness === 'unavailable'}
+						<p class="editor-preview-message" role="alert" title={previewRenderErrorMsg}>
+							Markdown preview is unavailable. You can continue editing and save again.
+						</p>
+					{:else if savedPreviewContent.trim().length === 0}
+						<p class="editor-preview-message">
+							Preview is empty because the saved document is empty.
+						</p>
+					{:else}
+						<MarkdownRenderer content={savedPreviewContent} onRenderError={onPreviewRenderError} />
+					{/if}
+				</section>
+			</div>
 		{/if}
 	</div>
 </div>
 
 <style>
+	.editor-shell {
+		min-width: 0;
+		overflow: hidden;
+	}
+
+	.editor-status {
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 6px;
+	}
+
+	.editor-actions {
+		margin-left: auto;
+		gap: 6px;
+		flex-wrap: wrap;
+	}
+
 	.editor-save-status {
 		font-size: 12px;
+	}
+
+	.editor-preview-layout {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(280px, 0.95fr);
+		gap: 1px;
+		height: 100%;
+		min-width: 0;
+		overflow: hidden;
+		background: var(--border-subtle);
+	}
+
+	.editor-source-pane,
+	.editor-preview-pane {
+		min-width: 0;
+		min-height: 0;
+		overflow: hidden;
+		background: var(--color-surface);
+	}
+
+	.editor-source-pane {
+		height: 100%;
+	}
+
+	.editor-preview-pane {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.editor-preview-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		border-bottom: 1px solid var(--border-subtle);
+		padding: 8px 10px;
+		font-size: 12px;
+	}
+
+	.editor-preview-status {
+		color: var(--text-mute);
+		text-align: right;
+	}
+
+	.editor-preview-message {
+		padding: 16px;
+		font-size: 0.875rem;
+		color: var(--text-mute);
+	}
+
+	@media (max-width: 820px) {
+		.editor-status {
+			align-items: flex-start;
+		}
+
+		.editor-actions {
+			margin-left: 0;
+		}
+
+		.editor-preview-layout {
+			grid-template-columns: 1fr;
+			grid-template-rows: minmax(340px, 55vh) minmax(220px, 45vh);
+			overflow-y: auto;
+		}
 	}
 </style>

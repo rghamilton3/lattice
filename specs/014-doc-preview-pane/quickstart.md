@@ -29,6 +29,14 @@ just check
 
 Run the full e2e suite when browser dependencies are available. If the implementation adds focused tests, run those first before broader validation.
 
+## Validation Results
+
+- 2026-05-29: `cd surface && bun run check` passed with 0 errors and 0 warnings.
+- 2026-05-29: `cd surface && bun run test:unit -- --run` passed 39 tests across 7 files.
+- 2026-05-29: `cd surface && bun run test:e2e` passed 23 tests. Playwright reported fallback browser host dependency warnings for `libxml2` and `libflite1`, but all tests completed successfully.
+- 2026-05-29: `just check` passed repository checks for spine TypeScript and Surface Svelte diagnostics.
+- Surface-only scope confirmed: no spine route, migration, auth, storage, or API contract files were intentionally changed.
+
 ## Accessibility Evidence
 
 - Update `docs/accessibility/working-docs.md` with the commands run, manual keyboard/reflow checks, and any residual risks.

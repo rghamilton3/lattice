@@ -181,6 +181,7 @@ export class WorkbenchStore {
 			case 'file':
 				return a.id === (b as typeof a).id;
 		}
+		return false;
 	}
 
 	private isSameSource(a: LateralSource, b: LateralSource): boolean {
@@ -196,6 +197,7 @@ export class WorkbenchStore {
 			case 'similar':
 				return a.id === (b as typeof a).id && a.docKind === (b as typeof a).docKind;
 		}
+		return false;
 	}
 
 	private isSameContent(a: PaneContent, b: PaneContent): boolean {
@@ -213,6 +215,7 @@ export class WorkbenchStore {
 			case 'results':
 				return this.isSameSource(a.source, (b as typeof a).source);
 		}
+		return false;
 	}
 
 	private recordPaneHistory(index: 0 | 1, next: PaneContent) {

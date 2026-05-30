@@ -99,6 +99,10 @@
 	background: var(--kind-working-bg);
 	color: var(--kind-working-fg);
 }
+.chip-annotation {
+	background: color-mix(in srgb, var(--color-accent) 24%, var(--bg-high));
+	color: var(--color-accent);
+}
 
 .card {
 	background: var(--bg-raised);

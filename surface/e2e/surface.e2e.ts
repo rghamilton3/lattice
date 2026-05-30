@@ -133,6 +133,18 @@ test('command palette: ⌘K → "search" → Enter switches the pane to library'
 	await expect(page.getByPlaceholder('Filter your library…')).toBeVisible();
 });
 
+test('command palette: ? opens palette and focuses the search input', async ({ page }) => {
+	await page.goto('/');
+	await page.getByRole('heading', { name: /Where you were/i }).waitFor();
+
+	await page.keyboard.press('?');
+	const palette = page.getByRole('dialog', { name: 'Command palette' });
+	const input = palette.getByRole('textbox', { name: 'Command palette search' });
+
+	await expect(palette).toBeVisible();
+	await expect(input).toBeFocused();
+});
+
 test('settings drawer cycles each theme and updates <html data-theme>', async ({ page }) => {
 	await page.goto('/');
 	await page.getByRole('heading', { name: /Where you were/i }).waitFor();

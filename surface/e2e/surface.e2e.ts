@@ -201,7 +201,7 @@ test('direct document deep link back falls back inside Surface', async ({ page }
 
 	await page.getByRole('button', { name: 'Back to previous view' }).click();
 	await expect(page.getByPlaceholder('Filter your library…')).toBeVisible();
-	await expect(page.getByText('Seed capture body')).toBeHidden();
+	await expect(page.locator('.doc-view').filter({ hasText: 'Seed capture body' })).toBeHidden();
 });
 
 test('back controls are named, keyboard-operable, and do not strand focus', async ({ page }) => {

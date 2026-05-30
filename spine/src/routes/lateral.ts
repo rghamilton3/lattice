@@ -3,11 +3,12 @@ import type { Database } from 'bun:sqlite';
 import { search } from '../search';
 import { WorkingNotFoundError, readWorking } from '../working';
 
-type LateralSourceKind = 'capture' | 'local-file' | 'working';
+type LateralSourceKind = 'capture' | 'local-file' | 'working' | 'archive';
 
 type LateralSource =
 	| { kind: 'capture'; id: number }
 	| { kind: 'local-file'; id: number }
+	| { kind: 'archive'; id: number }
 	| { kind: 'working'; slug: string };
 
 function parseLateralSource(
@@ -56,6 +57,20 @@ export const lateralRoutes = (db: Database) =>
 						sourceText = row.text;
 						break;
 					}
+					case 'archive': {
+						const row = db
+							.query(
+								`SELECT extracted_text FROM archives
+								 WHERE id = ? AND quality = 'good' AND superseded_by IS NULL AND deleted_at IS NULL`,
+							)
+							.get(source.id) as { extracted_text: string } | null;
+						if (!row) {
+							set.status = 404;
+							return { error: 'Not found' };
+						}
+						sourceText = row.extracted_text;
+						break;
+					}
 					case 'working': {
 						try {
 							sourceText = readWorking(source.slug).content;
@@ -77,6 +92,8 @@ export const lateralRoutes = (db: Database) =>
 							return false;
 						if (source.kind === 'local-file' && r.kind === 'local-file' && r.id === source.id)
 							return false;
+						if (source.kind === 'archive' && r.kind === 'archive' && r.id === source.id)
+							return false;
 						if (source.kind === 'working' && r.kind === 'working' && r.slug === source.slug)
 							return false;
 						return true;
@@ -87,7 +104,12 @@ export const lateralRoutes = (db: Database) =>
 			{
 				query: t.Object({
 					id: t.String({ minLength: 1 }),
-					kind: t.Union([t.Literal('capture'), t.Literal('local-file'), t.Literal('working')]),
+					kind: t.Union([
+						t.Literal('capture'),
+						t.Literal('local-file'),
+						t.Literal('working'),
+						t.Literal('archive'),
+					]),
 				}),
 			},
 		)

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { createQuery, createMutation, useQueryClient } from '@tanstack/svelte-query';
 	import { browser } from '$app/environment';
+	import { untrack } from 'svelte';
 	import { EditorState, Compartment } from '@codemirror/state';
 	import {
 		EditorView,
@@ -26,6 +27,8 @@
 
 	let editorContainer: HTMLDivElement | undefined = $state();
 	let view: EditorView | null = null;
+	let mountedSlug: string | null = null;
+	let loadedContent = '';
 	const vimCompartment = new Compartment();
 	let isDirty = $state(false);
 	let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -117,11 +120,22 @@
 		if (!browser || !editorContainer || !docQuery.data) return;
 		const container = editorContainer;
 
-		// If view already exists, just update content if slug changed (destroy and recreate)
+		if (view && mountedSlug === slug) {
+			const content = docQuery.data.content;
+			if (content !== loadedContent && !isDirty && view.state.doc.toString() !== content) {
+				view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
+			}
+			loadedContent = content;
+			return;
+		}
+
+		// Reuse the component instance across editor slugs, but not the CodeMirror view.
 		if (view) {
 			view.destroy();
 			view = null;
 		}
+		mountedSlug = slug;
+		loadedContent = docQuery.data.content;
 
 		const state = EditorState.create({
 			doc: docQuery.data.content,
@@ -132,7 +146,7 @@
 				highlightActiveLine(),
 				markdown(),
 				oneDark,
-				vimCompartment.of(buildVimExtension(wb.vimMode)),
+				vimCompartment.of(buildVimExtension(untrack(() => wb.vimMode))),
 				keymap.of([
 					{
 						key: 'Ctrl-s',
@@ -175,6 +189,7 @@
 			if (saveTimer) clearTimeout(saveTimer);
 			if (statusTimer) clearTimeout(statusTimer);
 			view?.destroy();
+			mountedSlug = null;
 		};
 	});
 </script>

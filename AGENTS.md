@@ -2,6 +2,6 @@
 
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/bugfix-001-windows-installer-produces/plan.md`
+`specs/bugfix-002-the-keyboard-shortcut/plan.md`
 
 <!-- SPECKIT END -->

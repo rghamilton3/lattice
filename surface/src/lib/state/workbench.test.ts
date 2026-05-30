@@ -173,8 +173,14 @@ describe('WorkbenchStore', () => {
 
 	it('falls back safely when no usable previous state exists', () => {
 		const wb = new WorkbenchStore();
-		wb.setBackFallback(0, { kind: 'library', query: '' });
-		wb.openInPane(0, { kind: 'doc', ref: { kind: 'capture', id: 9 } }, { recordHistory: false });
+		wb.openInPane(
+			0,
+			{ kind: 'doc', ref: { kind: 'capture', id: 9 } },
+			{
+				recordHistory: false,
+				fallback: { kind: 'library', query: '' }
+			}
+		);
 
 		wb.goBackInPane(0);
 		expect(wb.panes[0]).toEqual({ kind: 'library', query: '' });
@@ -199,6 +205,17 @@ describe('WorkbenchStore', () => {
 		});
 
 		expect(wb.panes[0]).toEqual({ kind: 'library', query: 'alpha' });
+	});
+
+	it('does not record duplicate history for the same archive document', () => {
+		const wb = new WorkbenchStore();
+		wb.openInPane(0, { kind: 'library', query: 'archives' });
+		wb.openInPane(0, { kind: 'doc', ref: { kind: 'archive', id: 42 } });
+		wb.openInPane(0, { kind: 'doc', ref: { kind: 'archive', id: 42 } });
+
+		wb.goBackInPane(0);
+
+		expect(wb.panes[0]).toEqual({ kind: 'library', query: 'archives' });
 	});
 
 	it('does not persist transient back history or fallback metadata', () => {

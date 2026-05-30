@@ -179,9 +179,13 @@ export class WorkbenchStore {
 				return a.slug === (b as typeof a).slug;
 			case 'capture':
 			case 'file':
+			case 'archive':
 				return a.id === (b as typeof a).id;
+			default: {
+				const _exhaustive: never = a;
+				return _exhaustive;
+			}
 		}
-		return false;
 	}
 
 	private isSameSource(a: LateralSource, b: LateralSource): boolean {
@@ -196,8 +200,11 @@ export class WorkbenchStore {
 				);
 			case 'similar':
 				return a.id === (b as typeof a).id && a.docKind === (b as typeof a).docKind;
+			default: {
+				const _exhaustive: never = a;
+				return _exhaustive;
+			}
 		}
-		return false;
 	}
 
 	private isSameContent(a: PaneContent, b: PaneContent): boolean {
@@ -214,8 +221,11 @@ export class WorkbenchStore {
 				return this.isSameRef(a.ref, (b as typeof a).ref);
 			case 'results':
 				return this.isSameSource(a.source, (b as typeof a).source);
+			default: {
+				const _exhaustive: never = a;
+				return _exhaustive;
+			}
 		}
-		return false;
 	}
 
 	private recordPaneHistory(index: 0 | 1, next: PaneContent) {
@@ -237,7 +247,12 @@ export class WorkbenchStore {
 		this.focusedPane = index;
 	}
 
-	openInPane(index: 0 | 1, content: PaneContent, opts: { recordHistory?: boolean } = {}) {
+	openInPane(
+		index: 0 | 1,
+		content: PaneContent,
+		opts: { recordHistory?: boolean; fallback?: PaneContent } = {}
+	) {
+		if (opts.fallback) this.paneFallbacks[index] = opts.fallback;
 		if (opts.recordHistory !== false) this.recordPaneHistory(index, content);
 		this.replacePane(index, content);
 	}

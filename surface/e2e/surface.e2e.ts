@@ -48,9 +48,12 @@ async function mockBackNavigationData(page: Page) {
 	await page.route('**/api/captures?**', (route) =>
 		route.fulfill({ status: 200, body: JSON.stringify({ items: [capture], next_cursor: null }) })
 	);
-	await page.route('**/api/working/notes', (route) =>
-		route.fulfill({ status: 200, body: JSON.stringify(working) })
-	);
+	await page.route('**/api/working/notes', (route) => {
+		if (route.request().method() === 'DELETE') {
+			return route.fulfill({ status: 200, body: JSON.stringify({ ok: true }) });
+		}
+		return route.fulfill({ status: 200, body: JSON.stringify(working) });
+	});
 	await page.route('**/api/working', (route) =>
 		route.fulfill({
 			status: 200,
@@ -219,6 +222,25 @@ test('back controls are named, keyboard-operable, and do not strand focus', asyn
 	await expect
 		.poll(() => page.evaluate(() => document.activeElement?.getAttribute('aria-label')))
 		.not.toBe('Back to previous view');
+});
+
+test('deleting from editor skips the now-unavailable reading view', async ({ page }) => {
+	await mockBackNavigationData(page);
+	page.on('dialog', (dialog) => dialog.accept());
+	await page.goto('/');
+	await page.getByRole('heading', { name: /Where you were/i }).waitFor();
+	await page.keyboard.press(`${mod}+/`);
+
+	const input = page.getByPlaceholder('Filter your library…');
+	await input.fill('alpha');
+	await page.getByRole('button', { name: 'Open notes.md', exact: true }).click();
+	await expect(page.getByText('Working notes body')).toBeVisible();
+	await page.getByRole('button', { name: 'Edit' }).click();
+	await page.getByRole('button', { name: 'Delete working document' }).click();
+
+	await expect(input).toBeVisible();
+	await expect(input).toHaveValue('alpha');
+	await expect(page.getByRole('button', { name: 'Delete working document' })).toBeHidden();
 });
 
 test('shortcut keys do not open capture while typing in library search', async ({ page }) => {

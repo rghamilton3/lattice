@@ -16,6 +16,7 @@
 	import { vim, Vim } from '@replit/codemirror-vim';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { workingKeys, fetchWorking, updateWorking, deleteWorking } from '$lib/api/working';
+	import type { PaneContent } from '$lib/types';
 	import Icon from '$components/icons/Icon.svelte';
 	import VimToggle from './VimToggle.svelte';
 
@@ -65,7 +66,7 @@
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: workingKeys.list() });
 			qc.removeQueries({ queryKey: workingKeys.detail(slug) });
-			goBack();
+			goBackAfterDelete();
 		},
 		onError: (err) => {
 			console.error('[editor] delete failed:', err);
@@ -93,6 +94,20 @@
 
 	function goBack() {
 		wb.goBackInPane(paneIndex);
+	}
+
+	function isDeletedWorkingContent(content: PaneContent) {
+		return (
+			(content.kind === 'doc' && content.ref.kind === 'working' && content.ref.slug === slug) ||
+			(content.kind === 'editor' && content.slug === slug)
+		);
+	}
+
+	function goBackAfterDelete() {
+		wb.goBackInPane(paneIndex, {
+			fallback: { kind: 'library', query: '' },
+			skipContent: isDeletedWorkingContent
+		});
 	}
 
 	function deleteDoc() {

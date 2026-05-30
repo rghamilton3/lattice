@@ -183,6 +183,24 @@ describe('WorkbenchStore', () => {
 		expect(wb.panes[0]).toEqual({ kind: 'library', query: '' });
 	});
 
+	it('skips invalidated previous content before falling back', () => {
+		const wb = new WorkbenchStore();
+		wb.openInPane(0, { kind: 'library', query: 'alpha' });
+		wb.openInPane(0, { kind: 'doc', ref: { kind: 'working', slug: 'notes' } });
+		wb.openInPane(0, { kind: 'editor', slug: 'notes' });
+
+		wb.goBackInPane(0, {
+			fallback: { kind: 'library', query: '' },
+			skipContent: (content) =>
+				(content.kind === 'doc' &&
+					content.ref.kind === 'working' &&
+					content.ref.slug === 'notes') ||
+				(content.kind === 'editor' && content.slug === 'notes')
+		});
+
+		expect(wb.panes[0]).toEqual({ kind: 'library', query: 'alpha' });
+	});
+
 	it('does not persist transient back history or fallback metadata', () => {
 		const a = new WorkbenchStore();
 		a.setBackFallback(0, { kind: 'library', query: '' });
@@ -202,6 +220,19 @@ describe('WorkbenchStore', () => {
 		wb.closeRightPane();
 		expect(wb.isSplit).toBe(false);
 		expect(wb.focusedPane).toBe(0);
+	});
+
+	it('clears right-pane back state before a later split-pane session', () => {
+		const wb = new WorkbenchStore();
+		wb.setBackFallback(1, { kind: 'library', query: 'stale' });
+		wb.openInPane(1, { kind: 'library', query: 'old' });
+		wb.openInPane(1, { kind: 'doc', ref: { kind: 'capture', id: 1 } });
+
+		wb.closeRightPane();
+		wb.openInPane(1, { kind: 'tasks' });
+		wb.goBackInPane(1);
+
+		expect(wb.panes[1]).toEqual({ kind: 'home' });
 	});
 
 	it('startTriage takes over the overlay; exitTriage fires API calls', async () => {

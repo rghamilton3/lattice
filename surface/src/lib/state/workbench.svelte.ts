@@ -1,5 +1,5 @@
 import { getContext, setContext } from 'svelte';
-import type { PaneContent, SearchResult } from '$lib/types';
+import type { DocRef, LateralSource, PaneContent, SearchResult } from '$lib/types';
 import { triageCapture, type TriageAction } from '$lib/api/captures';
 import { fetchSearch } from '$lib/api/search';
 import { ApiError } from '$lib/api/client';
@@ -172,8 +172,47 @@ export class WorkbenchStore {
 		return this.panes[index] ?? null;
 	}
 
+	private isSameRef(a: DocRef, b: DocRef): boolean {
+		if (a.kind !== b.kind) return false;
+		switch (a.kind) {
+			case 'working':
+				return a.slug === (b as typeof a).slug;
+			case 'capture':
+			case 'file':
+				return a.id === (b as typeof a).id;
+		}
+	}
+
+	private isSameSource(a: LateralSource, b: LateralSource): boolean {
+		if (a.kind !== b.kind) return false;
+		switch (a.kind) {
+			case 'mentions':
+				return a.q === (b as typeof a).q;
+			case 'nearby':
+				return (
+					a.timestamp === (b as typeof a).timestamp &&
+					a.window_hours === (b as typeof a).window_hours
+				);
+			case 'similar':
+				return a.id === (b as typeof a).id && a.docKind === (b as typeof a).docKind;
+		}
+	}
+
 	private isSameContent(a: PaneContent, b: PaneContent): boolean {
-		return JSON.stringify(a) === JSON.stringify(b);
+		if (a.kind !== b.kind) return false;
+		switch (a.kind) {
+			case 'home':
+			case 'tasks':
+				return true;
+			case 'library':
+				return a.query === (b as typeof a).query;
+			case 'editor':
+				return a.slug === (b as typeof a).slug;
+			case 'doc':
+				return this.isSameRef(a.ref, (b as typeof a).ref);
+			case 'results':
+				return this.isSameSource(a.source, (b as typeof a).source);
+		}
 	}
 
 	private recordPaneHistory(index: 0 | 1, next: PaneContent) {
@@ -206,6 +245,8 @@ export class WorkbenchStore {
 
 	closeRightPane() {
 		this.panes = [this.panes[0]];
+		this.paneHistory[1] = [];
+		this.paneFallbacks[1] = DEFAULT_BACK_FALLBACK;
 		if (this.focusedPane === 1) this.focusedPane = 0;
 	}
 
@@ -213,17 +254,21 @@ export class WorkbenchStore {
 		this.paneFallbacks[index] = content;
 	}
 
-	goBackInPane(index: 0 | 1) {
+	goBackInPane(
+		index: 0 | 1,
+		opts: { fallback?: PaneContent; skipContent?: (content: PaneContent) => boolean } = {}
+	) {
 		const current = this.paneContent(index);
 		const history = this.paneHistory[index];
 		while (history.length > 0) {
 			const previous = history.pop() as PaneContent;
+			if (opts.skipContent?.(previous)) continue;
 			if (!current || !this.isSameContent(previous, current)) {
 				this.replacePane(index, previous);
 				return;
 			}
 		}
-		const fallback = this.paneFallbacks[index];
+		const fallback = opts.fallback ?? this.paneFallbacks[index];
 		if (!current || !this.isSameContent(fallback, current)) {
 			this.replacePane(index, fallback);
 		}

@@ -3,6 +3,7 @@
 	import { browser } from '$app/environment';
 	import { untrack } from 'svelte';
 	import { EditorState, Compartment } from '@codemirror/state';
+	import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
 	import {
 		EditorView,
 		keymap,
@@ -32,6 +33,8 @@
 	let editorReady = $state(false);
 	let mountedSlug: string | null = null;
 	const vimCompartment = new Compartment();
+	const themeCompartment = new Compartment();
+	let themeKey = $state('dark');
 	let isDirty = $state(false);
 	let saveTimer: ReturnType<typeof setTimeout> | null = null;
 	let saveStatus = $state<'' | 'saved' | 'error' | 'deleting'>('');
@@ -97,6 +100,80 @@
 		return enabled ? vim() : [];
 	}
 
+	function editorPalette(theme: string) {
+		if (theme === 'light') {
+			return {
+				background: '#faf9f4',
+				foreground: '#252632',
+				muted: '#6b6d78',
+				line: '#d8d3c8',
+				activeLine: '#f1efe7',
+				selection: '#cbdff7',
+				accent: '#2f6fad'
+			};
+		}
+		if (theme === 'sepia') {
+			return {
+				background: '#f1e9d8',
+				foreground: '#493d2c',
+				muted: '#79694e',
+				line: '#c8b997',
+				activeLine: '#e7dcc6',
+				selection: '#dac39a',
+				accent: '#8b5b2f'
+			};
+		}
+		return {
+			background: '#181a20',
+			foreground: '#eeece4',
+			muted: '#9d9a91',
+			line: '#4a4d56',
+			activeLine: '#22252d',
+			selection: '#314b6e',
+			accent: '#9dc4ff'
+		};
+	}
+
+	function buildEditorTheme(theme: string) {
+		const palette = editorPalette(theme);
+		const shellTheme = EditorView.theme(
+			{
+				'&': {
+					height: '100%',
+					backgroundColor: palette.background,
+					color: palette.foreground
+				},
+				'.cm-scroller': {
+					overflow: 'auto',
+					fontFamily: 'var(--font-mono)',
+					fontSize: '0.933rem'
+				},
+				'.cm-content': { caretColor: palette.accent },
+				'.cm-cursor, .cm-dropCursor': { borderLeftColor: palette.accent },
+				'.cm-gutters': {
+					backgroundColor: palette.background,
+					borderRightColor: palette.line,
+					color: palette.muted
+				},
+				'.cm-activeLine, .cm-activeLineGutter': { backgroundColor: palette.activeLine },
+				'.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
+					backgroundColor: palette.selection
+				},
+				'.cm-line': { color: palette.foreground }
+			},
+			{ dark: theme === 'dark' }
+		);
+
+		return theme === 'dark'
+			? [oneDark, shellTheme]
+			: [
+					shellTheme,
+					syntaxHighlighting(defaultHighlightStyle, {
+						fallback: true
+					})
+				];
+	}
+
 	function goBack() {
 		wb.openInPane(paneIndex, { kind: 'library', query: '' });
 	}
@@ -149,7 +226,7 @@
 				drawSelection(),
 				highlightActiveLine(),
 				markdown(),
-				oneDark,
+				themeCompartment.of(buildEditorTheme(untrack(() => themeKey))),
 				vimCompartment.of(buildVimExtension(untrack(() => wb.vimMode))),
 				keymap.of([
 					{
@@ -172,15 +249,6 @@
 				]),
 				EditorView.updateListener.of((update) => {
 					if (update.docChanged) scheduleAutosave(update.state.doc.toString());
-				}),
-				EditorView.theme({
-					'&': { height: '100%', backgroundColor: 'var(--color-surface)' },
-					'.cm-scroller': {
-						overflow: 'auto',
-						fontFamily: 'var(--font-mono)',
-						fontSize: '0.933rem'
-					},
-					'.cm-content': { caretColor: 'var(--color-accent)' }
 				})
 			]
 		});
@@ -195,6 +263,23 @@
 		const enabled = wb.vimMode;
 		if (!view) return;
 		view.dispatch({ effects: vimCompartment.reconfigure(buildVimExtension(enabled)) });
+	});
+
+	$effect(() => {
+		const theme = themeKey;
+		if (!view) return;
+		view.dispatch({ effects: themeCompartment.reconfigure(buildEditorTheme(theme)) });
+	});
+
+	$effect(() => {
+		if (!browser) return;
+		const rootEl = document.documentElement;
+		themeKey = rootEl.dataset.theme ?? 'dark';
+		const observer = new MutationObserver(() => {
+			themeKey = rootEl.dataset.theme ?? 'dark';
+		});
+		observer.observe(rootEl, { attributes: true, attributeFilter: ['data-theme'] });
+		return () => observer.disconnect();
 	});
 
 	$effect(() => {

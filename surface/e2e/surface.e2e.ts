@@ -170,7 +170,7 @@ async function routePreviewDoc(
 	});
 }
 
-async function openWorkingEditor(
+async function openPreviewWorkingEditor(
 	page: Page,
 	content: string,
 	options: { saveStatus?: number; saveBody?: string } = {}
@@ -596,13 +596,13 @@ test('quick capture: 500 keeps modal open with failure message', async ({ page }
 });
 
 test('working doc editor keeps preview closed until split pane is requested', async ({ page }) => {
-	await openWorkingEditor(
+	await openPreviewWorkingEditor(
 		page,
 		'# Preview Title\n\n- first item\n- **second item**\n\n> quoted\n\n```ts\nconst ok = true;\n```\n\n[docs](https://example.com)'
 	);
 
 	await expect(page.getByRole('region', { name: 'Pane 2' })).toBeHidden();
-	await expect(page.getByRole('button', { name: 'Back to library' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Back to previous view' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Open preview in split pane' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Insert diagram' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Save working document' })).toBeVisible();
@@ -625,7 +625,7 @@ test('working doc editor keeps preview closed until split pane is requested', as
 });
 
 test('working doc editor inserts a mermaid diagram snippet', async ({ page }) => {
-	const editor = await openWorkingEditor(page, '# Diagram Draft\n\n');
+	const editor = await openPreviewWorkingEditor(page, '# Diagram Draft\n\n');
 
 	await editor.click();
 	await page.getByRole('button', { name: 'Insert diagram' }).click();
@@ -637,7 +637,7 @@ test('working doc editor inserts a mermaid diagram snippet', async ({ page }) =>
 });
 
 test('working doc split preview refreshes after successful save', async ({ page }) => {
-	const editor = await openWorkingEditor(page, '# Old Title\n\nold body');
+	const editor = await openPreviewWorkingEditor(page, '# Old Title\n\nold body');
 	await openPreviewSplit(page);
 
 	await editor.click();
@@ -655,12 +655,12 @@ test('working doc split preview refreshes after successful save', async ({ page 
 
 test('working doc preview layout remains reachable on narrow viewports', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 760 });
-	await openWorkingEditor(
+	await openPreviewWorkingEditor(
 		page,
 		'# Narrow Title\n\nA long preview line that should stay inside the pane.'
 	);
 
-	await expect(page.getByRole('button', { name: 'Back to library' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Back to previous view' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Open preview in split pane' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Insert diagram' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Save working document' })).toBeVisible();
@@ -676,9 +676,12 @@ test('working doc preview layout remains reachable on narrow viewports', async (
 test('working doc editor keyboard navigation reaches controls and preview without a trap', async ({
 	page
 }) => {
-	await openWorkingEditor(page, '# Keyboard Title\n\n[focus link](https://example.com)');
+	await openPreviewWorkingEditor(page, '# Keyboard Title\n\n[focus link](https://example.com)');
 	await openPreviewSplit(page);
-	await page.getByRole('button', { name: 'Back to library' }).focus();
+	await page
+		.getByRole('region', { name: 'Pane 1' })
+		.getByRole('button', { name: 'Back to previous view' })
+		.focus();
 
 	const reached = {
 		back: true,
@@ -699,7 +702,7 @@ test('working doc editor keyboard navigation reaches controls and preview withou
 				text: element?.textContent ?? ''
 			};
 		});
-		reached.back ||= active.aria === 'Back to library';
+		reached.back ||= active.aria === 'Back to previous view';
 		reached.split ||= active.aria === 'Open preview in split pane';
 		reached.diagram ||= active.aria === 'Insert diagram';
 		reached.save ||= active.aria === 'Save working document';
@@ -720,7 +723,7 @@ test('working doc editor keyboard navigation reaches controls and preview withou
 });
 
 test('working doc split preview keeps saved content until save', async ({ page }) => {
-	const editor = await openWorkingEditor(page, '# Fresh Title\n\nbody');
+	const editor = await openPreviewWorkingEditor(page, '# Fresh Title\n\nbody');
 	await openPreviewSplit(page);
 	const preview = page.getByRole('region', { name: 'Pane 2' });
 
@@ -738,7 +741,10 @@ test('working doc split preview keeps saved content until save', async ({ page }
 test('working doc save failure preserves editing and recoverable preview status', async ({
 	page
 }) => {
-	await openWorkingEditor(page, '# Previous Preview', { saveStatus: 500, saveBody: 'save failed' });
+	await openPreviewWorkingEditor(page, '# Previous Preview', {
+		saveStatus: 500,
+		saveBody: 'save failed'
+	});
 	await openPreviewSplit(page);
 	const editor = page.locator('.cm-content').first();
 	await editor.click();

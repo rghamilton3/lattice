@@ -319,6 +319,20 @@
 		word-break: break-word;
 	}
 
+	.markdown-renderer :global(.mermaid-error) {
+		border: 1px solid color-mix(in srgb, var(--c-alarm) 55%, transparent);
+		border-radius: 10px;
+		background: color-mix(in srgb, var(--c-alarm) 10%, transparent);
+		padding: 12px;
+		color: var(--text);
+	}
+
+	.markdown-renderer :global(.mermaid-error figcaption) {
+		margin-bottom: 8px;
+		color: var(--c-alarm);
+		font-weight: 600;
+	}
+
 	.markdown-renderer :global(.label),
 	.markdown-renderer :global(.nodeLabel),
 	.markdown-renderer :global(.nodeLabel *),

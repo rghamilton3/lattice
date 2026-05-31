@@ -43,6 +43,14 @@
 	let saveErrorMsg = $state('');
 	let statusTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastLoadedSlug = '';
+	const previewTargetPane = $derived(paneIndex === 0 ? 1 : 0);
+	const previewTargetContent = $derived(wb.panes[previewTargetPane]);
+	const isPreviewOpenInSplit = $derived(
+		!!slug &&
+			previewTargetContent?.kind === 'doc' &&
+			previewTargetContent.ref.kind === 'working' &&
+			previewTargetContent.ref.slug === slug
+	);
 	const previewStatusText = $derived(
 		saveStatus === 'error'
 			? 'Preview still shows last saved content. Save again to refresh it.'
@@ -212,8 +220,7 @@
 
 	function openPreviewInSplit() {
 		if (!slug) return;
-		const targetPane = Number(paneIndex) === 0 ? 1 : 0;
-		wb.openInPane(targetPane, { kind: 'doc', ref: { kind: 'working', slug } });
+		wb.openInPane(previewTargetPane, { kind: 'doc', ref: { kind: 'working', slug } });
 	}
 
 	function insertDiagram() {
@@ -375,8 +382,11 @@
 				<span class="mute">· deleting</span>
 			{/if}
 		</span>
-		<span role="status" aria-live="polite" class="editor-preview-status">· {previewStatusText}</span
-		>
+		{#if isPreviewOpenInSplit}
+			<span role="status" aria-live="polite" class="editor-preview-status"
+				>· {previewStatusText}</span
+			>
+		{/if}
 		<span class="row editor-actions">
 			<button
 				type="button"
@@ -399,6 +409,7 @@
 				<Icon name="plus" size={14} /> Diagram
 			</button>
 			<button
+				type="button"
 				class="btn btn-ghost"
 				title="Save working document"
 				aria-label="Save working document"

@@ -18,6 +18,7 @@
 	import { vim, Vim } from '@replit/codemirror-vim';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { workingKeys, fetchWorking, updateWorking, deleteWorking } from '$lib/api/working';
+	import type { PaneContent } from '$lib/types';
 	import Icon from '$components/icons/Icon.svelte';
 	import VimToggle from './VimToggle.svelte';
 
@@ -74,7 +75,7 @@
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: workingKeys.list() });
 			qc.removeQueries({ queryKey: workingKeys.detail(slug ?? '') });
-			goBack();
+			goBackAfterDelete();
 		},
 		onError: (err) => {
 			console.error('[editor] delete failed:', err);
@@ -176,7 +177,21 @@
 	}
 
 	function goBack() {
-		wb.openInPane(paneIndex, { kind: 'library', query: '' });
+		wb.goBackInPane(paneIndex);
+	}
+
+	function isDeletedWorkingContent(content: PaneContent) {
+		return (
+			(content.kind === 'doc' && content.ref.kind === 'working' && content.ref.slug === slug) ||
+			(content.kind === 'editor' && content.slug === slug)
+		);
+	}
+
+	function goBackAfterDelete() {
+		wb.goBackInPane(paneIndex, {
+			fallback: { kind: 'library', query: '' },
+			skipContent: isDeletedWorkingContent
+		});
 	}
 
 	function deleteDoc() {
@@ -310,8 +325,8 @@
 	<div class="editor-status">
 		<button
 			class="btn btn-ghost"
-			title="Back to library"
-			aria-label="Back to library"
+			title="Back to previous view"
+			aria-label="Back to previous view"
 			onclick={goBack}
 		>
 			<Icon name="arrow-right" size={14} class="rotate-180" /> Back
@@ -375,8 +390,11 @@
 		{:else if docQuery.isError}
 			<div class="p-3 text-xs" style="color:var(--c-alarm)" role="alert">
 				<p>{docQuery.error?.message ?? 'error loading doc'}</p>
-				<button class="btn btn-ghost" style="margin-top:8px" onclick={goBack}
-					>Back to library</button
+				<button
+					class="btn btn-ghost"
+					style="margin-top:8px"
+					aria-label="Back to previous view"
+					onclick={goBack}>Back</button
 				>
 			</div>
 		{:else}

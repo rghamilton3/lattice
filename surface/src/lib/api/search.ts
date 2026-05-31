@@ -1,7 +1,7 @@
 import { apiFetch } from './client';
 import type { SearchResult } from '$lib/types';
 
-export type DocKind = 'capture' | 'local-file' | 'working';
+export type DocKind = 'capture' | 'local-file' | 'working' | 'archive';
 
 export interface NearbyResult {
 	id: number;

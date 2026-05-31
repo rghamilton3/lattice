@@ -17,7 +17,10 @@
 		if (refParam) {
 			const ref = parseRef(refParam);
 			if (ref) {
-				wb.openInPane(0, { kind: 'doc', ref } satisfies PaneContent);
+				wb.openInPane(0, { kind: 'doc', ref } satisfies PaneContent, {
+					recordHistory: false,
+					fallback: { kind: 'library', query: '' }
+				});
 				return;
 			}
 			logError('deeplink', refParam);
@@ -26,9 +29,18 @@
 
 		// `?view=doc` without a ref has nothing to open — fall through to home.
 		if (viewParam === 'home') wb.openInPane(0, { kind: 'home' });
-		else if (viewParam === 'tasks') wb.openInPane(0, { kind: 'tasks' });
-		else if (viewParam === 'library' || viewParam === 'search')
-			wb.openInPane(0, { kind: 'library', query: '' });
+		else if (viewParam === 'tasks') {
+			wb.openInPane(0, { kind: 'tasks' }, { recordHistory: false, fallback: { kind: 'home' } });
+		} else if (viewParam === 'library' || viewParam === 'search') {
+			wb.openInPane(
+				0,
+				{ kind: 'library', query: '' },
+				{
+					recordHistory: false,
+					fallback: { kind: 'home' }
+				}
+			);
+		}
 	});
 </script>
 

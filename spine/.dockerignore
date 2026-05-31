@@ -3,6 +3,8 @@
 .github/
 node_modules/
 .git/
+Dockerfile*
+.dockerignore
 captures/
 *.db
 *.db-shm

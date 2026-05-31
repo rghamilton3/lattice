@@ -44,6 +44,10 @@
 	{:else if name === 'quote'}
 		<path d="M6 8h5v4c0 3-2 5-5 5" />
 		<path d="M14 8h5v4c0 3-2 5-5 5" />
+	{:else if name === 'notebook-pen'}
+		<path d="M7 4h11a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7z" />
+		<path d="M5 6h4M5 10h4M5 14h4M5 18h4" />
+		<path d="M13 15l4.5-4.5 2 2L15 17h-2z" />
 	{:else if name === 'clock'}
 		<circle cx="12" cy="12" r="8.5" />
 		<path d="M12 7v5l3 2" />

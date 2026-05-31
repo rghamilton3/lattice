@@ -8,9 +8,20 @@
 
 	const wb = getWorkbenchContext();
 
-	let modal = $state<HTMLDivElement | null>(null);
+	let modal: HTMLDivElement | null = null;
 	let q = $state('');
 	let active = $state(0);
+
+	function captureModal(element: HTMLDivElement) {
+		modal = element;
+		return () => {
+			if (modal === element) modal = null;
+		};
+	}
+
+	function focusOnMount(element: HTMLInputElement) {
+		element.focus();
+	}
 
 	const workingQuery = createQuery(() => ({
 		queryKey: workingKeys.list(),
@@ -174,7 +185,7 @@
 
 <svelte:document onclick={handleDocumentClick} />
 <div
-	bind:this={modal}
+	{@attach captureModal}
 	class="palette soft-in"
 	role="dialog"
 	aria-modal="true"
@@ -185,9 +196,8 @@
 >
 	<div class="palette-input-row">
 		<Icon name="search" size={14} />
-		<!-- svelte-ignore a11y_autofocus -->
 		<input
-			autofocus
+			{@attach focusOnMount}
 			bind:value={q}
 			class="palette-input"
 			aria-label="Command palette search"

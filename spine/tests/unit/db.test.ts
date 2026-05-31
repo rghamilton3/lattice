@@ -23,6 +23,7 @@ describe('db.initDb', () => {
 		expect(names).toContain('file_index');
 		expect(names).toContain('capture_attachments');
 		expect(names).toContain('archives');
+		expect(names).toContain('annotations');
 		expect(names).toContain('tracks');
 		expect(names).toContain('track_queries');
 
@@ -41,6 +42,7 @@ describe('db.initDb', () => {
 			'009_working_attachments.sql',
 			'010_archives.sql',
 			'011_tracks.sql',
+			'012_annotations.sql',
 		]);
 		db.close();
 	});
@@ -79,7 +81,7 @@ describe('db.initDb', () => {
 		const { initDb, getMigrationStatus } = await import('../../src/db');
 		const db = initDb();
 
-		expect(getMigrationStatus(db)).toEqual({ ready: true, applied: 11 });
+		expect(getMigrationStatus(db)).toEqual({ ready: true, applied: 12 });
 		db.close();
 	});
 

@@ -2,6 +2,7 @@ export type TriageAction = 'keep' | 'archive' | 'promote' | 'task' | 'skip';
 
 const COMMAND_MAP = new Map<string, TriageAction>([
 	['task', 'task'],
+	['todo', 'task'],
 	['note', 'keep'],
 	['skip', 'skip'],
 ]);

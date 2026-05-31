@@ -120,6 +120,52 @@ describe('GET /api/search', () => {
 		});
 	});
 
+	it('returns mapped annotation hits with source target context', async () => {
+		app.db
+			.prepare(
+				`INSERT INTO annotations
+				 (id, target_kind, target_id, selection_text, comment, created_at, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			)
+			.run(
+				'ann_search',
+				'working',
+				'daily-note',
+				'important passage',
+				'searchable annotation note',
+				'2026-01-01T00:00:00.000Z',
+				'2026-01-02T00:00:00.000Z',
+			);
+		app.qmd.setHits([
+			{
+				file: 'qmd://annotations/ann_search.md',
+				score: 0.8,
+				bestChunk: 'annotation snippet',
+				body: 'annotation body',
+				displayPath: 'annotations/ann_search.md',
+			},
+		]);
+
+		const res = await app.app.handle(req('/api/search?q=annotation'));
+		const { results } = await json(res);
+
+		expect(results).toEqual([
+			{
+				id: 'ann_search',
+				score: 0.8,
+				snippet: 'annotation snippet',
+				body: 'annotation body',
+				path: 'annotations/ann_search.md',
+				kind: 'annotation',
+				title: 'Annotation on working daily-note',
+				target_kind: 'working',
+				target_id: 'daily-note',
+				annotation_id: 'ann_search',
+				modified_at: '2026-01-02T00:00:00.000Z',
+			},
+		]);
+	});
+
 	it('drops local-file hits without a backing file_index row', async () => {
 		app.qmd.setHits([
 			{

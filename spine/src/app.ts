@@ -14,6 +14,7 @@ import { statusRoutes } from './routes/status';
 import { tasksRoutes } from './routes/tasks';
 import { attachmentRoutes } from './routes/attachments';
 import { archivesRoutes } from './routes/archives';
+import { annotationsRoutes } from './routes/annotations';
 import { buildPlatformStatus } from './status';
 
 export interface AppDeps {
@@ -53,6 +54,7 @@ export function buildApp(deps: AppDeps) {
 					),
 				)
 				.use(attachmentRoutes(db, { attachmentsDir }))
+				.use(annotationsRoutes(db))
 				.use(archivesRoutes(db, { archiveDir })),
 		)
 		.group('/api/agent', (app) =>

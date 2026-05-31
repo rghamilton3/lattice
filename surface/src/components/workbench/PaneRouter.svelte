@@ -19,7 +19,7 @@
 {:else if content.kind === 'results'}
 	<ResultList {paneIndex} source={content.source} />
 {:else if content.kind === 'doc'}
-	<ReadingPane {paneIndex} ref={content.ref} />
+	<ReadingPane {paneIndex} ref={content.ref} revealAnnotationId={content.revealAnnotationId} />
 {:else if content.kind === 'editor'}
 	<EditorPane {paneIndex} slug={content.slug} />
 {/if}

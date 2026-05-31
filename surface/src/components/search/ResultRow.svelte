@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { createWorking } from '$lib/api/working';
-	import { archiveRawUrl } from '$lib/api/archives';
 	import type { SearchResult, DocRef } from '$lib/types';
 	import Icon from '$components/icons/Icon.svelte';
 	import { relTime } from '$lib/utils/relTime';
@@ -13,28 +12,38 @@
 	const chipClass = $derived(
 		result.kind === 'local-file'
 			? 'chip chip-file'
-			: result.kind === 'archive'
-				? 'chip chip-working'
-				: result.kind === 'capture' || result.kind === 'capture-attachment'
-					? 'chip chip-capture'
-					: 'chip chip-working'
+			: result.kind === 'annotation'
+				? 'chip chip-annotation'
+				: result.kind === 'archive'
+					? 'chip chip-working'
+					: result.kind === 'capture' || result.kind === 'capture-attachment'
+						? 'chip chip-capture'
+						: 'chip chip-working'
 	);
 
 	const title = $derived(
 		result.kind === 'capture'
 			? `capture #${result.id}`
-			: result.kind === 'archive'
-				? (result.title ?? result.url)
-				: result.kind === 'local-file'
-					? (result.path.split('/').pop() ?? result.path)
-					: result.kind === 'capture-attachment' || result.kind === 'working-attachment'
-						? result.filename
-						: `${result.slug}.md`
+			: result.kind === 'annotation'
+				? (result.title ?? `annotation ${result.annotation_id}`)
+				: result.kind === 'archive'
+					? (result.title ?? result.url)
+					: result.kind === 'local-file'
+						? (result.path.split('/').pop() ?? result.path)
+						: result.kind === 'capture-attachment' || result.kind === 'working-attachment'
+							? result.filename
+							: `${result.slug}.md`
 	);
 
 	function refToDocRef(r: SearchResult): DocRef {
-		if (r.kind === 'capture') return { kind: 'capture', id: r.id };
-		if (r.kind === 'archive') return { kind: 'file', id: r.id };
+		if (r.kind === 'annotation') {
+			if (r.target_kind === 'capture') return { kind: 'capture', id: Number(r.target_id) };
+			if (r.target_kind === 'local_file') return { kind: 'file', id: Number(r.target_id) };
+			if (r.target_kind === 'archive') return { kind: 'archive', id: Number(r.target_id) };
+			return { kind: 'working', slug: r.target_id };
+		}
+		if (r.kind === 'capture') return { kind: 'capture', id: Number(r.id) };
+		if (r.kind === 'archive') return { kind: 'archive', id: Number(r.id) };
 		if (r.kind === 'working') return { kind: 'working', slug: r.slug };
 		if (r.kind === 'capture-attachment') return { kind: 'capture', id: r.capture_id };
 		if (r.kind === 'working-attachment') return { kind: 'working', slug: r.slug };
@@ -42,6 +51,20 @@
 	}
 
 	function similarSource(r: SearchResult) {
+		if (r.kind === 'annotation') {
+			return {
+				kind: 'similar' as const,
+				id: r.target_kind === 'working' ? r.target_id : Number(r.target_id),
+				docKind:
+					r.target_kind === 'capture'
+						? ('capture' as const)
+						: r.target_kind === 'working'
+							? ('working' as const)
+							: r.target_kind === 'archive'
+								? ('archive' as const)
+								: ('local-file' as const)
+			};
+		}
 		if (r.kind === 'capture-attachment') {
 			return { kind: 'similar' as const, id: r.capture_id, docKind: 'capture' as const };
 		}
@@ -51,7 +74,7 @@
 		return {
 			kind: 'similar' as const,
 			id: r.id,
-			docKind: r.kind === 'archive' ? 'local-file' : r.kind
+			docKind: r.kind
 		};
 	}
 
@@ -66,7 +89,7 @@
 		const params =
 			result.kind === 'capture'
 				? { title: baseTitle, seed_capture_id: result.id }
-				: { title: baseTitle, seed_file_id: result.id };
+				: { title: baseTitle, seed_file_id: Number(result.id) };
 		try {
 			const { slug } = await createWorking(params);
 			wb.openInPane(paneIndex, { kind: 'editor', slug });
@@ -118,7 +141,7 @@
 			<button
 				class="btn"
 				aria-label={`Open archived page ${title}`}
-				onclick={() => openNewTab(archiveRawUrl(result.id))}
+				onclick={() => wb.openInPane(paneIndex, { kind: 'doc', ref: refToDocRef(result) })}
 			>
 				<Icon name="arrow-right" size={13} /> Open archive
 			</button>
@@ -133,19 +156,29 @@
 			<button
 				class="btn"
 				aria-label={`Open ${title}`}
-				onclick={() => wb.openInPane(paneIndex, { kind: 'doc', ref: refToDocRef(result) })}
+				onclick={() =>
+					wb.openInPane(paneIndex, {
+						kind: 'doc',
+						ref: refToDocRef(result),
+						revealAnnotationId: result.kind === 'annotation' ? result.annotation_id : undefined
+					})}
 			>
 				<Icon name="arrow-right" size={13} /> Open
 			</button>
 			<button
 				class="btn btn-ghost"
 				aria-label={`Open ${title} in split pane`}
-				onclick={() => wb.openInOther(paneIndex, { kind: 'doc', ref: refToDocRef(result) })}
+				onclick={() =>
+					wb.openInOther(paneIndex, {
+						kind: 'doc',
+						ref: refToDocRef(result),
+						revealAnnotationId: result.kind === 'annotation' ? result.annotation_id : undefined
+					})}
 			>
 				<Icon name="split" size={13} /> Open in split
 			</button>
 		{/if}
-		{#if result.kind !== 'working' && result.kind !== 'archive'}
+		{#if result.kind !== 'working' && result.kind !== 'archive' && result.kind !== 'annotation'}
 			<button
 				class="btn btn-ghost"
 				aria-label={`Promote ${title} to working document`}

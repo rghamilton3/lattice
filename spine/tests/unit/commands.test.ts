@@ -10,6 +10,13 @@ describe('parseCommand', () => {
 			});
 		});
 
+		it('/todo maps to triage_action task', () => {
+			expect(parseCommand('/todo buy oat milk')).toEqual({
+				action: 'task',
+				strippedText: 'buy oat milk',
+			});
+		});
+
 		it('/note maps to triage_action keep', () => {
 			expect(parseCommand('/note remember this')).toEqual({
 				action: 'keep',
@@ -28,6 +35,13 @@ describe('parseCommand', () => {
 	describe('case insensitivity', () => {
 		it('/TASK is treated as /task', () => {
 			expect(parseCommand('/TASK buy milk'))?.toEqual({
+				action: 'task',
+				strippedText: 'buy milk',
+			});
+		});
+
+		it('/TODO is treated as /todo', () => {
+			expect(parseCommand('/TODO buy milk'))?.toEqual({
 				action: 'task',
 				strippedText: 'buy milk',
 			});
@@ -63,6 +77,10 @@ describe('parseCommand', () => {
 
 		it('known command with no body (/task alone)', () => {
 			expect(parseCommand('/task')).toBeNull();
+		});
+
+		it('known alias with no body (/todo alone)', () => {
+			expect(parseCommand('/todo')).toBeNull();
 		});
 
 		it('known command with only whitespace body', () => {
@@ -110,6 +128,13 @@ describe('parseCommand', () => {
 
 		it('handles tabs between command and body', () => {
 			expect(parseCommand('/task\tbuy milk'))?.toEqual({
+				action: 'task',
+				strippedText: 'buy milk',
+			});
+		});
+
+		it('handles tabs between alias and body', () => {
+			expect(parseCommand('/todo\tbuy milk'))?.toEqual({
 				action: 'task',
 				strippedText: 'buy milk',
 			});

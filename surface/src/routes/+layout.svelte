@@ -61,6 +61,7 @@
 	<link rel="manifest" href="/manifest.webmanifest" />
 	<meta name="theme-color" content="#1f2937" />
 	<meta name="application-name" content="Lattice Surface" />
+	<meta name="mobile-web-app-capable" content="yes" />
 	<meta name="apple-mobile-web-app-capable" content="yes" />
 	<meta name="apple-mobile-web-app-title" content="Surface" />
 </svelte:head>

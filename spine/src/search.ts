@@ -39,8 +39,18 @@ interface ArchiveData {
 	extracted_text: string;
 }
 
+interface AnnotationData {
+	id: string;
+	target_kind: 'capture' | 'local_file' | 'working' | 'archive';
+	target_id: string;
+	selection_text: string | null;
+	comment: string;
+	created_at: string;
+	updated_at: string;
+}
+
 export interface SearchResult {
-	id: number;
+	id: number | string;
 	score: number;
 	snippet: string;
 	body: string;
@@ -51,13 +61,17 @@ export interface SearchResult {
 		| 'working'
 		| 'capture-attachment'
 		| 'working-attachment'
-		| 'archive';
+		| 'archive'
+		| 'annotation';
 	machine_id?: string;
 	slug?: string;
 	capture_id?: number;
 	filename?: string;
 	url?: string;
 	title?: string | null;
+	target_kind?: AnnotationData['target_kind'];
+	target_id?: string;
+	annotation_id?: string;
 	modified_at: string;
 }
 
@@ -83,6 +97,10 @@ export function workingAttachmentsMdDir(): string {
 
 export function archivesMdDir(): string {
 	return join(dbDir(), 'archive-index');
+}
+
+export function annotationsMdDir(): string {
+	return join(dbDir(), 'annotation-index');
 }
 
 function qmdDbPath(): string {
@@ -134,6 +152,19 @@ export function archiveToMarkdown({
 	return `---\nid: ${id}\nurl: ${sanitize(url)}\ntitle: ${sanitize(title ?? url)}\narchived_at: ${sanitize(archived_at)}\nquality: ${sanitize(quality)}\n---\n\n${sanitize(title ?? url)}\n\n${extracted_text}\n`;
 }
 
+export function annotationToMarkdown({
+	id,
+	target_kind,
+	target_id,
+	selection_text,
+	comment,
+	created_at,
+	updated_at,
+}: AnnotationData): string {
+	const selected = selection_text ? `\n\nSelected passage:\n${selection_text}\n` : '';
+	return `---\nid: ${sanitize(id)}\ntarget_kind: ${target_kind}\ntarget_id: ${sanitize(target_id)}\ncreated_at: ${sanitize(created_at)}\nupdated_at: ${sanitize(updated_at)}\n---\n\nAnnotation on ${target_kind} ${sanitize(target_id)}${selected}\n\nComment:\n${comment}\n`;
+}
+
 let _db: Database | null = null;
 let _store: QMDStore | null = null;
 let _initFailed = false;
@@ -163,6 +194,7 @@ export async function initSearch(db: Database): Promise<void> {
 	const attachmentsMd = attachmentsMdDir();
 	const workingAttachmentsMd = workingAttachmentsMdDir();
 	const archivesMd = archivesMdDir();
+	const annotationsMd = annotationsMdDir();
 	// QMD's glob over `working` runs at createStore time; without the dir
 	// present it raises and trips _initFailed. Pre-refactor working.ts mkdir'd
 	// at module load; now it only mkdirs lazily, so init must do it.
@@ -172,6 +204,7 @@ export async function initSearch(db: Database): Promise<void> {
 	mkdirSync(attachmentsMd, { recursive: true });
 	mkdirSync(workingAttachmentsMd, { recursive: true });
 	mkdirSync(archivesMd, { recursive: true });
+	mkdirSync(annotationsMd, { recursive: true });
 
 	const rows = db
 		.query('SELECT id, text, source, captured_at FROM captures')
@@ -224,6 +257,19 @@ export async function initSearch(db: Database): Promise<void> {
 		}
 	}
 
+	const annotationRows = db
+		.query(
+			'SELECT id, target_kind, target_id, selection_text, comment, created_at, updated_at FROM annotations',
+		)
+		.all() as AnnotationData[];
+
+	for (const row of annotationRows) {
+		const filePath = join(annotationsMd, `${row.id}.md`);
+		if (!existsSync(filePath)) {
+			writeFileSync(filePath, annotationToMarkdown(row));
+		}
+	}
+
 	try {
 		_store = await createStore({
 			dbPath: qmdDbPath(),
@@ -235,6 +281,7 @@ export async function initSearch(db: Database): Promise<void> {
 					'capture-attachments': { path: attachmentsMd, pattern: '**/*.md' },
 					'working-attachments': { path: workingAttachmentsMd, pattern: '**/*.md' },
 					archives: { path: archivesMd, pattern: '**/*.md' },
+					annotations: { path: annotationsMd, pattern: '**/*.md' },
 				},
 			},
 		});
@@ -262,6 +309,16 @@ export function writeCaptureFile(
 export function writeArchiveIndex(row: ArchiveData): void {
 	mkdirSync(archivesMdDir(), { recursive: true });
 	writeFileSync(join(archivesMdDir(), `${row.id}.md`), archiveToMarkdown(row));
+}
+
+export function writeAnnotationIndex(row: AnnotationData): void {
+	mkdirSync(annotationsMdDir(), { recursive: true });
+	writeFileSync(join(annotationsMdDir(), `${row.id}.md`), annotationToMarkdown(row));
+}
+
+export function deleteAnnotationIndex(id: string): void {
+	const mdPath = join(annotationsMdDir(), `${id}.md`);
+	if (existsSync(mdPath)) unlinkSync(mdPath);
 }
 
 export function writeWorkingAttachmentIndex(
@@ -350,6 +407,9 @@ function mapResults(
 	const archiveStmt = _db?.query(
 		`SELECT id, url, title, archived_at FROM archives
 		 WHERE id = ? AND quality = 'good' AND superseded_by IS NULL AND deleted_at IS NULL`,
+	);
+	const annotationStmt = _db?.query(
+		'SELECT id, target_kind, target_id, selection_text, comment, created_at, updated_at FROM annotations WHERE id = ?',
 	);
 	return hits.flatMap((r): SearchResult[] => {
 		const m = VIRTUAL_PATH.exec(r.file);
@@ -474,6 +534,26 @@ function mapResults(
 					slug: attRow.slug,
 					filename: attRow.filename,
 					modified_at: attRow.created_at,
+				},
+			];
+		}
+		if (collection === 'annotations') {
+			const id = basename(relPath, '.md');
+			const annotationRow = annotationStmt?.get(id) as AnnotationData | null;
+			if (!annotationRow) return [];
+			return [
+				{
+					id: annotationRow.id,
+					score: r.score,
+					snippet: r.bestChunk,
+					body: r.body,
+					path: r.displayPath,
+					kind: 'annotation' as const,
+					title: `Annotation on ${annotationRow.target_kind} ${annotationRow.target_id}`,
+					target_kind: annotationRow.target_kind,
+					target_id: annotationRow.target_id,
+					annotation_id: annotationRow.id,
+					modified_at: annotationRow.updated_at,
 				},
 			];
 		}

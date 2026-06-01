@@ -27,8 +27,9 @@ walkdir = "2"
 ksni = { version = "0.3", features = ["blocking"] }
 
 [target.'cfg(windows)'.dependencies]
-# tray-icon provides the Windows system tray; it uses its own message pump on Windows.
+# tray-icon provides the Windows system tray; lattice-tray-windows pumps Win32 messages directly.
 tray-icon = "0.17"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
 
 [[bin]]
 name = "lattice-agent"

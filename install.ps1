@@ -18,18 +18,26 @@
 .PARAMETER SkipTray
     Install the agent only; do not install or register the tray icon.
 
+.PARAMETER Uninstall
+    Remove the current user's installer-managed binaries and scheduled tasks.
+
+.PARAMETER PurgeConfig
+    With -Uninstall, also remove the installer-created configuration directory.
+
 .EXAMPLE
     .\install.ps1 -SpineUrl https://lattice.example.com -AgentToken "abc123"
 #>
-[CmdletBinding(SupportsShouldProcess)]
+[CmdletBinding()]
 param(
-    [Parameter(Mandatory)]
     [string]$SpineUrl,
 
-    [Parameter(Mandatory)]
     [string]$AgentToken,
 
-    [switch]$SkipTray
+    [switch]$SkipTray,
+
+    [switch]$Uninstall,
+
+    [switch]$PurgeConfig
 )
 
 Set-StrictMode -Version Latest
@@ -90,6 +98,167 @@ function Format-SchtasksFailureMessage {
     "Failed to register scheduled task '$TaskName': $Output"
 }
 
+function Resolve-SchtasksEndArguments {
+    param([string]$TaskName)
+
+    @('/End', '/TN', $TaskName)
+}
+
+function Resolve-SchtasksDeleteArguments {
+    param([string]$TaskName)
+
+    @('/Delete', '/TN', $TaskName, '/F')
+}
+
+function Test-SchtasksMissingOutput {
+    param([object]$Output)
+
+    $text = ($Output | Out-String)
+    $text -like '*cannot find*' -or $text -like '*does not exist*' -or $text -like '*not exist*'
+}
+
+function Test-SchtasksBenignStopOutput {
+    param([object]$Output)
+
+    $text = ($Output | Out-String)
+    (Test-SchtasksMissingOutput -Output $Output) -or $text -like '*not currently running*' -or $text -like '*has not been run*'
+}
+
+function Format-UninstallFailureMessage {
+    param(
+        [string]$Component,
+        [string]$Identifier,
+        [object]$Reason,
+        [string]$NextAction
+    )
+
+    "$Component ($Identifier): $Reason Next action: $NextAction"
+}
+
+$script:UninstallRemoved = @()
+$script:UninstallPreserved = @()
+$script:UninstallSkipped = @()
+$script:UninstallFailed = @()
+$script:UninstallNextActions = @()
+
+function Add-UninstallRemoved { param([string]$Message) $script:UninstallRemoved += $Message }
+function Add-UninstallPreserved { param([string]$Message) $script:UninstallPreserved += $Message }
+function Add-UninstallSkipped { param([string]$Message) $script:UninstallSkipped += $Message }
+function Add-UninstallFailed {
+    param([string]$Message, [string]$NextAction)
+
+    $script:UninstallFailed += $Message
+    $script:UninstallNextActions += $NextAction
+}
+
+function Write-UninstallSection {
+    param([string]$Title, [string[]]$Items)
+
+    Write-Host "${Title}:"
+    if ($Items.Count -eq 0) {
+        Write-Host '  None'
+        return
+    }
+
+    foreach ($item in $Items) {
+        Write-Host "  - $item"
+    }
+}
+
+function Write-UninstallSummary {
+    Write-Host ''
+    Write-Host 'Uninstall summary'
+    Write-Host '-----------------'
+    Write-UninstallSection -Title 'Removed' -Items $script:UninstallRemoved
+    Write-UninstallSection -Title 'Preserved' -Items $script:UninstallPreserved
+    Write-UninstallSection -Title 'Skipped' -Items $script:UninstallSkipped
+    Write-UninstallSection -Title 'Failed' -Items $script:UninstallFailed
+    Write-UninstallSection -Title 'Next actions' -Items $script:UninstallNextActions
+}
+
+function Remove-InstallerPath {
+    param([string]$Name, [string]$Path, [string]$NextAction)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        Add-UninstallSkipped "$Name`: already absent at $Path"
+        return
+    }
+
+    try {
+        Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+        Add-UninstallRemoved "$Name`: $Path"
+    } catch {
+        $message = Format-UninstallFailureMessage -Component $Name -Identifier $Path -Reason $_.Exception.Message -NextAction $NextAction
+        Add-UninstallFailed $message $NextAction
+    }
+}
+
+function Remove-InstallerScheduledTask {
+    param([string]$TaskName)
+
+    $endArgs = Resolve-SchtasksEndArguments -TaskName $TaskName
+    try {
+        $output = & schtasks.exe @endArgs 2>&1
+        if ($LASTEXITCODE -ne 0 -and -not (Test-SchtasksBenignStopOutput -Output $output)) {
+            $nextAction = "Close related Lattice processes, then rerun uninstall or stop scheduled task $TaskName manually."
+            $message = Format-UninstallFailureMessage -Component 'scheduled task stop' -Identifier $TaskName -Reason $output -NextAction $nextAction
+            Add-UninstallFailed $message $nextAction
+        }
+    } catch {
+        $nextAction = "Rerun uninstall on Windows or stop scheduled task $TaskName manually."
+        $message = Format-UninstallFailureMessage -Component 'scheduled task stop' -Identifier $TaskName -Reason $_.Exception.Message -NextAction $nextAction
+        Add-UninstallFailed $message $nextAction
+    }
+
+    $deleteArgs = Resolve-SchtasksDeleteArguments -TaskName $TaskName
+    try {
+        $output = & schtasks.exe @deleteArgs 2>&1
+    } catch {
+        $nextAction = "Rerun uninstall on Windows or delete scheduled task $TaskName manually."
+        $message = Format-UninstallFailureMessage -Component 'scheduled task' -Identifier $TaskName -Reason $_.Exception.Message -NextAction $nextAction
+        Add-UninstallFailed $message $nextAction
+        return
+    }
+    if ($LASTEXITCODE -eq 0) {
+        Add-UninstallRemoved "scheduled task $TaskName"
+        return
+    }
+
+    if (Test-SchtasksMissingOutput -Output $output) {
+        Add-UninstallSkipped "scheduled task $TaskName`: already absent"
+        return
+    }
+
+    $nextAction = "Close related Lattice processes, then rerun uninstall or delete scheduled task $TaskName manually."
+    $message = Format-UninstallFailureMessage -Component 'scheduled task' -Identifier $TaskName -Reason $output -NextAction $nextAction
+    Add-UninstallFailed $message $nextAction
+}
+
+function Invoke-LatticeUninstall {
+    param([string]$BinDir, [string]$CfgDir, [switch]$PurgeConfig)
+
+    Write-Host 'Uninstalling Lattice local user installation'
+
+    Remove-InstallerScheduledTask -TaskName 'LatticeAgent'
+    Remove-InstallerScheduledTask -TaskName 'LatticeTray'
+
+    Remove-InstallerPath -Name 'lattice-agent binary' -Path (Join-Path $BinDir 'lattice-agent.exe') -NextAction 'Close running lattice-agent processes and remove the file manually.'
+    Remove-InstallerPath -Name 'lattice-capture binary' -Path (Join-Path $BinDir 'lattice-capture.exe') -NextAction 'Close running lattice-capture processes and remove the file manually.'
+    Remove-InstallerPath -Name 'lattice-tray binary' -Path (Join-Path $BinDir 'lattice-tray.exe') -NextAction 'Close running lattice-tray processes and remove the file manually.'
+
+    if ($PurgeConfig) {
+        Remove-InstallerPath -Name 'Lattice configuration' -Path $CfgDir -NextAction 'Check permissions or remove the configuration directory manually.'
+    } elseif (Test-Path -LiteralPath $CfgDir) {
+        Add-UninstallPreserved "Lattice configuration: $CfgDir"
+        $script:UninstallNextActions += 'To remove preserved configuration, rerun with -Uninstall -PurgeConfig.'
+    } else {
+        Add-UninstallSkipped "Lattice configuration: already absent at $CfgDir"
+    }
+
+    Write-UninstallSummary
+    return ($script:UninstallFailed.Count -eq 0)
+}
+
 function Invoke-Schtasks {
     param([string[]]$Arguments, [string]$TaskName)
 
@@ -115,6 +284,26 @@ if ($env:LATTICE_INSTALLER_IMPORT_ONLY -eq '1') {
 $BinDir  = Join-Path $env:LOCALAPPDATA 'lattice'
 $CfgDir  = Join-Path $env:APPDATA      'lattice'
 $CfgFile = Join-Path $CfgDir           'config.toml'
+
+if ($Uninstall) {
+    $ok = Invoke-LatticeUninstall -BinDir $BinDir -CfgDir $CfgDir -PurgeConfig:$PurgeConfig
+    if (-not $ok) {
+        exit 1
+    }
+    exit 0
+}
+
+if ($PurgeConfig) {
+    throw 'PurgeConfig requires -Uninstall.'
+}
+
+if ([string]::IsNullOrWhiteSpace($SpineUrl)) {
+    throw 'SpineUrl is required for install mode. Use -Uninstall to remove an existing installation.'
+}
+
+if ([string]::IsNullOrWhiteSpace($AgentToken)) {
+    throw 'AgentToken is required for install mode. Use -Uninstall to remove an existing installation.'
+}
 
 # ── Install ───────────────────────────────────────────────────────────────────
 

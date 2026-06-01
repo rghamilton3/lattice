@@ -12,12 +12,156 @@ CONFIG_FILE="${CONFIG_DIR}/config.toml"
 SERVICE_DIR="${HOME}/.config/systemd/user"
 SERVICE_FILE="${SERVICE_DIR}/lattice-agent.service"
 DEFAULT_PATTERNS='["**/*.md", "**/*.txt", "**/*.pdf"]'
+UNINSTALL=false
+PURGE_CONFIG=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --uninstall)
+      UNINSTALL=true
+      ;;
+    --purge-config)
+      PURGE_CONFIG=true
+      ;;
+    *)
+      echo "error: unknown option: $1" >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
+
+if [[ "$PURGE_CONFIG" == true && "$UNINSTALL" != true ]]; then
+  echo "error: --purge-config requires --uninstall" >&2
+  exit 1
+fi
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 die()  { echo "error: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
 warn() { echo "warning: $*" >&2; }
+
+removed_items=()
+preserved_items=()
+skipped_items=()
+failed_items=()
+next_actions=()
+
+record_removed() { removed_items+=("$1"); }
+record_preserved() { preserved_items+=("$1"); }
+record_skipped() { skipped_items+=("$1"); }
+record_failed() {
+  failed_items+=("$1")
+  next_actions+=("$2")
+}
+
+print_uninstall_section() {
+  local title="$1"
+  shift
+  echo "${title}:"
+  if [[ $# -eq 0 ]]; then
+    echo "  None"
+    return
+  fi
+  local item
+  for item in "$@"; do
+    echo "  - ${item}"
+  done
+}
+
+print_uninstall_summary() {
+  echo ""
+  echo "Uninstall summary"
+  echo "-----------------"
+  print_uninstall_section "Removed" "${removed_items[@]+"${removed_items[@]}"}"
+  print_uninstall_section "Preserved" "${preserved_items[@]+"${preserved_items[@]}"}"
+  print_uninstall_section "Skipped" "${skipped_items[@]+"${skipped_items[@]}"}"
+  print_uninstall_section "Failed" "${failed_items[@]+"${failed_items[@]}"}"
+  print_uninstall_section "Next actions" "${next_actions[@]+"${next_actions[@]}"}"
+}
+
+remove_path() {
+  local name="$1"
+  local path="$2"
+  local next_action="$3"
+  local output
+
+  if [[ ! -e "$path" && ! -L "$path" ]]; then
+    record_skipped "${name}: already absent at ${path}"
+    return
+  fi
+
+  if output=$(rm -rf "$path" 2>&1); then
+    record_removed "${name}: ${path}"
+  else
+    record_failed "${name}: could not remove ${path}: ${output}" "$next_action"
+  fi
+}
+
+systemctl_missing_unit_output() {
+  local output="$1"
+  [[ "$output" == *"not loaded"* || "$output" == *"not found"* || "$output" == *"could not be found"* ]]
+}
+
+systemctl_not_enabled_output() {
+  local output="$1"
+  [[ "$output" == *"No such file or directory"* || "$output" == *"not loaded"* || "$output" == *"not found"* || "$output" == *"does not exist"* ]]
+}
+
+remove_user_service() {
+  local service="$1"
+  local service_file="$2"
+
+  if [[ ! -e "$service_file" && ! -L "$service_file" ]]; then
+    record_skipped "${service}: service unit already absent at ${service_file}"
+    return
+  fi
+
+  if command -v systemctl &>/dev/null; then
+    local output
+    if ! output=$(systemctl --user stop "$service" 2>&1); then
+      if ! systemctl_missing_unit_output "$output"; then
+        record_failed "${service}: could not stop user service: ${output}" "Close running ${service} processes or run systemctl --user stop ${service} manually."
+      fi
+    fi
+    if ! output=$(systemctl --user disable "$service" 2>&1); then
+      if ! systemctl_not_enabled_output "$output"; then
+        record_failed "${service}: could not disable user service: ${output}" "Run systemctl --user disable ${service} manually, then rerun uninstall."
+      fi
+    fi
+  fi
+
+  remove_path "${service} service unit" "$service_file" "Run systemctl --user disable ${service}, then remove ${service_file} manually."
+}
+
+run_uninstall() {
+  info "Uninstalling Lattice local user installation"
+
+  remove_user_service "lattice-agent" "$SERVICE_FILE"
+  remove_user_service "lattice-tray" "${SERVICE_DIR}/lattice-tray.service"
+
+  remove_path "lattice-agent binary" "${INSTALL_DIR}/lattice-agent" "Close running lattice-agent processes and remove ${INSTALL_DIR}/lattice-agent manually."
+  remove_path "lattice-capture binary" "${INSTALL_DIR}/lattice-capture" "Close running lattice-capture processes and remove ${INSTALL_DIR}/lattice-capture manually."
+  remove_path "lattice-tray binary" "${INSTALL_DIR}/lattice-tray" "Close running lattice-tray processes and remove ${INSTALL_DIR}/lattice-tray manually."
+  remove_path "lattice-config binary" "${INSTALL_DIR}/lattice-config" "Close running lattice-config processes and remove ${INSTALL_DIR}/lattice-config manually."
+
+  if [[ "$PURGE_CONFIG" == true ]]; then
+    remove_path "Lattice configuration" "$CONFIG_DIR" "Check permissions or remove ${CONFIG_DIR} manually."
+  elif [[ -e "$CONFIG_DIR" || -L "$CONFIG_DIR" ]]; then
+    record_preserved "Lattice configuration: ${CONFIG_DIR}"
+    next_actions+=("To remove preserved configuration, rerun with --uninstall --purge-config.")
+  else
+    record_skipped "Lattice configuration: already absent at ${CONFIG_DIR}"
+  fi
+
+  if command -v systemctl &>/dev/null; then
+    systemctl --user daemon-reload >/dev/null 2>&1 || true
+  fi
+
+  print_uninstall_summary
+  [[ ${#failed_items[@]} -eq 0 ]]
+}
 
 # Escape a value for a TOML basic double-quoted string.
 toml_escape() {
@@ -62,6 +206,11 @@ check_deps() {
 }
 
 # ── Preflight ─────────────────────────────────────────────────────────────────
+
+if [[ "$UNINSTALL" == true ]]; then
+  run_uninstall
+  exit $?
+fi
 
 for tool in curl jq; do
   command -v "$tool" &>/dev/null || die "installer requires ${tool}"

@@ -6,6 +6,7 @@ $installScript = Join-Path $repoRoot 'install.ps1'
 
 $env:LATTICE_INSTALLER_IMPORT_ONLY = '1'
 . $installScript -SpineUrl 'https://lattice.example.com' -AgentToken 'test-token' -SkipTray
+. $installScript -Uninstall
 Remove-Item Env:LATTICE_INSTALLER_IMPORT_ONLY -ErrorAction SilentlyContinue
 
 $agentAsset = 'lattice-agent-x86_64-pc-windows-msvc.exe'
@@ -84,8 +85,86 @@ Assert-Equal -Actual $spacePathTaskRun -Expected '"C:\Users\Bob Smith\AppData\Lo
 $schtasksArgs = Resolve-SchtasksCreateArguments -TaskName 'LatticeAgent' -TaskRun $agentTaskRun
 Assert-Equal -Actual ($schtasksArgs -join ' ') -Expected '/Create /TN LatticeAgent /TR "C:\lattice\lattice-agent.exe" /SC ONLOGON /F' -Message 'Task registration should use schtasks logon create-or-update arguments.'
 
+$schtasksEndArgs = Resolve-SchtasksEndArguments -TaskName 'LatticeAgent'
+Assert-Equal -Actual ($schtasksEndArgs -join ' ') -Expected '/End /TN LatticeAgent' -Message 'Task stop should use schtasks end arguments.'
+
+$schtasksDeleteArgs = Resolve-SchtasksDeleteArguments -TaskName 'LatticeAgent'
+Assert-Equal -Actual ($schtasksDeleteArgs -join ' ') -Expected '/Delete /TN LatticeAgent /F' -Message 'Task unregister should use schtasks delete arguments.'
+
 $schtasksFailureMessage = Format-SchtasksFailureMessage -TaskName 'LatticeAgent' -Output 'Access is denied.'
 Assert-Equal -Actual $schtasksFailureMessage -Expected "Failed to register scheduled task 'LatticeAgent': Access is denied." -Message 'Schtasks failure message should include task name and output.'
+
+$uninstallFailureMessage = Format-UninstallFailureMessage -Component 'scheduled task' -Identifier 'LatticeAgent' -Reason 'Access is denied.' -NextAction 'Delete the task manually.'
+Assert-Equal -Actual $uninstallFailureMessage -Expected 'scheduled task (LatticeAgent): Access is denied. Next action: Delete the task manually.' -Message 'Uninstall failure message should include component, identifier, reason, and next action.'
+
+Assert-Equal -Actual (Test-SchtasksMissingOutput -Output 'ERROR: The system cannot find the file specified.') -Expected $true -Message 'Missing scheduled task output should be classified as skipped.'
+Assert-Equal -Actual (Test-SchtasksMissingOutput -Output 'Access is denied.') -Expected $false -Message 'Permission failure should not be classified as skipped.'
+Assert-Equal -Actual (Test-SchtasksBenignStopOutput -Output 'ERROR: The system cannot find the file specified.') -Expected $true -Message 'Missing scheduled task stop output should be classified as benign.'
+Assert-Equal -Actual (Test-SchtasksBenignStopOutput -Output 'Access is denied.') -Expected $false -Message 'Permission failure during scheduled task stop should not be classified as benign.'
+
+$script:UninstallRemoved = @()
+$script:UninstallPreserved = @()
+$script:UninstallSkipped = @()
+$script:UninstallFailed = @()
+$script:UninstallNextActions = @()
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "lattice-installer-test-$([System.Guid]::NewGuid())"
+$binDir = Join-Path $tempRoot 'bin'
+$cfgDir = Join-Path $tempRoot 'cfg'
+New-Item -ItemType Directory -Force -Path $binDir, $cfgDir | Out-Null
+New-Item -ItemType File -Force -Path (Join-Path $binDir 'lattice-agent.exe'), (Join-Path $cfgDir 'config.toml') | Out-Null
+try {
+    function global:schtasks.exe {
+        param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+
+        $global:LASTEXITCODE = 1
+        'ERROR: The system cannot find the file specified.'
+    }
+
+    $ok = Invoke-LatticeUninstall -BinDir $binDir -CfgDir $cfgDir
+    Assert-Equal -Actual $ok -Expected $true -Message 'Default uninstall should succeed when scheduled tasks are already absent.'
+    Assert-Equal -Actual (Test-Path -LiteralPath (Join-Path $binDir 'lattice-agent.exe')) -Expected $false -Message 'Default uninstall should remove agent binary.'
+    Assert-Equal -Actual (Test-Path -LiteralPath $cfgDir) -Expected $true -Message 'Default uninstall should preserve configuration directory.'
+    Assert-Equal -Actual (@($script:UninstallPreserved | Where-Object { $_ -like "Lattice configuration: $cfgDir" }).Count -eq 1) -Expected $true -Message 'Default uninstall should record preserved configuration.'
+    Assert-Equal -Actual (@($script:UninstallSkipped | Where-Object { $_ -like 'scheduled task LatticeAgent*already absent' }).Count -eq 1) -Expected $true -Message 'Missing scheduled task should be skipped.'
+    Assert-Equal -Actual (@($script:UninstallNextActions | Where-Object { $_ -like '*-Uninstall -PurgeConfig*' }).Count -eq 1) -Expected $true -Message 'Default uninstall should include purge next action.'
+} finally {
+    Remove-Item function:global:schtasks.exe -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+$script:UninstallRemoved = @()
+$script:UninstallPreserved = @()
+$script:UninstallSkipped = @()
+$script:UninstallFailed = @()
+$script:UninstallNextActions = @()
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "lattice-installer-test-$([System.Guid]::NewGuid())"
+$binDir = Join-Path $tempRoot 'bin'
+$cfgDir = Join-Path $tempRoot 'cfg'
+New-Item -ItemType Directory -Force -Path $binDir, $cfgDir | Out-Null
+New-Item -ItemType File -Force -Path (Join-Path $cfgDir 'config.toml') | Out-Null
+try {
+    function global:schtasks.exe {
+        param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+
+        if ($Arguments[0] -eq '/End') {
+            $global:LASTEXITCODE = 1
+            'Access is denied.'
+            return
+        }
+
+        $global:LASTEXITCODE = 1
+        'ERROR: The system cannot find the file specified.'
+    }
+
+    $ok = Invoke-LatticeUninstall -BinDir $binDir -CfgDir $cfgDir -PurgeConfig
+    Assert-Equal -Actual $ok -Expected $false -Message 'Uninstall should fail when scheduled task stop fails.'
+    Assert-Equal -Actual (Test-Path -LiteralPath $cfgDir) -Expected $false -Message 'Purge uninstall should remove configuration directory.'
+    Assert-Equal -Actual (@($script:UninstallFailed | Where-Object { $_ -like 'scheduled task stop (LatticeAgent): Access is denied.*' }).Count -eq 1) -Expected $true -Message 'Scheduled task stop failure should be recorded.'
+    Assert-Equal -Actual (@($script:UninstallRemoved | Where-Object { $_ -like "Lattice configuration: $cfgDir" }).Count -eq 1) -Expected $true -Message 'Purge uninstall should record removed configuration.'
+} finally {
+    Remove-Item function:global:schtasks.exe -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
 
 Assert-Equal `
     -Actual (Get-ReleaseAssetUrl -Release $allAssetsRelease -Asset $agentAsset) `

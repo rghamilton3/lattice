@@ -97,3 +97,11 @@ just check
 ```
 
 Record parser/syntax validation, targeted regression results, and any platform smoke-test limitations in implementation notes.
+
+## Implementation Notes
+
+- Bash syntax validation passed with `bash -n install.sh`.
+- Bash uninstall regression tests passed with `bash tests/linux-installer-uninstall.sh`.
+- PowerShell parser validation passed with the command listed above.
+- PowerShell installer regression tests passed with `pwsh -NoProfile -File tests/windows-installer-assets.ps1`.
+- Manual platform smoke tests remain optional because targeted tests use temporary paths and avoid destructive live installs.

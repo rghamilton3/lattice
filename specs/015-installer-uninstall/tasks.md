@@ -18,9 +18,9 @@
 
 **Purpose**: Prepare focused installer regression coverage without changing install behavior.
 
-- [ ] T001 Create Bash installer regression test harness skeleton in `tests/linux-installer-uninstall.sh` with temporary HOME/XDG paths, assertion helpers, and no live network calls
-- [ ] T002 [P] Add uninstall-focused helper assertions to `tests/windows-installer-assets.ps1` while preserving existing asset and scheduled-task tests
-- [ ] T003 [P] Add a task-local implementation notes section to `specs/015-installer-uninstall/quickstart.md` for recording platform smoke-test limitations and parser validation results
+- [X] T001 Create Bash installer regression test harness skeleton in `tests/linux-installer-uninstall.sh` with temporary HOME/XDG paths, assertion helpers, and no live network calls
+- [X] T002 [P] Add uninstall-focused helper assertions to `tests/windows-installer-assets.ps1` while preserving existing asset and scheduled-task tests
+- [X] T003 [P] Add a task-local implementation notes section to `specs/015-installer-uninstall/quickstart.md` for recording platform smoke-test limitations and parser validation results
 
 ---
 
@@ -30,10 +30,10 @@
 
 **CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T004 Add early argument parsing for `--uninstall` and `--purge-config` in `install.sh` before curl/jq preflight or release metadata access
-- [ ] T005 Add `-Uninstall` and `-PurgeConfig` switches to `install.ps1` and make `-SpineUrl` and `-AgentToken` required only for install mode
-- [ ] T006 Add reusable uninstall result collection helpers for removed, preserved, skipped, failed, and next-action entries in `install.sh`
-- [ ] T007 Add reusable uninstall result collection helpers for removed, preserved, skipped, failed, and next-action entries in `install.ps1`
+- [X] T004 Add early argument parsing for `--uninstall` and `--purge-config` in `install.sh` before curl/jq preflight or release metadata access
+- [X] T005 Add `-Uninstall` and `-PurgeConfig` switches to `install.ps1` and make `-SpineUrl` and `-AgentToken` required only for install mode
+- [X] T006 Add reusable uninstall result collection helpers for removed, preserved, skipped, failed, and next-action entries in `install.sh`
+- [X] T007 Add reusable uninstall result collection helpers for removed, preserved, skipped, failed, and next-action entries in `install.ps1`
 
 **Checkpoint**: Both installers can identify uninstall mode before install-only requirements or network operations, and both scripts have a common result model for story implementation.
 
@@ -47,17 +47,17 @@
 
 ### Tests for User Story 1
 
-- [ ] T008 [P] [US1] Add Bash regression cases in `tests/linux-installer-uninstall.sh` for `./install.sh --uninstall` removing fake `lattice-agent`, `lattice-capture`, `lattice-tray`, `lattice-config`, `lattice-agent.service`, and `lattice-tray.service`
-- [ ] T009 [P] [US1] Add PowerShell regression cases in `tests/windows-installer-assets.ps1` for uninstall mode not requiring `-SpineUrl` or `-AgentToken` and for scheduled-task unregister command construction
+- [X] T008 [P] [US1] Add Bash regression cases in `tests/linux-installer-uninstall.sh` for `./install.sh --uninstall` removing fake `lattice-agent`, `lattice-capture`, `lattice-tray`, `lattice-config`, `lattice-agent.service`, and `lattice-tray.service`
+- [X] T009 [P] [US1] Add PowerShell regression cases in `tests/windows-installer-assets.ps1` for uninstall mode not requiring `-SpineUrl` or `-AgentToken` and for scheduled-task unregister command construction
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Implement Linux uninstall cleanup in `install.sh` to stop/disable/remove `lattice-agent.service` and `lattice-tray.service` when present before removing binaries
-- [ ] T011 [US1] Implement Linux binary removal in `install.sh` for `${HOME}/.local/bin/lattice-agent`, `lattice-capture`, `lattice-tray`, and `lattice-config` with missing optional artifacts recorded as skipped
-- [ ] T012 [US1] Implement Windows scheduled-task cleanup helpers in `install.ps1` for `LatticeAgent` and `LatticeTray`, including stop-before-delete behavior and missing tasks recorded as skipped
-- [ ] T013 [US1] Implement Windows binary removal in `install.ps1` for `%LOCALAPPDATA%\lattice\lattice-agent.exe`, `lattice-capture.exe`, and `lattice-tray.exe` with missing optional artifacts recorded as skipped
-- [ ] T014 [US1] Ensure uninstall mode in `install.sh` exits before `release_url`, curl downloads, interactive install prompts, config writes, or install service creation run
-- [ ] T015 [US1] Ensure uninstall mode in `install.ps1` exits before `Get-LatestReleaseMetadata`, `Download-Asset`, config writes, or install task registration run
+- [X] T010 [US1] Implement Linux uninstall cleanup in `install.sh` to stop/disable/remove `lattice-agent.service` and `lattice-tray.service` when present before removing binaries
+- [X] T011 [US1] Implement Linux binary removal in `install.sh` for `${HOME}/.local/bin/lattice-agent`, `lattice-capture`, `lattice-tray`, and `lattice-config` with missing optional artifacts recorded as skipped
+- [X] T012 [US1] Implement Windows scheduled-task cleanup helpers in `install.ps1` for `LatticeAgent` and `LatticeTray`, including stop-before-delete behavior and missing tasks recorded as skipped
+- [X] T013 [US1] Implement Windows binary removal in `install.ps1` for `%LOCALAPPDATA%\lattice\lattice-agent.exe`, `lattice-capture.exe`, and `lattice-tray.exe` with missing optional artifacts recorded as skipped
+- [X] T014 [US1] Ensure uninstall mode in `install.sh` exits before `release_url`, curl downloads, interactive install prompts, config writes, or install service creation run
+- [X] T015 [US1] Ensure uninstall mode in `install.ps1` exits before `Get-LatestReleaseMetadata`, `Download-Asset`, config writes, or install task registration run
 
 **Checkpoint**: User Story 1 is independently functional for default uninstall of installed launch registrations and executable artifacts.
 
@@ -71,15 +71,15 @@
 
 ### Tests for User Story 2
 
-- [ ] T016 [P] [US2] Add Bash regression cases in `tests/linux-installer-uninstall.sh` for preserving `${XDG_CONFIG_HOME:-$HOME/.config}/lattice/config.toml` by default and removing it only with `--purge-config`
-- [ ] T017 [P] [US2] Add PowerShell regression cases in `tests/windows-installer-assets.ps1` for preserving `%APPDATA%\lattice\config.toml` by default and removing it only with `-PurgeConfig`
+- [X] T016 [P] [US2] Add Bash regression cases in `tests/linux-installer-uninstall.sh` for preserving `${XDG_CONFIG_HOME:-$HOME/.config}/lattice/config.toml` by default and removing it only with `--purge-config`
+- [X] T017 [P] [US2] Add PowerShell regression cases in `tests/windows-installer-assets.ps1` for preserving `%APPDATA%\lattice\config.toml` by default and removing it only with `-PurgeConfig`
 
 ### Implementation for User Story 2
 
-- [ ] T018 [US2] Implement default configuration preservation and explicit `--purge-config` removal for `${XDG_CONFIG_HOME:-$HOME/.config}/lattice` in `install.sh`
-- [ ] T019 [US2] Implement default configuration preservation and explicit `-PurgeConfig` removal for `%APPDATA%\lattice` in `install.ps1`
-- [ ] T020 [US2] Add plain-text preserved and purged configuration messages to `install.sh` that include the affected config path
-- [ ] T021 [US2] Add plain-text preserved and purged configuration messages to `install.ps1` that include the affected config path
+- [X] T018 [US2] Implement default configuration preservation and explicit `--purge-config` removal for `${XDG_CONFIG_HOME:-$HOME/.config}/lattice` in `install.sh`
+- [X] T019 [US2] Implement default configuration preservation and explicit `-PurgeConfig` removal for `%APPDATA%\lattice` in `install.ps1`
+- [X] T020 [US2] Add plain-text preserved and purged configuration messages to `install.sh` that include the affected config path
+- [X] T021 [US2] Add plain-text preserved and purged configuration messages to `install.ps1` that include the affected config path
 
 **Checkpoint**: User Story 2 is independently functional for safe default uninstall and explicit complete-removal behavior.
 
@@ -93,16 +93,16 @@
 
 ### Tests for User Story 3
 
-- [ ] T022 [P] [US3] Add Bash regression cases in `tests/linux-installer-uninstall.sh` for final summary categories `Removed`, `Preserved`, `Skipped`, `Failed`, and `Next actions`
-- [ ] T023 [P] [US3] Add PowerShell regression cases in `tests/windows-installer-assets.ps1` for final summary categories `Removed`, `Preserved`, `Skipped`, `Failed`, and `Next actions`
+- [X] T022 [P] [US3] Add Bash regression cases in `tests/linux-installer-uninstall.sh` for final summary categories `Removed`, `Preserved`, `Skipped`, `Failed`, and `Next actions`
+- [X] T023 [P] [US3] Add PowerShell regression cases in `tests/windows-installer-assets.ps1` for final summary categories `Removed`, `Preserved`, `Skipped`, `Failed`, and `Next actions`
 
 ### Implementation for User Story 3
 
-- [ ] T024 [US3] Implement final uninstall summary output in `install.sh` with removed, preserved, skipped, failed, and next-action sections in plain text
-- [ ] T025 [US3] Implement final uninstall summary output in `install.ps1` with removed, preserved, skipped, failed, and next-action sections in plain text
-- [ ] T026 [US3] Add actionable failure messages in `install.sh` that include component name, path or service identifier, platform error when available, and a next action
-- [ ] T027 [US3] Add actionable failure messages in `install.ps1` that include component name, path or scheduled-task identifier, platform error when available, and a next action
-- [ ] T028 [US3] Review all new uninstall output in `install.sh` and `install.ps1` for plain-text, copyable, non-color-dependent wording and keep bilingual delivery out of scope as documented
+- [X] T024 [US3] Implement final uninstall summary output in `install.sh` with removed, preserved, skipped, failed, and next-action sections in plain text
+- [X] T025 [US3] Implement final uninstall summary output in `install.ps1` with removed, preserved, skipped, failed, and next-action sections in plain text
+- [X] T026 [US3] Add actionable failure messages in `install.sh` that include component name, path or service identifier, platform error when available, and a next action
+- [X] T027 [US3] Add actionable failure messages in `install.ps1` that include component name, path or scheduled-task identifier, platform error when available, and a next action
+- [X] T028 [US3] Review all new uninstall output in `install.sh` and `install.ps1` for plain-text, copyable, non-color-dependent wording and keep bilingual delivery out of scope as documented
 
 **Checkpoint**: User Story 3 is independently functional for diagnosable and accessible terminal output.
 
@@ -112,12 +112,12 @@
 
 **Purpose**: Validate the complete feature, preserve install-only behavior, and record any platform-specific limitations.
 
-- [ ] T029 Run Bash syntax validation with `bash -n install.sh` and record the result in `specs/015-installer-uninstall/quickstart.md`
-- [ ] T030 Run Bash uninstall regression tests with `bash tests/linux-installer-uninstall.sh` and record the result in `specs/015-installer-uninstall/quickstart.md`
-- [ ] T031 Run PowerShell parser validation for `install.ps1` with the command from `specs/015-installer-uninstall/quickstart.md`, or record pending Windows/CI validation there if `pwsh` is unavailable
-- [ ] T032 Run PowerShell installer regression tests with `pwsh -NoProfile -File tests/windows-installer-assets.ps1`, or record pending Windows/CI validation in `specs/015-installer-uninstall/quickstart.md` if `pwsh` is unavailable
-- [ ] T033 Verify default install contracts remain unchanged for `./install.sh` and `.\install.ps1 -SpineUrl https://lattice.example.com -AgentToken "<token>"` in `specs/015-installer-uninstall/contracts/uninstall-cli.md`
-- [ ] T034 If broader project files were touched beyond `install.sh`, `install.ps1`, `tests/linux-installer-uninstall.sh`, `tests/windows-installer-assets.ps1`, and `specs/015-installer-uninstall/quickstart.md`, run `just lint` and `just check` and record results in `specs/015-installer-uninstall/quickstart.md`
+- [X] T029 Run Bash syntax validation with `bash -n install.sh` and record the result in `specs/015-installer-uninstall/quickstart.md`
+- [X] T030 Run Bash uninstall regression tests with `bash tests/linux-installer-uninstall.sh` and record the result in `specs/015-installer-uninstall/quickstart.md`
+- [X] T031 Run PowerShell parser validation for `install.ps1` with the command from `specs/015-installer-uninstall/quickstart.md`, or record pending Windows/CI validation there if `pwsh` is unavailable
+- [X] T032 Run PowerShell installer regression tests with `pwsh -NoProfile -File tests/windows-installer-assets.ps1`, or record pending Windows/CI validation in `specs/015-installer-uninstall/quickstart.md` if `pwsh` is unavailable
+- [X] T033 Verify default install contracts remain unchanged for `./install.sh` and `.\install.ps1 -SpineUrl https://lattice.example.com -AgentToken "<token>"` in `specs/015-installer-uninstall/contracts/uninstall-cli.md`
+- [X] T034 If broader project files were touched beyond `install.sh`, `install.ps1`, `tests/linux-installer-uninstall.sh`, `tests/windows-installer-assets.ps1`, and `specs/015-installer-uninstall/quickstart.md`, run `just lint` and `just check` and record results in `specs/015-installer-uninstall/quickstart.md`
 
 ---
 

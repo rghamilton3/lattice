@@ -6,6 +6,7 @@ $installScript = Join-Path $repoRoot 'install.ps1'
 
 $env:LATTICE_INSTALLER_IMPORT_ONLY = '1'
 . $installScript -SpineUrl 'https://lattice.example.com' -AgentToken 'test-token' -SkipTray
+. $installScript -Uninstall
 Remove-Item Env:LATTICE_INSTALLER_IMPORT_ONLY -ErrorAction SilentlyContinue
 
 $agentAsset = 'lattice-agent-x86_64-pc-windows-msvc.exe'
@@ -84,8 +85,20 @@ Assert-Equal -Actual $spacePathTaskRun -Expected '"C:\Users\Bob Smith\AppData\Lo
 $schtasksArgs = Resolve-SchtasksCreateArguments -TaskName 'LatticeAgent' -TaskRun $agentTaskRun
 Assert-Equal -Actual ($schtasksArgs -join ' ') -Expected '/Create /TN LatticeAgent /TR "C:\lattice\lattice-agent.exe" /SC ONLOGON /F' -Message 'Task registration should use schtasks logon create-or-update arguments.'
 
+$schtasksEndArgs = Resolve-SchtasksEndArguments -TaskName 'LatticeAgent'
+Assert-Equal -Actual ($schtasksEndArgs -join ' ') -Expected '/End /TN LatticeAgent' -Message 'Task stop should use schtasks end arguments.'
+
+$schtasksDeleteArgs = Resolve-SchtasksDeleteArguments -TaskName 'LatticeAgent'
+Assert-Equal -Actual ($schtasksDeleteArgs -join ' ') -Expected '/Delete /TN LatticeAgent /F' -Message 'Task unregister should use schtasks delete arguments.'
+
 $schtasksFailureMessage = Format-SchtasksFailureMessage -TaskName 'LatticeAgent' -Output 'Access is denied.'
 Assert-Equal -Actual $schtasksFailureMessage -Expected "Failed to register scheduled task 'LatticeAgent': Access is denied." -Message 'Schtasks failure message should include task name and output.'
+
+$uninstallFailureMessage = Format-UninstallFailureMessage -Component 'scheduled task' -Identifier 'LatticeAgent' -Reason 'Access is denied.' -NextAction 'Delete the task manually.'
+Assert-Equal -Actual $uninstallFailureMessage -Expected 'scheduled task (LatticeAgent): Access is denied. Next action: Delete the task manually.' -Message 'Uninstall failure message should include component, identifier, reason, and next action.'
+
+Assert-Equal -Actual (Test-SchtasksMissingOutput -Output 'ERROR: The system cannot find the file specified.') -Expected $true -Message 'Missing scheduled task output should be classified as skipped.'
+Assert-Equal -Actual (Test-SchtasksMissingOutput -Output 'Access is denied.') -Expected $false -Message 'Permission failure should not be classified as skipped.'
 
 Assert-Equal `
     -Actual (Get-ReleaseAssetUrl -Release $allAssetsRelease -Asset $agentAsset) `

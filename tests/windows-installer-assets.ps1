@@ -73,26 +73,26 @@ function Resolve-InstallerDownloads {
 
 $allAssetsRelease = New-TestRelease -AssetNames @($agentAsset, $captureAsset, $trayAsset)
 
-$agentTaskRun = Resolve-ScheduledTaskRunCommand -ExePath 'C:\lattice\lattice-agent.exe'
-Assert-Equal -Actual $agentTaskRun -Expected '"C:\lattice\lattice-agent.exe"' -Message 'Task run command should quote executable path.'
+$shortcutPath = Resolve-StartupShortcutPath -StartupDir 'C:\Users\Bob\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\' -ShortcutName 'LatticeAgent'
+Assert-Equal -Actual $shortcutPath -Expected 'C:\Users\Bob\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\LatticeAgent.lnk' -Message 'Startup shortcut path should trim trailing slash and append .lnk.'
 
-$promptTaskRun = Resolve-ScheduledTaskRunCommand -ExePath 'C:\lattice\lattice-capture.exe' -Arguments '--prompt'
-Assert-Equal -Actual $promptTaskRun -Expected '"C:\lattice\lattice-capture.exe" --prompt' -Message 'Task run command should preserve arguments.'
+$hiddenStartCommand = Resolve-HiddenStartCommand -FilePath 'C:\Users\Bob Smith\AppData\Local\lattice\lattice-agent.exe'
+Assert-Equal -Actual $hiddenStartCommand -Expected "Start-Process -WindowStyle Hidden -FilePath 'C:\Users\Bob Smith\AppData\Local\lattice\lattice-agent.exe'" -Message 'Hidden start command should hide and detach executable launches.'
 
-$spacePathTaskRun = Resolve-ScheduledTaskRunCommand -ExePath 'C:\Users\Bob Smith\AppData\Local\lattice\lattice-agent.exe'
-Assert-Equal -Actual $spacePathTaskRun -Expected '"C:\Users\Bob Smith\AppData\Local\lattice\lattice-agent.exe"' -Message 'Task run command should quote paths containing spaces.'
+$shortcutProperties = Resolve-ShortcutProperties -ExePath 'C:\Users\Bob Smith\AppData\Local\lattice\lattice-capture.exe' -Arguments '--prompt'
+Assert-Equal -Actual $shortcutProperties.TargetPath -Expected 'powershell.exe' -Message 'Shortcut target should use PowerShell to launch without a visible console window.'
+Assert-Equal -Actual $shortcutProperties.Arguments -Expected "-NoProfile -WindowStyle Hidden -Command `"Start-Process -WindowStyle Hidden -FilePath 'C:\Users\Bob Smith\AppData\Local\lattice\lattice-capture.exe' -ArgumentList '--prompt'`"" -Message 'Shortcut arguments should hide and detach command arguments.'
+Assert-Equal -Actual $shortcutProperties.WorkingDirectory -Expected 'C:\Users\Bob Smith\AppData\Local\lattice' -Message 'Shortcut working directory should be the executable parent directory.'
+Assert-Equal -Actual $shortcutProperties.WindowStyle -Expected 7 -Message 'Shortcut window should start minimized if PowerShell shows a launcher window.'
 
-$schtasksArgs = Resolve-SchtasksCreateArguments -TaskName 'LatticeAgent' -TaskRun $agentTaskRun
-Assert-Equal -Actual ($schtasksArgs -join ' ') -Expected '/Create /TN LatticeAgent /TR "C:\lattice\lattice-agent.exe" /SC ONLOGON /F' -Message 'Task registration should use schtasks logon create-or-update arguments.'
+$rootlessShortcutProperties = Resolve-ShortcutProperties -ExePath 'lattice-agent.exe'
+Assert-Equal -Actual $rootlessShortcutProperties.WorkingDirectory -Expected '' -Message 'Shortcut working directory should be empty when no parent directory exists.'
 
 $schtasksEndArgs = Resolve-SchtasksEndArguments -TaskName 'LatticeAgent'
 Assert-Equal -Actual ($schtasksEndArgs -join ' ') -Expected '/End /TN LatticeAgent' -Message 'Task stop should use schtasks end arguments.'
 
 $schtasksDeleteArgs = Resolve-SchtasksDeleteArguments -TaskName 'LatticeAgent'
 Assert-Equal -Actual ($schtasksDeleteArgs -join ' ') -Expected '/Delete /TN LatticeAgent /F' -Message 'Task unregister should use schtasks delete arguments.'
-
-$schtasksFailureMessage = Format-SchtasksFailureMessage -TaskName 'LatticeAgent' -Output 'Access is denied.'
-Assert-Equal -Actual $schtasksFailureMessage -Expected "Failed to register scheduled task 'LatticeAgent': Access is denied." -Message 'Schtasks failure message should include task name and output.'
 
 $uninstallFailureMessage = Format-UninstallFailureMessage -Component 'scheduled task' -Identifier 'LatticeAgent' -Reason 'Access is denied.' -NextAction 'Delete the task manually.'
 Assert-Equal -Actual $uninstallFailureMessage -Expected 'scheduled task (LatticeAgent): Access is denied. Next action: Delete the task manually.' -Message 'Uninstall failure message should include component, identifier, reason, and next action.'

@@ -5,7 +5,7 @@
 .DESCRIPTION
     Downloads the latest lattice-agent release binaries, installs them to
     %LOCALAPPDATA%\lattice\, writes a starter config to %APPDATA%\lattice\,
-    and registers two Task Scheduler tasks that run at logon:
+    and places two shortcuts in the current-user Startup folder:
       - LatticeAgent     : the background indexer
       - LatticeTray      : the system-tray monitor
 
@@ -16,10 +16,10 @@
     Bearer token for the agent to authenticate with Spine.
 
 .PARAMETER SkipTray
-    Install the agent only; do not install or register the tray icon.
+    Install the agent only; do not install or register the tray startup shortcut.
 
 .PARAMETER Uninstall
-    Remove the current user's installer-managed binaries and scheduled tasks.
+    Remove the current user's installer-managed binaries, startup shortcuts, and legacy scheduled tasks.
 
 .PARAMETER PurgeConfig
     With -Uninstall, also remove the installer-created configuration directory.
@@ -73,29 +73,71 @@ function Download-Asset {
     Invoke-WebRequest -Uri $Url -OutFile $Dest -UseBasicParsing
 }
 
-function Resolve-ScheduledTaskRunCommand {
-    param([string]$ExePath, [string]$Arguments = '')
+function Resolve-StartupShortcutPath {
+    param([string]$StartupDir, [string]$ShortcutName)
 
-    $taskRun = "`"$ExePath`""
-    if (-not [string]::IsNullOrEmpty($Arguments)) {
-        $taskRun = "$taskRun $Arguments"
+    "$($StartupDir.TrimEnd('\'))\$ShortcutName.lnk"
+}
+
+function Resolve-WindowsParentPath {
+    param([string]$Path)
+
+    $lastSlash = $Path.LastIndexOf('\')
+    if ($lastSlash -lt 0) {
+        return ''
     }
 
-    $taskRun
+    $Path.Substring(0, $lastSlash)
 }
 
-function Resolve-SchtasksCreateArguments {
-    param([string]$TaskName, [string]$TaskRun)
+function ConvertTo-PowerShellSingleQuotedString {
+    param([string]$Value)
 
-    # schtasks avoids Register-ScheduledTask access-denied failures for normal users.
-    # It intentionally uses default runtime/retry settings; next-login restart is acceptable.
-    @('/Create', '/TN', $TaskName, '/TR', $TaskRun, '/SC', 'ONLOGON', '/F')
+    "'$($Value.Replace("'", "''"))'"
 }
 
-function Format-SchtasksFailureMessage {
-    param([string]$TaskName, [object]$Output)
+function Resolve-HiddenStartCommand {
+    param([string]$FilePath, [string]$Arguments = '')
 
-    "Failed to register scheduled task '$TaskName': $Output"
+    $command = "Start-Process -WindowStyle Hidden -FilePath $(ConvertTo-PowerShellSingleQuotedString -Value $FilePath)"
+    if (-not [string]::IsNullOrEmpty($Arguments)) {
+        $command = "$command -ArgumentList $(ConvertTo-PowerShellSingleQuotedString -Value $Arguments)"
+    }
+
+    $command
+}
+
+function Resolve-ShortcutProperties {
+    param([string]$ExePath, [string]$Arguments = '')
+
+    $startCommand = Resolve-HiddenStartCommand -FilePath $ExePath -Arguments $Arguments
+    @{
+        TargetPath = 'powershell.exe'
+        Arguments = "-NoProfile -WindowStyle Hidden -Command `"$startCommand`""
+        WorkingDirectory = Resolve-WindowsParentPath -Path $ExePath
+        WindowStyle = 7
+    }
+}
+
+function Register-StartupShortcut {
+    param([string]$ShortcutName, [string]$ExePath, [string]$Arguments = '')
+
+    $startupDir = [Environment]::GetFolderPath('Startup')
+    if ([string]::IsNullOrEmpty($startupDir)) {
+        throw 'Could not resolve the Startup folder path.'
+    }
+
+    $shortcutPath = Resolve-StartupShortcutPath -StartupDir $startupDir -ShortcutName $ShortcutName
+    $shortcutProperties = Resolve-ShortcutProperties -ExePath $ExePath -Arguments $Arguments
+
+    Write-Host "  Creating or updating startup shortcut: $ShortcutName"
+    $shell = New-Object -ComObject WScript.Shell
+    $shortcut = $shell.CreateShortcut($shortcutPath)
+    $shortcut.TargetPath = $shortcutProperties.TargetPath
+    $shortcut.Arguments = $shortcutProperties.Arguments
+    $shortcut.WorkingDirectory = $shortcutProperties.WorkingDirectory
+    $shortcut.WindowStyle = $shortcutProperties.WindowStyle
+    $shortcut.Save()
 }
 
 function Resolve-SchtasksEndArguments {
@@ -242,6 +284,12 @@ function Invoke-LatticeUninstall {
     Remove-InstallerScheduledTask -TaskName 'LatticeAgent'
     Remove-InstallerScheduledTask -TaskName 'LatticeTray'
 
+    $startupDir = [Environment]::GetFolderPath('Startup')
+    if (-not [string]::IsNullOrEmpty($startupDir)) {
+        Remove-InstallerPath -Name 'startup shortcut LatticeAgent' -Path (Resolve-StartupShortcutPath -StartupDir $startupDir -ShortcutName 'LatticeAgent') -NextAction 'Remove the Startup folder shortcut manually.'
+        Remove-InstallerPath -Name 'startup shortcut LatticeTray' -Path (Resolve-StartupShortcutPath -StartupDir $startupDir -ShortcutName 'LatticeTray') -NextAction 'Remove the Startup folder shortcut manually.'
+    }
+
     Remove-InstallerPath -Name 'lattice-agent binary' -Path (Join-Path $BinDir 'lattice-agent.exe') -NextAction 'Close running lattice-agent processes and remove the file manually.'
     Remove-InstallerPath -Name 'lattice-capture binary' -Path (Join-Path $BinDir 'lattice-capture.exe') -NextAction 'Close running lattice-capture processes and remove the file manually.'
     Remove-InstallerPath -Name 'lattice-tray binary' -Path (Join-Path $BinDir 'lattice-tray.exe') -NextAction 'Close running lattice-tray processes and remove the file manually.'
@@ -257,24 +305,6 @@ function Invoke-LatticeUninstall {
 
     Write-UninstallSummary
     return ($script:UninstallFailed.Count -eq 0)
-}
-
-function Invoke-Schtasks {
-    param([string[]]$Arguments, [string]$TaskName)
-
-    $output = & schtasks.exe @Arguments 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw (Format-SchtasksFailureMessage -TaskName $TaskName -Output $output)
-    }
-}
-
-function Register-LogonTask {
-    param([string]$TaskName, [string]$ExePath, [string]$Arguments = '')
-    $taskRun = Resolve-ScheduledTaskRunCommand -ExePath $ExePath -Arguments $Arguments
-    $schtasksArgs = Resolve-SchtasksCreateArguments -TaskName $TaskName -TaskRun $taskRun
-
-    Write-Host "  Creating or updating task: $TaskName"
-    Invoke-Schtasks -Arguments $schtasksArgs -TaskName $TaskName
 }
 
 if ($env:LATTICE_INSTALLER_IMPORT_ONLY -eq '1') {
@@ -357,20 +387,20 @@ max_file_bytes        = 10485760
     Write-Host "  Config already exists, skipping: $CfgFile"
 }
 
-Write-Host "`nRegistering Task Scheduler tasks ..."
-Register-LogonTask -TaskName 'LatticeAgent' -ExePath $agentExe
+Write-Host "`nRegistering startup shortcuts ..."
+Register-StartupShortcut -ShortcutName 'LatticeAgent' -ExePath $agentExe
 
 if (-not $SkipTray) {
-    Register-LogonTask -TaskName 'LatticeTray' -ExePath $trayExe
+    Register-StartupShortcut -ShortcutName 'LatticeTray' -ExePath $trayExe
 }
 
 Write-Host "`nDone! Edit your config at:"
 Write-Host "  $CfgFile"
 Write-Host ""
 Write-Host "Then start the agent now with:"
-Write-Host "  schtasks /Run /TN LatticeAgent"
+Write-Host "  $(Resolve-HiddenStartCommand -FilePath $agentExe)"
 if (-not $SkipTray) {
-    Write-Host "  schtasks /Run /TN LatticeTray"
+    Write-Host "  $(Resolve-HiddenStartCommand -FilePath $trayExe)"
 }
 
 Write-Host ""

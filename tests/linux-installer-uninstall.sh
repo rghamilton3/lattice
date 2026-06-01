@@ -120,8 +120,28 @@ test_missing_artifacts_are_skipped() {
 
   assert_contains "$output" "Skipped:"
   assert_contains "$output" "lattice-agent binary: already absent"
+  assert_contains "$output" "Lattice configuration: already absent at ${xdg_dir}/lattice"
   assert_contains "$output" "Failed:"
+  assert_contains "$output" "  None"
   assert_contains "$output" "Next actions:"
+}
+
+test_purge_config_without_uninstall_is_rejected() {
+  local tmp
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' RETURN
+
+  local home_dir="${tmp}/home"
+  local xdg_dir="${tmp}/xdg"
+  local stub_dir="${tmp}/bin"
+  mkdir -p "$home_dir" "$xdg_dir" "$stub_dir"
+
+  local output
+  if output=$(run_installer "$home_dir" "$xdg_dir" "$stub_dir" --purge-config 2>&1); then
+    fail "expected --purge-config without --uninstall to fail"
+  fi
+
+  assert_contains "$output" "--purge-config requires --uninstall"
 }
 
 test_service_stop_disable_failures_are_reported() {
@@ -177,6 +197,7 @@ test_remove_failures_include_platform_reason() {
 test_default_uninstall_removes_artifacts
 test_purge_config_removes_config
 test_missing_artifacts_are_skipped
+test_purge_config_without_uninstall_is_rejected
 test_service_stop_disable_failures_are_reported
 test_remove_failures_include_platform_reason
 

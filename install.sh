@@ -74,11 +74,11 @@ print_uninstall_summary() {
   echo ""
   echo "Uninstall summary"
   echo "-----------------"
-  print_uninstall_section "Removed" "${removed_items[@]}"
-  print_uninstall_section "Preserved" "${preserved_items[@]}"
-  print_uninstall_section "Skipped" "${skipped_items[@]}"
-  print_uninstall_section "Failed" "${failed_items[@]}"
-  print_uninstall_section "Next actions" "${next_actions[@]}"
+  print_uninstall_section "Removed" "${removed_items[@]+"${removed_items[@]}"}"
+  print_uninstall_section "Preserved" "${preserved_items[@]+"${preserved_items[@]}"}"
+  print_uninstall_section "Skipped" "${skipped_items[@]+"${skipped_items[@]}"}"
+  print_uninstall_section "Failed" "${failed_items[@]+"${failed_items[@]}"}"
+  print_uninstall_section "Next actions" "${next_actions[@]+"${next_actions[@]}"}"
 }
 
 remove_path() {

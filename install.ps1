@@ -27,7 +27,7 @@
 .EXAMPLE
     .\install.ps1 -SpineUrl https://lattice.example.com -AgentToken "abc123"
 #>
-[CmdletBinding(SupportsShouldProcess)]
+[CmdletBinding()]
 param(
     [string]$SpineUrl,
 

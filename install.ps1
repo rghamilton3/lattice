@@ -117,6 +117,13 @@ function Test-SchtasksMissingOutput {
     $text -like '*cannot find*' -or $text -like '*does not exist*' -or $text -like '*not exist*'
 }
 
+function Test-SchtasksBenignStopOutput {
+    param([object]$Output)
+
+    $text = ($Output | Out-String)
+    (Test-SchtasksMissingOutput -Output $Output) -or $text -like '*not currently running*' -or $text -like '*has not been run*'
+}
+
 function Format-UninstallFailureMessage {
     param(
         [string]$Component,
@@ -191,9 +198,16 @@ function Remove-InstallerScheduledTask {
 
     $endArgs = Resolve-SchtasksEndArguments -TaskName $TaskName
     try {
-        & schtasks.exe @endArgs 2>&1 | Out-Null
+        $output = & schtasks.exe @endArgs 2>&1
+        if ($LASTEXITCODE -ne 0 -and -not (Test-SchtasksBenignStopOutput -Output $output)) {
+            $nextAction = "Close related Lattice processes, then rerun uninstall or stop scheduled task $TaskName manually."
+            $message = Format-UninstallFailureMessage -Component 'scheduled task stop' -Identifier $TaskName -Reason $output -NextAction $nextAction
+            Add-UninstallFailed $message $nextAction
+        }
     } catch {
-        # Best-effort stop only; deletion below reports the blocking failure if schtasks is unavailable.
+        $nextAction = "Rerun uninstall on Windows or stop scheduled task $TaskName manually."
+        $message = Format-UninstallFailureMessage -Component 'scheduled task stop' -Identifier $TaskName -Reason $_.Exception.Message -NextAction $nextAction
+        Add-UninstallFailed $message $nextAction
     }
 
     $deleteArgs = Resolve-SchtasksDeleteArguments -TaskName $TaskName

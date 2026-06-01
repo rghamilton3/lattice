@@ -124,8 +124,60 @@ test_missing_artifacts_are_skipped() {
   assert_contains "$output" "Next actions:"
 }
 
+test_service_stop_disable_failures_are_reported() {
+  local tmp
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' RETURN
+
+  local home_dir="${tmp}/home"
+  local xdg_dir="${tmp}/xdg"
+  local stub_dir="${tmp}/bin"
+  mkdir -p "${home_dir}/.config/systemd/user" "$xdg_dir" "$stub_dir"
+  touch "${home_dir}/.config/systemd/user/lattice-agent.service"
+  make_tool_stub "$stub_dir" systemctl 'if [[ "$1 $2 $3" == "--user stop lattice-agent" || "$1 $2 $3" == "--user disable lattice-agent" ]]; then echo "Access denied" >&2; exit 1; fi; exit 0'
+  make_tool_stub "$stub_dir" curl 'echo curl should not run >&2; exit 99'
+  make_tool_stub "$stub_dir" jq 'echo jq should not run >&2; exit 99'
+
+  local output
+  if output=$(run_installer "$home_dir" "$xdg_dir" "$stub_dir" --uninstall 2>&1); then
+    fail "expected uninstall to fail when service stop/disable fails"
+  fi
+
+  assert_contains "$output" "lattice-agent: could not stop user service: Access denied"
+  assert_contains "$output" "lattice-agent: could not disable user service: Access denied"
+  assert_contains "$output" "Next actions:"
+}
+
+test_remove_failures_include_platform_reason() {
+  local tmp
+  tmp=$(mktemp -d)
+  trap 'chmod -R u+w "$tmp" 2>/dev/null || true; rm -rf "$tmp"' RETURN
+
+  local home_dir="${tmp}/home"
+  local xdg_dir="${tmp}/xdg"
+  local stub_dir="${tmp}/bin"
+  mkdir -p "${home_dir}/.local/bin" "$xdg_dir" "$stub_dir"
+  touch "${home_dir}/.local/bin/lattice-agent"
+  chmod u-w "${home_dir}/.local/bin"
+  make_tool_stub "$stub_dir" systemctl 'exit 0'
+  make_tool_stub "$stub_dir" curl 'echo curl should not run >&2; exit 99'
+  make_tool_stub "$stub_dir" jq 'echo jq should not run >&2; exit 99'
+
+  local output
+  if output=$(run_installer "$home_dir" "$xdg_dir" "$stub_dir" --uninstall 2>&1); then
+    fail "expected uninstall to fail when binary removal fails"
+  fi
+
+  chmod u+w "${home_dir}/.local/bin"
+  assert_exists "${home_dir}/.local/bin/lattice-agent"
+  assert_contains "$output" "lattice-agent binary: could not remove ${home_dir}/.local/bin/lattice-agent:"
+  assert_contains "$output" "Permission denied"
+}
+
 test_default_uninstall_removes_artifacts
 test_purge_config_removes_config
 test_missing_artifacts_are_skipped
+test_service_stop_disable_failures_are_reported
+test_remove_failures_include_platform_reason
 
 echo "linux-installer-uninstall.sh: PASS"

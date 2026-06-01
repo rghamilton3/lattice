@@ -85,17 +85,28 @@ remove_path() {
   local name="$1"
   local path="$2"
   local next_action="$3"
+  local output
 
   if [[ ! -e "$path" && ! -L "$path" ]]; then
     record_skipped "${name}: already absent at ${path}"
     return
   fi
 
-  if rm -rf "$path"; then
+  if output=$(rm -rf "$path" 2>&1); then
     record_removed "${name}: ${path}"
   else
-    record_failed "${name}: could not remove ${path}" "$next_action"
+    record_failed "${name}: could not remove ${path}: ${output}" "$next_action"
   fi
+}
+
+systemctl_missing_unit_output() {
+  local output="$1"
+  [[ "$output" == *"not loaded"* || "$output" == *"not found"* || "$output" == *"could not be found"* ]]
+}
+
+systemctl_not_enabled_output() {
+  local output="$1"
+  [[ "$output" == *"No such file or directory"* || "$output" == *"not loaded"* || "$output" == *"not found"* || "$output" == *"does not exist"* ]]
 }
 
 remove_user_service() {
@@ -108,8 +119,17 @@ remove_user_service() {
   fi
 
   if command -v systemctl &>/dev/null; then
-    systemctl --user stop "$service" >/dev/null 2>&1 || true
-    systemctl --user disable "$service" >/dev/null 2>&1 || true
+    local output
+    if ! output=$(systemctl --user stop "$service" 2>&1); then
+      if ! systemctl_missing_unit_output "$output"; then
+        record_failed "${service}: could not stop user service: ${output}" "Close running ${service} processes or run systemctl --user stop ${service} manually."
+      fi
+    fi
+    if ! output=$(systemctl --user disable "$service" 2>&1); then
+      if ! systemctl_not_enabled_output "$output"; then
+        record_failed "${service}: could not disable user service: ${output}" "Run systemctl --user disable ${service} manually, then rerun uninstall."
+      fi
+    fi
   fi
 
   remove_path "${service} service unit" "$service_file" "Run systemctl --user disable ${service}, then remove ${service_file} manually."

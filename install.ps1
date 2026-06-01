@@ -82,12 +82,7 @@ function Resolve-StartupShortcutPath {
 function Resolve-WindowsParentPath {
     param([string]$Path)
 
-    $lastSlash = $Path.LastIndexOf('\')
-    if ($lastSlash -lt 0) {
-        return ''
-    }
-
-    $Path.Substring(0, $lastSlash)
+    (Split-Path -Parent $Path) -replace '/', '\'
 }
 
 function ConvertTo-PowerShellSingleQuotedString {
@@ -110,6 +105,7 @@ function Resolve-HiddenStartCommand {
 function Resolve-ShortcutProperties {
     param([string]$ExePath, [string]$Arguments = '')
 
+    # The shortcut hides PowerShell and the launched process to avoid console windows at login.
     $startCommand = Resolve-HiddenStartCommand -FilePath $ExePath -Arguments $Arguments
     @{
         TargetPath = 'powershell.exe'
@@ -398,6 +394,7 @@ Write-Host "`nDone! Edit your config at:"
 Write-Host "  $CfgFile"
 Write-Host ""
 Write-Host "Then start the agent now with:"
+Write-Host "  Run these from PowerShell:"
 Write-Host "  $(Resolve-HiddenStartCommand -FilePath $agentExe)"
 if (-not $SkipTray) {
     Write-Host "  $(Resolve-HiddenStartCommand -FilePath $trayExe)"

@@ -79,6 +79,9 @@ Assert-Equal -Actual $shortcutPath -Expected 'C:\Users\Bob\AppData\Roaming\Micro
 $hiddenStartCommand = Resolve-HiddenStartCommand -FilePath 'C:\Users\Bob Smith\AppData\Local\lattice\lattice-agent.exe'
 Assert-Equal -Actual $hiddenStartCommand -Expected "Start-Process -WindowStyle Hidden -FilePath 'C:\Users\Bob Smith\AppData\Local\lattice\lattice-agent.exe'" -Message 'Hidden start command should hide and detach executable launches.'
 
+$singleQuoteHiddenStartCommand = Resolve-HiddenStartCommand -FilePath "C:\Users\O'Brien\AppData\Local\lattice\lattice-agent.exe"
+Assert-Equal -Actual $singleQuoteHiddenStartCommand -Expected "Start-Process -WindowStyle Hidden -FilePath 'C:\Users\O''Brien\AppData\Local\lattice\lattice-agent.exe'" -Message 'Hidden start command should escape single quotes in file paths.'
+
 $shortcutProperties = Resolve-ShortcutProperties -ExePath 'C:\Users\Bob Smith\AppData\Local\lattice\lattice-capture.exe' -Arguments '--prompt'
 Assert-Equal -Actual $shortcutProperties.TargetPath -Expected 'powershell.exe' -Message 'Shortcut target should use PowerShell to launch without a visible console window.'
 Assert-Equal -Actual $shortcutProperties.Arguments -Expected "-NoProfile -WindowStyle Hidden -Command `"Start-Process -WindowStyle Hidden -FilePath 'C:\Users\Bob Smith\AppData\Local\lattice\lattice-capture.exe' -ArgumentList '--prompt'`"" -Message 'Shortcut arguments should hide and detach command arguments.'

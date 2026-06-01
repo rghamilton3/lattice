@@ -227,7 +227,7 @@ fn spawn_sibling(name: &str) {
 fn pump_windows_messages() {
     unsafe {
         let mut msg = std::mem::zeroed::<MSG>();
-        while PeekMessageW(&mut msg, 0, 0, 0, PM_REMOVE) != 0 {
+        while PeekMessageW(&mut msg, std::ptr::null_mut(), 0, 0, PM_REMOVE) != 0 {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }

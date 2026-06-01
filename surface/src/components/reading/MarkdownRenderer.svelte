@@ -8,8 +8,14 @@
 	const {
 		content,
 		annotations = [],
-		revealAnnotationId
-	}: { content: string; annotations?: Annotation[]; revealAnnotationId?: string } = $props();
+		revealAnnotationId,
+		onRenderError
+	}: {
+		content: string;
+		annotations?: Annotation[];
+		revealAnnotationId?: string;
+		onRenderError?: (error: unknown) => void;
+	} = $props();
 
 	let html = $state('');
 	let root: HTMLDivElement | null = $state(null);
@@ -126,6 +132,7 @@
 						mermaidBlocks.set(id, styleMermaidSvg(svg, theme, id));
 						(token as unknown as { mermaidId: string }).mermaidId = id;
 					} catch (error) {
+						onRenderError?.(error);
 						const message =
 							error instanceof Error ? error.message : 'Unable to render Mermaid diagram';
 						mermaidBlocks.set(
@@ -171,8 +178,9 @@
 					USE_PROFILES: { html: true, svg: true, mathMl: true }
 				});
 			})
-			.catch(() => {
+			.catch((error) => {
 				if (seq !== renderSeq) return;
+				onRenderError?.(error);
 				html = `<pre><code>${escapeHtml(md)}</code></pre>`;
 			});
 	});
@@ -289,10 +297,40 @@
 		--tw-prose-th-borders: var(--line-strong);
 		--tw-prose-td-borders: var(--line);
 		color: var(--text);
+		overflow-wrap: anywhere;
 	}
 
-	.markdown-renderer :global(svg) {
+	.markdown-renderer :global(pre),
+	.markdown-renderer :global(code) {
 		max-width: 100%;
+	}
+
+	.markdown-renderer :global(pre) {
+		overflow-x: auto;
+	}
+
+	.markdown-renderer :global(svg),
+	.markdown-renderer :global(.katex-display) {
+		max-width: 100%;
+		overflow-x: auto;
+	}
+
+	.markdown-renderer :global(a) {
+		word-break: break-word;
+	}
+
+	.markdown-renderer :global(.mermaid-error) {
+		border: 1px solid color-mix(in srgb, var(--c-alarm) 55%, transparent);
+		border-radius: 10px;
+		background: color-mix(in srgb, var(--c-alarm) 10%, transparent);
+		padding: 12px;
+		color: var(--text);
+	}
+
+	.markdown-renderer :global(.mermaid-error figcaption) {
+		margin-bottom: 8px;
+		color: var(--c-alarm);
+		font-weight: 600;
 	}
 
 	.markdown-renderer :global(.label),

@@ -47,6 +47,7 @@
 	let readingBody: HTMLDivElement | null = $state(null);
 	let attachFileInput = $state<HTMLInputElement | null>(null);
 	let attachUploading = $state(false);
+	let renderError = $state<{ content: string | undefined; message: string } | null>(null);
 
 	const annotationTarget = $derived<{
 		kind: AnnotationTargetKind;
@@ -230,6 +231,18 @@
 					? (archiveQuery.data?.title ?? archiveQuery.data?.url ?? `archive #${ref.id}`)
 					: `${ref.slug}.md`
 	);
+	const renderedContent = $derived(
+		ref.kind === 'capture'
+			? captureQuery.data?.text
+			: ref.kind === 'file'
+				? fileQuery.data?.text
+				: ref.kind === 'working'
+					? workingQuery.data?.content
+					: archiveQuery.data?.extracted_text
+	);
+	const renderErrorMessage = $derived(
+		renderError && renderError.content === renderedContent ? renderError.message : ''
+	);
 	const annotations = $derived(annotationsQuery.data?.annotations ?? []);
 
 	function openMoreLikeThis() {
@@ -330,6 +343,13 @@
 	function goBack() {
 		wb.goBackInPane(paneIndex);
 	}
+
+	function onRenderError(error: unknown) {
+		renderError = {
+			content: renderedContent,
+			message: error instanceof Error ? error.message : 'Preview render failed'
+		};
+	}
 </script>
 
 <div class="doc-view">
@@ -423,6 +443,16 @@
 	{#if promoteError}
 		<div class="px-3 py-1 text-xs" style="color:var(--c-alarm)">{promoteError}</div>
 	{/if}
+	{#if renderErrorMessage}
+		<div
+			class="px-3 py-1 text-xs"
+			style="color:var(--c-alarm)"
+			role="alert"
+			title={renderErrorMessage}
+		>
+			Preview render failed. The source remains available to edit and save.
+		</div>
+	{/if}
 	{#if createAnnotationError || updateAnnotationError || deleteAnnotationError}
 		<div class="px-3 py-1 text-xs" style="color:var(--c-alarm)" role="alert">
 			{createAnnotationError || updateAnnotationError || deleteAnnotationError}
@@ -457,20 +487,36 @@
 						'error loading document'}
 				</p>
 			{:else if ref.kind === 'capture' && captureQuery.data}
-				<MarkdownRenderer content={captureQuery.data.text} {annotations} {revealAnnotationId} />
+				<MarkdownRenderer
+					content={captureQuery.data.text}
+					{annotations}
+					{revealAnnotationId}
+					{onRenderError}
+				/>
 			{:else if ref.kind === 'file' && fileQuery.data}
 				{#if fileQuery.data.mime_type === 'application/pdf'}
 					<PdfViewer fileId={ref.id} />
 				{:else}
-					<MarkdownRenderer content={fileQuery.data.text} {annotations} {revealAnnotationId} />
+					<MarkdownRenderer
+						content={fileQuery.data.text}
+						{annotations}
+						{revealAnnotationId}
+						{onRenderError}
+					/>
 				{/if}
 			{:else if ref.kind === 'working' && workingQuery.data}
-				<MarkdownRenderer content={workingQuery.data.content} {annotations} {revealAnnotationId} />
+				<MarkdownRenderer
+					content={workingQuery.data.content}
+					{annotations}
+					{revealAnnotationId}
+					{onRenderError}
+				/>
 			{:else if ref.kind === 'archive' && archiveQuery.data}
 				<MarkdownRenderer
 					content={archiveQuery.data.extracted_text}
 					{annotations}
 					{revealAnnotationId}
+					{onRenderError}
 				/>
 			{/if}
 		</div>

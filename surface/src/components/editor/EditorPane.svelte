@@ -42,6 +42,24 @@
 	let saveStatus = $state<'' | 'saved' | 'error' | 'deleting'>('');
 	let saveErrorMsg = $state('');
 	let statusTimer: ReturnType<typeof setTimeout> | null = null;
+	let lastLoadedSlug = '';
+	const previewTargetPane = $derived(paneIndex === 0 ? 1 : 0);
+	const previewTargetContent = $derived(wb.panes[previewTargetPane]);
+	const isPreviewOpenInSplit = $derived(
+		!!slug &&
+			previewTargetContent?.kind === 'doc' &&
+			previewTargetContent.ref.kind === 'working' &&
+			previewTargetContent.ref.slug === slug
+	);
+	const previewStatusText = $derived(
+		saveStatus === 'error'
+			? 'Preview still shows last saved content. Save again to refresh it.'
+			: isDirty
+				? 'Preview shows saved content. Unsaved edits are not included until Save.'
+				: saveStatus === 'saved'
+					? 'Preview refreshed from saved content.'
+					: 'Preview opens in Split and shows saved content.'
+	);
 
 	const docQuery = createQuery(() => ({
 		queryKey: workingKeys.detail(slug ?? ''),
@@ -200,12 +218,27 @@
 		deleteMutation.mutate();
 	}
 
+	function openPreviewInSplit() {
+		if (!slug) return;
+		wb.openInPane(previewTargetPane, { kind: 'doc', ref: { kind: 'working', slug } });
+	}
+
 	function insertDiagram() {
 		if (!view) return;
-		const selection = view.state.selection.main;
+		const { from, to } = view.state.selection.main;
+		const doc = view.state.doc;
+		const previousChar = from > 0 ? doc.sliceString(from - 1, from) : '\n';
+		const nextChar = to < doc.length ? doc.sliceString(to, to + 1) : '\n';
+		const prefix = previousChar === '\n' ? '' : '\n\n';
+		const suffix = nextChar === '\n' ? '' : '\n\n';
+		const diagramBody = mermaidTemplate.trimEnd();
+		const insertion = `${prefix}${diagramBody}${suffix}`;
+		const labelStart = insertion.indexOf('A[Start]');
+
 		view.dispatch({
-			changes: { from: selection.from, to: selection.to, insert: mermaidTemplate },
-			selection: { anchor: selection.from + mermaidTemplate.length }
+			changes: { from, to, insert: insertion },
+			selection: { anchor: from + labelStart, head: from + labelStart + 'A[Start]'.length },
+			scrollIntoView: true
 		});
 		view.focus();
 	}
@@ -226,6 +259,10 @@
 	$effect(() => {
 		if (!browser || !slug || !editorContainer || !docQuery.data) return;
 		const container = editorContainer;
+		if (lastLoadedSlug !== slug) {
+			lastLoadedSlug = slug;
+			isDirty = false;
+		}
 
 		if (view && mountedSlug === slug) {
 			const content = docQuery.data.content;
@@ -335,27 +372,44 @@
 			>{slug ? `${slug}.md` : 'No document selected'}</span
 		>
 		<span role="status" aria-live="polite" class="editor-save-status">
-			{#if isDirty}
+			{#if saveStatus === 'error'}
+				<span style="color:var(--c-alarm)" title={saveErrorMsg}>· action failed</span>
+			{:else if isDirty}
 				<span class="mute">· unsaved</span>
 			{:else if saveStatus === 'saved'}
 				<span style="color:var(--c-ok)">· saved</span>
-			{:else if saveStatus === 'error'}
-				<span style="color:var(--c-alarm)" title={saveErrorMsg}>· action failed</span>
 			{:else if saveStatus === 'deleting'}
 				<span class="mute">· deleting</span>
 			{/if}
 		</span>
-		<span class="row" style="margin-left:auto; gap:6px">
+		{#if isPreviewOpenInSplit}
+			<span role="status" aria-live="polite" class="editor-preview-status"
+				>· {previewStatusText}</span
+			>
+		{/if}
+		<span class="row editor-actions">
 			<button
+				type="button"
+				class="btn btn-ghost"
+				title="Open preview in split pane"
+				aria-label="Open preview in split pane"
+				disabled={!slug}
+				onclick={openPreviewInSplit}
+			>
+				<Icon name="split" size={14} /> Split
+			</button>
+			<button
+				type="button"
 				class="btn btn-ghost"
 				title="Insert Mermaid diagram block"
-				aria-label="Insert Mermaid diagram block"
+				aria-label="Insert diagram"
 				disabled={!editorReady || saveMutation.isPending || deleteMutation.isPending}
 				onclick={insertDiagram}
 			>
-				Diagram
+				<Icon name="plus" size={14} /> Diagram
 			</button>
 			<button
+				type="button"
 				class="btn btn-ghost"
 				title="Save working document"
 				aria-label="Save working document"
@@ -365,6 +419,7 @@
 				Save
 			</button>
 			<button
+				type="button"
 				class="btn btn-ghost"
 				title="Delete working document"
 				aria-label="Delete working document"
@@ -408,7 +463,39 @@
 </div>
 
 <style>
+	.editor-shell {
+		min-width: 0;
+		overflow: hidden;
+	}
+
+	.editor-status {
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 6px;
+	}
+
+	.editor-actions {
+		margin-left: auto;
+		gap: 6px;
+		flex-wrap: wrap;
+	}
+
 	.editor-save-status {
 		font-size: 12px;
+	}
+
+	.editor-preview-status {
+		color: var(--text-mute);
+		font-size: 12px;
+	}
+
+	@media (max-width: 820px) {
+		.editor-status {
+			align-items: flex-start;
+		}
+
+		.editor-actions {
+			margin-left: 0;
+		}
 	}
 </style>

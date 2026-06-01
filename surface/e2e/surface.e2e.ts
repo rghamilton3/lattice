@@ -123,6 +123,77 @@ async function mockBackNavigationData(page: Page) {
 	);
 }
 
+test.use({ serviceWorkers: 'block' });
+
+async function routePreviewDoc(
+	page: Page,
+	content: string,
+	options: { saveStatus?: number; saveBody?: string } = {}
+) {
+	let savedContent = content;
+	const saveStatus = options.saveStatus ?? 200;
+	const saveBody =
+		options.saveBody ?? (saveStatus >= 400 ? 'save failed' : JSON.stringify({ ok: true }));
+	await page.unroute('**/api/**');
+	await page.route('**/api/lateral**', (route) =>
+		route.fulfill({ status: 200, body: JSON.stringify({ results: [] }) })
+	);
+	await page.route('**/api/similar**', (route) =>
+		route.fulfill({ status: 200, body: JSON.stringify({ results: [] }) })
+	);
+	await page.route('**/api/working/preview-doc/attachments**', (route) =>
+		route.fulfill({ status: 200, body: '[]' })
+	);
+	await page.route('**/api/working/preview-doc', async (route) => {
+		if (route.request().method() === 'PUT') {
+			if (saveStatus < 400) {
+				const body = route.request().postDataJSON() as { content?: string };
+				savedContent = body.content ?? savedContent;
+			}
+			return route.fulfill({ status: saveStatus, body: saveBody });
+		}
+		return route.fulfill({
+			status: 200,
+			body: JSON.stringify({ slug: 'preview-doc', title: 'Preview Doc', content: savedContent })
+		});
+	});
+	await page.route('**/api/**', (route) => {
+		const url = route.request().url();
+		if (
+			url.includes('/api/working/preview-doc') ||
+			url.includes('/api/lateral') ||
+			url.includes('/api/similar')
+		) {
+			return route.fallback();
+		}
+		return route.fulfill({ status: 200, body: '[]' });
+	});
+}
+
+async function openPreviewWorkingEditor(
+	page: Page,
+	content: string,
+	options: { saveStatus?: number; saveBody?: string } = {}
+) {
+	await page.addInitScript(() => {
+		localStorage.setItem('lattice.session', JSON.stringify({ vimMode: false }));
+	});
+	await routePreviewDoc(page, content, options);
+
+	await page.goto('/?ref=working:preview-doc');
+	const dismissInstall = page.getByRole('button', { name: 'Dismiss' });
+	if (await dismissInstall.isVisible()) await dismissInstall.click();
+	await page.getByRole('button', { name: /Edit/i }).click();
+	await expect(page.getByLabel('Markdown editor for preview-doc.md')).toBeVisible();
+	return page.locator('.cm-content').first();
+}
+
+async function openPreviewSplit(page: Page) {
+	const splitButton = page.getByRole('button', { name: 'Open preview in split pane' });
+	await splitButton.click();
+	await expect(page.getByRole('region', { name: 'Pane 2' })).toBeVisible();
+}
+
 test.beforeEach(async ({ page }) => {
 	await page.addInitScript(() => {
 		try {
@@ -132,7 +203,17 @@ test.beforeEach(async ({ page }) => {
 		}
 	});
 	// API requests go nowhere in preview — stub them so queries resolve fast.
-	await page.route('**/api/**', (route) => route.fulfill({ status: 200, body: '[]' }));
+	await page.route('**/api/**', (route) => {
+		const url = route.request().url();
+		if (
+			url.includes('/api/working/preview-doc') ||
+			url.includes('/api/lateral') ||
+			url.includes('/api/similar')
+		) {
+			return route.fallback();
+		}
+		return route.fulfill({ status: 200, body: '[]' });
+	});
 });
 
 test('home view renders the canonical landing greeting', async ({ page }) => {
@@ -512,4 +593,179 @@ test('quick capture: 500 keeps modal open with failure message', async ({ page }
 	// Modal stays open and surfaces the failure inline.
 	await expect(dialog).toBeVisible();
 	await expect(dialog.getByText('Save failed — try again')).toBeVisible();
+});
+
+test('working doc editor keeps preview closed until split pane is requested', async ({ page }) => {
+	await openPreviewWorkingEditor(
+		page,
+		'# Preview Title\n\n- first item\n- **second item**\n\n> quoted\n\n```ts\nconst ok = true;\n```\n\n[docs](https://example.com)'
+	);
+
+	await expect(page.getByRole('region', { name: 'Pane 2' })).toBeHidden();
+	await expect(page.getByRole('button', { name: 'Back to previous view' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Open preview in split pane' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Insert diagram' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Save working document' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Delete working document' })).toBeVisible();
+	await expect(page.getByRole('button', { name: /Vim/i })).toBeVisible();
+
+	await openPreviewSplit(page);
+	const preview = page.getByRole('region', { name: 'Pane 2' });
+	await expect(preview.getByRole('heading', { name: 'Preview Title' })).toBeVisible();
+	await expect(preview.getByText('first item')).toBeVisible();
+	await expect(preview.getByText('second item')).toBeVisible();
+	await expect(preview.getByText('quoted')).toBeVisible();
+	await expect(preview.getByText('const ok = true;')).toBeVisible();
+	await expect(preview.getByRole('link', { name: 'docs' })).toBeVisible();
+	await expect(preview.getByRole('button', { name: /Similar/i })).toBeVisible();
+	await expect(preview.getByRole('button', { name: /Mentions/i })).toBeVisible();
+	await expect(preview.getByRole('button', { name: /Attach/i })).toBeVisible();
+	await expect(preview.getByRole('button', { name: /Edit/i })).toBeVisible();
+	await expect(preview.getByRole('button', { name: /Split/i })).toBeVisible();
+});
+
+test('working doc editor inserts a mermaid diagram snippet', async ({ page }) => {
+	const editor = await openPreviewWorkingEditor(page, '# Diagram Draft\n\n');
+
+	await editor.click();
+	await page.getByRole('button', { name: 'Insert diagram' }).click();
+
+	await expect(editor).toContainText('```mermaid');
+	await expect(editor).toContainText('flowchart TD');
+	await expect(editor).toContainText('A[Start] --> B[Next]');
+	await expect(page.locator('.editor-save-status').getByText('unsaved')).toBeVisible();
+});
+
+test('working doc split preview refreshes after successful save', async ({ page }) => {
+	const editor = await openPreviewWorkingEditor(page, '# Old Title\n\nold body');
+	await openPreviewSplit(page);
+
+	await editor.click();
+	await page.keyboard.press(`${mod}+a`);
+	await page.keyboard.type('# Saved Title\n\nnew body');
+	await page.getByRole('button', { name: 'Save working document' }).click();
+
+	const preview = page.getByRole('region', { name: 'Pane 2' });
+	await expect(preview.getByRole('heading', { name: 'Saved Title' })).toBeVisible({
+		timeout: 2000
+	});
+	await expect(preview.getByText('new body')).toBeVisible();
+	await expect(page.getByText('Preview refreshed from saved content.')).toBeVisible();
+});
+
+test('working doc preview layout remains reachable on narrow viewports', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 760 });
+	await openPreviewWorkingEditor(
+		page,
+		'# Narrow Title\n\nA long preview line that should stay inside the pane.'
+	);
+
+	await expect(page.getByRole('button', { name: 'Back to previous view' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Open preview in split pane' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Insert diagram' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Save working document' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Delete working document' })).toBeVisible();
+	await expect(page.getByRole('button', { name: /Vim/i })).toBeVisible();
+	await expect(page.getByLabel('Markdown editor for preview-doc.md')).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Pane 2' })).toBeHidden();
+	await expect
+		.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+		.toBe(true);
+});
+
+test('working doc editor keyboard navigation reaches controls and preview without a trap', async ({
+	page
+}) => {
+	await openPreviewWorkingEditor(page, '# Keyboard Title\n\n[focus link](https://example.com)');
+	await openPreviewSplit(page);
+	await page
+		.getByRole('region', { name: 'Pane 1' })
+		.getByRole('button', { name: 'Back to previous view' })
+		.focus();
+
+	const reached = {
+		back: true,
+		split: false,
+		diagram: false,
+		save: false,
+		delete: false,
+		vim: false,
+		previewLink: false
+	};
+
+	for (let i = 0; i < 20; i += 1) {
+		await page.keyboard.press('Tab');
+		const active = await page.evaluate(() => {
+			const element = document.activeElement as HTMLElement | null;
+			return {
+				aria: element?.getAttribute('aria-label') ?? '',
+				text: element?.textContent ?? ''
+			};
+		});
+		reached.back ||= active.aria === 'Back to previous view';
+		reached.split ||= active.aria === 'Open preview in split pane';
+		reached.diagram ||= active.aria === 'Insert diagram';
+		reached.save ||= active.aria === 'Save working document';
+		reached.delete ||= active.aria === 'Delete working document';
+		reached.vim ||= /vim/i.test(active.text);
+		reached.previewLink ||= active.text.trim() === 'focus link';
+	}
+
+	expect(reached).toEqual({
+		back: true,
+		split: true,
+		diagram: true,
+		save: true,
+		delete: true,
+		vim: true,
+		previewLink: true
+	});
+});
+
+test('working doc split preview keeps saved content until save', async ({ page }) => {
+	const editor = await openPreviewWorkingEditor(page, '# Fresh Title\n\nbody');
+	await openPreviewSplit(page);
+	const preview = page.getByRole('region', { name: 'Pane 2' });
+
+	await expect(preview.getByRole('heading', { name: 'Fresh Title' })).toBeVisible();
+	await editor.click();
+	await page.keyboard.type('\nunsaved edit');
+
+	await expect(
+		page.getByText('Preview shows saved content. Unsaved edits are not included until Save.')
+	).toBeVisible();
+	await expect(preview.getByRole('heading', { name: 'Fresh Title' })).toBeVisible();
+	await expect(preview.getByText('unsaved edit')).toBeHidden();
+});
+
+test('working doc save failure preserves editing and recoverable preview status', async ({
+	page
+}) => {
+	await openPreviewWorkingEditor(page, '# Previous Preview', {
+		saveStatus: 500,
+		saveBody: 'save failed'
+	});
+	await openPreviewSplit(page);
+	const editor = page.locator('.cm-content').first();
+	await editor.click();
+	await page.keyboard.type('\nunsaved edit');
+	const saveButton = page.getByRole('button', { name: 'Save working document' });
+	await expect(saveButton).toBeEnabled();
+	const failedSave = page.waitForResponse(
+		(response) =>
+			response.url().includes('/api/working/preview-doc') &&
+			response.request().method() === 'PUT' &&
+			response.status() === 500
+	);
+	await saveButton.click();
+	await failedSave;
+
+	await expect(page.getByText('action failed')).toBeVisible();
+	await expect(
+		page.getByText('Preview still shows last saved content. Save again to refresh it.')
+	).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Pane 2' }).getByRole('heading')).toHaveText(
+		'Previous Preview'
+	);
+	await expect(page.getByRole('button', { name: 'Save working document' })).toBeEnabled();
 });

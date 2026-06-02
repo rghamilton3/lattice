@@ -177,6 +177,7 @@ async fn check() -> Result<i32> {
             attempts.message = "Release metadata was unavailable. Installed files were not changed; try again when the network is reachable.".to_owned();
             attempts.error_detail = Some(err.to_string());
             record_attempt(&attempts)?;
+            eprintln!("Reported issue: {err}");
             Ok(2)
         }
     }
@@ -205,6 +206,7 @@ async fn apply(args: &[String]) -> Result<i32> {
             attempt.error_detail = Some(err.to_string());
             record_attempt(&attempt)?;
             eprintln!("{}", attempt.message);
+            eprintln!("Reported issue: {err}");
             return Ok(2);
         }
     };

@@ -112,6 +112,10 @@
 		wb.startTriage();
 	}
 
+	function openTracking() {
+		wb.openInPane(paneIndex, { kind: 'tracking' });
+	}
+
 	async function onTriage(id: number, action: TriageAction) {
 		queryClient.setQueryData(inboxKeys.list(20), (old: { items: InboxItem[] } | undefined) =>
 			old ? { ...old, items: old.items.filter((item) => item.id !== `capture:${id}`) } : old
@@ -177,12 +181,19 @@
 				</h1>
 				<p class="mute home-sub">Pick up, or capture something new. No streaks, no overdue.</p>
 			</div>
-			<PostureToggle
-				value={wb.posture}
-				onChange={(p) => {
-					wb.posture = p;
-				}}
-			/>
+			<div
+				style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end"
+			>
+				<button class="btn btn-ghost" onclick={openTracking}>
+					<Icon name="library" size={14} />Tracking follow-ups
+				</button>
+				<PostureToggle
+					value={wb.posture}
+					onChange={(p) => {
+						wb.posture = p;
+					}}
+				/>
+			</div>
 		</div>
 
 		{#if last}

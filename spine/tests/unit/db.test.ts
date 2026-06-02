@@ -26,6 +26,8 @@ describe('db.initDb', () => {
 		expect(names).toContain('annotations');
 		expect(names).toContain('tracks');
 		expect(names).toContain('track_queries');
+		expect(names).toContain('track_bins');
+		expect(names).toContain('track_photos');
 
 		const migrations = db.query('SELECT name FROM schema_migrations ORDER BY name').all() as {
 			name: string;
@@ -43,6 +45,7 @@ describe('db.initDb', () => {
 			'010_archives.sql',
 			'011_tracks.sql',
 			'012_annotations.sql',
+			'013_track_bins.sql',
 		]);
 		db.close();
 	});
@@ -81,7 +84,7 @@ describe('db.initDb', () => {
 		const { initDb, getMigrationStatus } = await import('../../src/db');
 		const db = initDb();
 
-		expect(getMigrationStatus(db)).toEqual({ ready: true, applied: 12 });
+		expect(getMigrationStatus(db)).toEqual({ ready: true, applied: 13 });
 		db.close();
 	});
 

@@ -91,6 +91,10 @@ describe('WorkbenchStore', () => {
 		expect(a.view).toBe('home');
 		a.openInPane(0, { kind: 'library', query: '' });
 		expect(a.view).toBe('library');
+		a.openInPane(0, { kind: 'tracking' });
+		expect(a.view).toBe('tracking');
+		a.openInPane(0, { kind: 'tracking-detail', trackId: 7 });
+		expect(a.view).toBe('tracking');
 		a.openInPane(0, { kind: 'doc', ref: { kind: 'working', slug: 'x' } });
 		expect(a.view).toBe('doc');
 		a.persist();
@@ -216,6 +220,21 @@ describe('WorkbenchStore', () => {
 		wb.goBackInPane(0);
 
 		expect(wb.panes[0]).toEqual({ kind: 'library', query: 'archives' });
+	});
+
+	it('does not record duplicate history for tracking workspace or same tracking detail', () => {
+		const wb = new WorkbenchStore();
+		wb.openInPane(0, { kind: 'library', query: 'tracks' });
+		wb.openInPane(0, { kind: 'tracking' });
+		wb.openInPane(0, { kind: 'tracking' });
+		wb.openInPane(0, { kind: 'tracking-detail', trackId: 11 });
+		wb.openInPane(0, { kind: 'tracking-detail', trackId: 11 });
+
+		wb.goBackInPane(0);
+		expect(wb.panes[0]).toEqual({ kind: 'tracking' });
+
+		wb.goBackInPane(0);
+		expect(wb.panes[0]).toEqual({ kind: 'library', query: 'tracks' });
 	});
 
 	it('does not persist transient back history or fallback metadata', () => {

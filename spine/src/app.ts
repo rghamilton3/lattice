@@ -47,7 +47,7 @@ export function buildApp(deps: AppDeps) {
 				.use(filesRoutes(db))
 				.use(workingRoutes(db, { attachmentsDir }))
 				.use(lateralRoutes(db))
-				.use(tracksRoutes(db))
+				.use(tracksRoutes(db, { attachmentsDir }))
 				.use(
 					statusRoutes(db, () =>
 						buildPlatformStatus({ db, agentToken, allowHttp, devUser, surfaceBuild }),

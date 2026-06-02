@@ -123,6 +123,300 @@ async function mockBackNavigationData(page: Page) {
 	);
 }
 
+async function mockTrackingData(page: Page) {
+	let nextTrackId = 4;
+	let nextBinId = 2;
+	let failNextCreate = false;
+	let failNextMovedFollowup = false;
+	let bins = [{ id: 1, name: 'Router Shelf', normalized_name: 'router shelf' }];
+	let cards = [
+		{
+			item_key: 'keys',
+			item_phrase: 'keys',
+			current_track: {
+				id: 1,
+				text: 'keys by the router',
+				captured_at: '2026-01-02T00:00:00.000Z',
+				source: 'signal-text',
+				displaced: false,
+				photo_ref: 'photo-keys',
+				supersedes: null
+			},
+			bin_id: 1,
+			bin_name: 'Router Shelf',
+			location_label: 'Router Shelf',
+			displaced: false,
+			possible_duplicates: []
+		}
+	];
+	let unbinned = [
+		{
+			item_key: 'bike-lock',
+			item_phrase: 'bike lock',
+			current_track: {
+				id: 2,
+				text: 'bike lock in hallway shelf',
+				captured_at: '2026-01-03T00:00:00.000Z',
+				source: 'surface-form',
+				displaced: false,
+				photo_ref: null,
+				supersedes: null
+			},
+			bin_id: null,
+			bin_name: null,
+			location_label: 'hallway shelf',
+			displaced: false,
+			possible_duplicates: []
+		}
+	];
+	let followups = [
+		{
+			query_id: 7,
+			query: 'keys',
+			queried_at: '2026-01-01T00:00:00.000Z',
+			expires_at: '2026-01-08T00:00:00.000Z',
+			opened_track: cards[0].current_track,
+			affirmative_label: 'Still there'
+		},
+		{
+			query_id: 8,
+			query: 'bike lock',
+			queried_at: '2026-01-01T00:00:00.000Z',
+			expires_at: '2026-01-08T00:00:00.000Z',
+			opened_track: unbinned[0].current_track,
+			affirmative_label: 'Still there'
+		},
+		{
+			query_id: 9,
+			query: 'flashlight',
+			queried_at: '2026-01-01T00:00:00.000Z',
+			expires_at: '2026-01-08T00:00:00.000Z',
+			opened_track: {
+				id: 6,
+				text: 'flashlight in toolbox',
+				captured_at: '2026-01-02T00:00:00.000Z',
+				source: 'signal-text',
+				displaced: false,
+				photo_ref: null,
+				supersedes: null
+			},
+			affirmative_label: 'Still there'
+		}
+	];
+	const detail = (id: number) => ({
+		record:
+			[...cards, ...unbinned].find((card) => card.current_track.id === id)?.current_track ??
+			cards[0].current_track,
+		same_item_history: [
+			{
+				id: 3,
+				text: 'keys in kitchen bowl',
+				captured_at: '2026-01-01T00:00:00.000Z',
+				source: 'signal-text',
+				displaced: false,
+				photo_ref: 'photo-history',
+				supersedes: null
+			}
+		],
+		related_location_tracks: [unbinned[0].current_track]
+	});
+	const board = (displacedOnly: boolean) => {
+		const filteredCards = displacedOnly ? cards.filter((card) => card.displaced) : cards;
+		const filteredUnbinned = displacedOnly ? unbinned.filter((card) => card.displaced) : unbinned;
+		return {
+			bins,
+			cards: filteredCards,
+			unbinned: filteredUnbinned,
+			displaced_count: [...cards, ...unbinned].filter((card) => card.displaced).length
+		};
+	};
+
+	await page.route('**/api/tracks/**', async (route) => {
+		const request = route.request();
+		const url = new URL(request.url());
+		const path = url.pathname;
+		const method = request.method();
+		if (path === '/api/tracks/search' && method === 'GET') {
+			return route.fulfill({
+				status: 200,
+				body: JSON.stringify({
+					query_id: 5,
+					primary: cards[0].current_track,
+					history: [detail(1).same_item_history[0]],
+					results: [cards[0].current_track, detail(1).same_item_history[0]],
+					empty_message: null
+				})
+			});
+		}
+		if (path === '/api/tracks/queries/5/open' && method === 'POST') {
+			return route.fulfill({ status: 200, body: JSON.stringify({ ok: true }) });
+		}
+		if (path === '/api/tracks/board' && method === 'GET') {
+			return route.fulfill({
+				status: 200,
+				body: JSON.stringify(board(url.searchParams.get('displaced') === 'only'))
+			});
+		}
+		if (path === '/api/tracks/followups' && method === 'GET') {
+			return route.fulfill({ status: 200, body: JSON.stringify({ followups }) });
+		}
+		if (path === '/api/tracks/photos' && method === 'POST') {
+			return route.fulfill({
+				status: 201,
+				body: JSON.stringify({
+					ref: 'photo-1',
+					filename: 'photo.png',
+					content_type: 'image/png',
+					size_bytes: 4,
+					url: '/api/tracks/photos/photo-1/raw'
+				})
+			});
+		}
+		if (path.match(/^\/api\/tracks\/photos\/.+\/raw$/) && method === 'GET') {
+			return route.fulfill({
+				status: 200,
+				contentType: 'image/png',
+				body: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
+			});
+		}
+		if (path === '/api/tracks/' && method === 'POST') {
+			if (failNextCreate) {
+				failNextCreate = false;
+				return route.fulfill({ status: 500, body: 'temporary save issue' });
+			}
+			const body = request.postDataJSON() as { text: string; photo_ref?: string | null };
+			const track = {
+				id: nextTrackId++,
+				text: body.text,
+				captured_at: '2026-01-04T00:00:00.000Z',
+				source: 'surface-form',
+				displaced: false,
+				photo_ref: body.photo_ref ?? null,
+				supersedes: null
+			};
+			unbinned = [
+				...unbinned,
+				{
+					item_key: body.text.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+					item_phrase: body.text.split(' in ')[0] ?? body.text,
+					current_track: track,
+					bin_id: null,
+					bin_name: null,
+					location_label: body.text.split(' in ')[1] ?? null,
+					displaced: false,
+					possible_duplicates: []
+				}
+			];
+			return route.fulfill({
+				status: 201,
+				body: JSON.stringify({ id: track.id, possible_duplicates: [] })
+			});
+		}
+		if (path === '/api/tracks/bins' && method === 'POST') {
+			const body = request.postDataJSON() as { name: string };
+			const bin = {
+				id: nextBinId++,
+				name: body.name,
+				normalized_name: body.name.toLowerCase()
+			};
+			bins = [...bins, bin];
+			return route.fulfill({ status: 201, body: JSON.stringify({ bin }) });
+		}
+		if (path === '/api/tracks/board/move' && method === 'POST') {
+			const body = request.postDataJSON() as {
+				item_phrase: string;
+				from_track_id: number;
+				to_bin_id: number;
+			};
+			const bin = bins.find((candidate) => candidate.id === body.to_bin_id) ?? bins[0];
+			const sourceCard = [...cards, ...unbinned].find(
+				(card) => card.current_track.id === body.from_track_id
+			);
+			const moved = {
+				...(sourceCard ?? unbinned[0]),
+				current_track: {
+					...(sourceCard ?? unbinned[0]).current_track,
+					id: nextTrackId++,
+					text: `${body.item_phrase} in ${bin.name}`,
+					supersedes: body.from_track_id
+				},
+				bin_id: bin.id,
+				bin_name: bin.name,
+				location_label: bin.name,
+				displaced: false
+			};
+			cards = [...cards.filter((card) => card.item_key !== moved.item_key), moved];
+			unbinned = unbinned.filter((card) => card.item_key !== moved.item_key);
+			return route.fulfill({
+				status: 201,
+				body: JSON.stringify({
+					track_id: moved.current_track.id,
+					text: moved.current_track.text,
+					displaced: false,
+					supersedes: body.from_track_id
+				})
+			});
+		}
+		if (path === '/api/tracks/board/checkout' && method === 'POST') {
+			const body = request.postDataJSON() as {
+				item_phrase: string;
+				from_track_id: number;
+				context: string;
+			};
+			cards = cards.map((card) =>
+				card.current_track.id === body.from_track_id
+					? {
+							...card,
+							current_track: {
+								...card.current_track,
+								id: nextTrackId++,
+								text: `${body.item_phrase} checked out: ${body.context}`,
+								displaced: true,
+								supersedes: body.from_track_id
+							},
+							displaced: true
+						}
+					: card
+			);
+			return route.fulfill({
+				status: 201,
+				body: JSON.stringify({
+					track_id: nextTrackId,
+					text: `${body.item_phrase} checked out: ${body.context}`,
+					displaced: true,
+					supersedes: body.from_track_id
+				})
+			});
+		}
+		if (path.includes('/api/tracks/followups/') && method === 'POST') {
+			if (path.endsWith('/moved') && failNextMovedFollowup) {
+				failNextMovedFollowup = false;
+				return route.fulfill({ status: 500, body: 'temporary moved issue' });
+			}
+			const queryId = Number(path.split('/')[4]);
+			followups = followups.filter((followup) => followup.query_id !== queryId);
+			return route.fulfill({ status: 200, body: JSON.stringify({ ok: true, outcome: 'closed' }) });
+		}
+		const detailMatch = path.match(/^\/api\/tracks\/(\d+)$/);
+		if (detailMatch && method === 'GET') {
+			return route.fulfill({
+				status: 200,
+				body: JSON.stringify(detail(Number(detailMatch[1])))
+			});
+		}
+		return route.fulfill({ status: 404, body: 'tracking mock missing' });
+	});
+
+	return {
+		failNextCreate: () => {
+			failNextCreate = true;
+		},
+		failNextMovedFollowup: () => {
+			failNextMovedFollowup = true;
+		}
+	};
+}
+
 test.use({ serviceWorkers: 'block' });
 
 async function routePreviewDoc(
@@ -219,6 +513,106 @@ test.beforeEach(async ({ page }) => {
 test('home view renders the canonical landing greeting', async ({ page }) => {
 	await page.goto('/');
 	await expect(page.getByRole('heading', { name: /Where you were/i })).toBeVisible();
+});
+
+test('tracking workspace searches, opens history, and restores stable detail links', async ({
+	page
+}) => {
+	await mockTrackingData(page);
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Tracking follow-ups' }).click();
+
+	await expect(
+		page.getByRole('heading', { name: 'Find and place real-world items' })
+	).toBeVisible();
+	await page.getByLabel('Item or place').fill('keys by router');
+	await page.getByRole('button', { name: 'Search' }).click();
+	await expect(page.getByText('Best match', { exact: true })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'keys by the router' })).toBeVisible();
+	await expect(page.getByAltText('Photo preview for keys by the router')).toBeVisible();
+	await expect(page.getByText('photo attached').first()).toBeVisible();
+	await expect(page.getByAltText('Photo preview for keys in kitchen bowl')).toBeVisible();
+	await page.getByRole('button', { name: 'Open record' }).click();
+
+	const detailRegion = page.getByLabel('Tracking record detail');
+	await expect(page.getByRole('region', { name: 'Pane 1' })).toContainText('Same item history');
+	await expect(page.getByText('keys in kitchen bowl')).toBeVisible();
+	await expect(detailRegion.getByText('bike lock in hallway shelf')).toBeVisible();
+
+	await page.goto('/?track=1');
+	await expect(page.getByRole('heading', { name: 'keys by the router' })).toBeVisible();
+});
+
+test('tracking workspace creates records, moves cards by keyboard controls, and filters checkouts', async ({
+	page
+}) => {
+	const tracking = await mockTrackingData(page);
+	await page.goto('/?view=tracking');
+
+	await page.getByRole('button', { name: 'Save track' }).click();
+	await expect(page.getByRole('alert')).toContainText('Write the item and where it is');
+
+	await page.getByLabel('Item and place').fill('camera in desk drawer');
+	tracking.failNextCreate();
+	await page.getByRole('button', { name: 'Save track' }).click();
+	await expect(page.getByRole('alert')).toContainText('Save did not finish');
+	await expect(page.getByLabel('Item and place')).toHaveValue('camera in desk drawer');
+
+	await page.getByLabel('Item and place').fill('camera in desk drawer');
+	await page.getByLabel('Optional photo').setInputFiles({
+		name: 'camera.png',
+		mimeType: 'image/png',
+		buffer: Buffer.from([1, 2, 3, 4])
+	});
+	await page.getByRole('button', { name: 'Save track' }).click();
+	await expect(page.getByText(/Saved track \d+\./)).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'camera' })).toBeVisible();
+
+	const bikeCard = page.locator('article.board-card', { hasText: 'bike lock' });
+	await bikeCard.getByRole('button', { name: 'Create bin from hallway shelf' }).click();
+	await expect(page.getByText('Created bin hallway shelf.')).toBeVisible();
+
+	await page.getByPlaceholder('garage shelf').fill('Office Shelf');
+	await page.getByRole('button', { name: 'Create bin', exact: true }).click();
+	await bikeCard.getByRole('button', { name: 'Move' }).click();
+	await bikeCard.getByLabel('Destination bin').selectOption({ label: 'Office Shelf' });
+	await bikeCard.getByRole('button', { name: 'Place' }).click();
+	await expect(bikeCard).toContainText('Office Shelf');
+
+	await page.getByLabel('Checkout context').fill('with neighbor');
+	await bikeCard.getByRole('button', { name: 'Check out' }).click();
+	await expect(bikeCard).toContainText('away');
+	await page.getByLabel('Show only away items').check();
+	await expect(page.locator('article.board-card')).toHaveCount(1);
+	await expect(page.locator('article.board-card')).toContainText('bike lock');
+});
+
+test('tracking follow-ups close still, moved, and skipped rows without reappearing', async ({
+	page
+}) => {
+	const tracking = await mockTrackingData(page);
+	await page.goto('/?view=tracking');
+
+	const keysFollowup = page.locator('article.followup-row', { hasText: 'keys' });
+	await keysFollowup.getByRole('button', { name: 'Still there' }).click();
+	await expect(keysFollowup).toHaveCount(0);
+
+	const bikeFollowup = page.locator('article.followup-row', { hasText: 'bike lock' });
+	await bikeFollowup.getByLabel('Moved place for bike lock').fill('bike lock in garage');
+	tracking.failNextMovedFollowup();
+	await bikeFollowup.getByRole('button', { name: 'Moved' }).click();
+	await expect(page.getByRole('alert')).toContainText('Follow-up did not finish');
+	await expect(bikeFollowup.getByLabel('Moved place for bike lock')).toHaveValue(
+		'bike lock in garage'
+	);
+	await bikeFollowup.getByRole('button', { name: 'Moved' }).click();
+	await expect(bikeFollowup).toHaveCount(0);
+
+	const flashlightFollowup = page.locator('article.followup-row', { hasText: 'flashlight' });
+	await flashlightFollowup.getByRole('button', { name: 'Skip' }).click();
+	await expect(flashlightFollowup).toHaveCount(0);
+
+	await expect(page.getByText('No follow-ups right now.')).toBeVisible();
 });
 
 test('quick capture: c → type → ⌘↵ shows toast', async ({ page }) => {

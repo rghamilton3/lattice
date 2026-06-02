@@ -153,7 +153,7 @@ Returns the derived tracking board.
   "cards": [
     {
       "item_key": "drill",
-      "phrase": "drill",
+      "item_phrase": "drill",
       "current_track": {
         "id": 42,
         "text": "drill in Garage shelf",
@@ -167,7 +167,7 @@ Returns the derived tracking board.
       "bin_id": 1,
       "location_label": "Garage shelf",
       "displaced": false,
-      "possible_duplicate_keys": []
+      "possible_duplicates": []
     }
   ],
   "unbinned": [],
@@ -198,11 +198,14 @@ Creates a manual or phrase-promoted bin.
 
 ```json
 {
-  "id": 1,
-  "name": "Garage shelf",
-  "normalized_name": "garage shelf",
-  "created_at": "2026-06-02T10:00:00Z",
-  "updated_at": "2026-06-02T10:00:00Z"
+  "bin": {
+    "id": 1,
+    "name": "Garage shelf",
+    "normalized_name": "garage shelf",
+    "created_at": "2026-06-02T10:00:00Z",
+    "updated_at": "2026-06-02T10:00:00Z",
+    "archived_at": null
+  }
 }
 ```
 

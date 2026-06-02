@@ -130,6 +130,7 @@
 		if (view === 'home') wb.openInPane(0, { kind: 'home' });
 		else if (view === 'tasks') wb.openInPane(0, { kind: 'tasks' });
 		else if (view === 'library') wb.openInPane(0, { kind: 'library', query: '' });
+		else if (view === 'tracking') wb.openInPane(0, { kind: 'tracking' });
 	}
 </script>
 

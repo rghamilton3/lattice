@@ -1,8 +1,8 @@
 //! System tray icon for the Lattice agent (Windows).
 //!
 //! Uses `tray-icon` + `muda` for the system tray and context menu.
-//! The tray-icon crate owns a Windows message-only HWND internally, so no
-//! additional event-loop framework is required — a simple polling loop suffices.
+//! The tray-icon crate owns a Windows message-only HWND internally; this binary
+//! pumps the Win32 queue directly instead of bringing in a GUI event-loop crate.
 
 // The tray-icon crate is a Windows-only dependency; gate all impl behind cfg(windows).
 // On other platforms this compiles to a stub that exits with an error message.
@@ -21,6 +21,10 @@ use std::time::Duration;
 use tray_icon::{
     TrayIcon, TrayIconBuilder,
     menu::{IsMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem},
+};
+#[cfg(windows)]
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    DispatchMessageW, MSG, PM_REMOVE, PeekMessageW, TranslateMessage,
 };
 
 // ── Render state sent from background → main thread ──────────────────────────
@@ -219,6 +223,17 @@ fn spawn_sibling(name: &str) {
     }
 }
 
+#[cfg(windows)]
+fn pump_windows_messages() {
+    unsafe {
+        let mut msg = std::mem::zeroed::<MSG>();
+        while PeekMessageW(&mut msg, std::ptr::null_mut(), 0, 0, PM_REMOVE) != 0 {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 #[cfg(windows)]
@@ -245,6 +260,8 @@ fn main() {
     let exit_id = menu.exit_item.id().clone();
 
     loop {
+        pump_windows_messages();
+
         while let Ok(state) = state_rx.try_recv() {
             apply_state(&tray, &menu, &state);
         }

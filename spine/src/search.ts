@@ -567,10 +567,7 @@ export async function search(q: string): Promise<SearchResult[]> {
 			console.warn('[qmd] search called but initSearch failed — returning empty results');
 		return [];
 	}
-	// QMD's structuredSearch rejects multi-line queries and negation syntax in vec
-	// queries. Document content (markdown) routinely contains newlines, list-item
-	// bullets (`- item`), and unbalanced quotes, all of which trigger validation
-	// errors. Normalize before handing off so the caller never sees a 500.
+	// normalize doc content before structuredSearch: QMD rejects newlines, unbalanced quotes, and negation dashes
 	const singleLine = q.replace(/[\r\n]+/g, ' ').trim();
 	// lex: unmatched `"` → strip all quotes rather than risk an FTS5 parse error
 	const quoteCount = (singleLine.match(/"/g) ?? []).length;
@@ -595,6 +592,7 @@ export async function searchDeep(q: string): Promise<SearchResult[]> {
 		return [];
 	}
 	try {
+		// single-query form — bypasses structuredSearch validators, no normalization needed
 		const results = await _store.search({ query: q, limit: 20 });
 		return mapResults(results);
 	} catch (e) {

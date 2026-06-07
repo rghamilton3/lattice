@@ -189,6 +189,8 @@ async function openPreviewWorkingEditor(
 }
 
 async function openPreviewSplit(page: Page) {
+	const dismiss = page.getByRole('button', { name: 'Dismiss' });
+	if (await dismiss.isVisible()) await dismiss.click();
 	const splitButton = page.getByRole('button', { name: 'Open preview in split pane' });
 	await splitButton.click();
 	await expect(page.getByRole('region', { name: 'Pane 2' })).toBeVisible();
@@ -710,9 +712,13 @@ test('working doc editor keyboard navigation reaches controls and preview withou
 			const element = document.activeElement as HTMLElement | null;
 			return {
 				aria: element?.getAttribute('aria-label') ?? '',
-				text: element?.textContent ?? ''
+				text: element?.textContent ?? '',
+				inEditor: element?.closest('.cm-content') !== null
 			};
 		});
+		if (active.inEditor) {
+			await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+		}
 		reached.back ||= active.aria === 'Back to previous view';
 		reached.split ||= active.aria === 'Open preview in split pane';
 		reached.diagram ||= active.aria === 'Insert diagram';

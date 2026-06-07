@@ -567,10 +567,17 @@ export async function search(q: string): Promise<SearchResult[]> {
 			console.warn('[qmd] search called but initSearch failed — returning empty results');
 		return [];
 	}
+	// normalize doc content before structuredSearch: QMD rejects newlines, unbalanced quotes, and negation dashes
+	const singleLine = q.replace(/[\r\n]+/g, ' ').trim();
+	// lex: unmatched `"` → strip all quotes rather than risk an FTS5 parse error
+	const quoteCount = (singleLine.match(/"/g) ?? []).length;
+	const lexQuery = quoteCount % 2 === 0 ? singleLine : singleLine.replace(/"/g, '');
+	// vec: `(^|\s)-word` looks like negation syntax; remove the dash
+	const vecQuery = singleLine.replace(/(^|\s)-(?=[\w"])/g, '$1');
 	const results = await _store.search({
 		queries: [
-			{ type: 'lex', query: q },
-			{ type: 'vec', query: q },
+			{ type: 'lex', query: lexQuery },
+			{ type: 'vec', query: vecQuery },
 		],
 		rerank: false,
 		limit: 20,
@@ -585,6 +592,7 @@ export async function searchDeep(q: string): Promise<SearchResult[]> {
 		return [];
 	}
 	try {
+		// single-query form — bypasses structuredSearch validators, no normalization needed
 		const results = await _store.search({ query: q, limit: 20 });
 		return mapResults(results);
 	} catch (e) {

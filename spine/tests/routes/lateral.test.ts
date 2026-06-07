@@ -156,6 +156,51 @@ describe('GET /api/similar', () => {
 		expect(results.map((r: any) => r.snippet)).toEqual(['other-file']);
 	});
 
+	it('does not 500 when working doc content has newlines', async () => {
+		// Multi-line content fails QMD structuredSearch newline validation without the fix.
+		await app.app.handle(
+			req('/api/working', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ title: 'Multiline', content: '# Multiline\n\nsome content\n' }),
+			}),
+		);
+		app.qmd.setHits([]);
+		const res = await app.app.handle(req('/api/similar?id=multiline&kind=working'));
+		expect(res.status).toBe(200);
+	});
+
+	it('does not 500 when working doc content has negation-style dash (vec path)', async () => {
+		// Single-line content with ` -word` trips validateSemanticQuery in QMD without the fix.
+		await app.app.handle(
+			req('/api/working', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					title: 'Negation',
+					content: 'release notes for v2 -deprecated and removed',
+				}),
+			}),
+		);
+		app.qmd.setHits([]);
+		const res = await app.app.handle(req('/api/similar?id=negation&kind=working'));
+		expect(res.status).toBe(200);
+	});
+
+	it('does not 500 when working doc content has an unbalanced double quote (lex path)', async () => {
+		// Odd number of " fails validateLexQuery in QMD without the fix.
+		await app.app.handle(
+			req('/api/working', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ title: 'Quoted', content: 'she said "hello and left' }),
+			}),
+		);
+		app.qmd.setHits([]);
+		const res = await app.app.handle(req('/api/similar?id=quoted&kind=working'));
+		expect(res.status).toBe(200);
+	});
+
 	it('caps results at 10', async () => {
 		const { id } = seedCapture(app, 'src');
 		const hits = Array.from({ length: 20 }, (_, i) => ({

@@ -78,6 +78,23 @@ export function installQmdMock(): FakeStoreHandle {
 		async search(args: unknown) {
 			state.lastSearchArgs = args;
 			if (state.searchThrows) throw state.searchThrows;
+			// Mirror QMD's structuredSearch validation so tests catch the same errors
+			// that production throws on malformed queries.
+			const typed = args as { queries?: Array<{ type: string; query: string }> };
+			if (typed.queries) {
+				for (const q of typed.queries) {
+					if (/[\r\n]/.test(q.query))
+						throw new Error(
+							`Structured search (${q.type}): queries must be single-line. Remove newline characters.`,
+						);
+					if (q.type === 'lex' && (q.query.match(/"/g) ?? []).length % 2 === 1)
+						throw new Error(`Structured search (lex): Lex query has an unmatched double quote (")`);
+					if ((q.type === 'vec' || q.type === 'hyde') && /(^|\s)-[\w"]/.test(q.query))
+						throw new Error(
+							`Structured search (${q.type}): Negation (-term) is not supported in vec/hyde queries.`,
+						);
+				}
+			}
 			return state.searchHits;
 		},
 	};

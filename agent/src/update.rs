@@ -177,6 +177,7 @@ async fn check() -> Result<i32> {
             attempts.message = "Release metadata was unavailable. Installed files were not changed; try again when the network is reachable.".to_owned();
             attempts.error_detail = Some(err.to_string());
             record_attempt(&attempts)?;
+            eprintln!("Reported issue: {err}");
             Ok(2)
         }
     }
@@ -205,6 +206,7 @@ async fn apply(args: &[String]) -> Result<i32> {
             attempt.error_detail = Some(err.to_string());
             record_attempt(&attempt)?;
             eprintln!("{}", attempt.message);
+            eprintln!("Reported issue: {err}");
             return Ok(2);
         }
     };
@@ -331,6 +333,7 @@ async fn apply(args: &[String]) -> Result<i32> {
             attempt.error_detail = Some(err.to_string());
             record_attempt(&attempt)?;
             eprintln!("{}", attempt.message);
+            eprintln!("Reported issue: {err}");
             return Ok(1);
         }
         applied_products.push(product.id.clone());
@@ -375,16 +378,7 @@ fn print_history() -> Result<i32> {
             .next()
             .cloned()
             .unwrap_or_else(|| "unknown".to_owned());
-        println!(
-            "{} {} {} {} -> {}: {}. {}",
-            attempt.completed_at,
-            attempt.operation,
-            products,
-            starting,
-            target,
-            outcome_text(attempt.outcome),
-            attempt.message
-        );
+        println!("{}", history_line(attempt, &products, &starting, &target));
     }
     Ok(0)
 }
@@ -947,6 +941,24 @@ fn outcome_text(outcome: AttemptOutcome) -> &'static str {
     }
 }
 
+fn history_line(attempt: &UpdateAttempt, products: &str, starting: &str, target: &str) -> String {
+    let mut line = format!(
+        "{} {} {} {} -> {}: {}. {}",
+        attempt.completed_at,
+        attempt.operation,
+        products,
+        starting,
+        target,
+        outcome_text(attempt.outcome),
+        attempt.message
+    );
+    if let Some(error_detail) = &attempt.error_detail {
+        line.push_str(" Reported issue: ");
+        line.push_str(error_detail);
+    }
+    line
+}
+
 impl Version {
     pub fn parse(raw: &str) -> Self {
         let raw = raw.trim();
@@ -1214,6 +1226,25 @@ mod tests {
         assert!(json.contains("spine"));
         assert!(json.contains("ManualActionRequired"));
         assert!(json.contains("Update spine manually."));
+    }
+
+    #[test]
+    fn history_line_includes_error_detail_when_present() {
+        let product = manual_product(
+            "spine",
+            "spine",
+            ProductKind::ServerComponent,
+            "Update spine manually.",
+        );
+        let mut attempt = base_attempt("apply", &[product], "1");
+        attempt.outcome = AttemptOutcome::FailedInstallation;
+        attempt.message = "spine update failed.".to_owned();
+        attempt.error_detail = Some("permission denied".to_owned());
+
+        let line = history_line(&attempt, "spine", "unknown", "unavailable");
+
+        assert!(line.contains("failed-installation"));
+        assert!(line.contains("Reported issue: permission denied"));
     }
 
     #[test]

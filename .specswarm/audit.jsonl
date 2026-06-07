@@ -1,0 +1,8 @@
+{"timestamp":"2026-06-07T17:29:57-05:00","event":"principle_unhandled","reason":"unknown_rule_type","rule_type":"...","summary":"Unnamed principle"}
+{"timestamp":"2026-06-07T17:29:57-05:00","event":"constitutional_hook_generated","rule_type":"no-pattern","severity":"warn","slug":"new-web-source-must-be-typescript-not-javascript","summary":"New web source must be TypeScript, not JavaScript"}
+{"timestamp":"2026-06-07T17:29:57-05:00","event":"constitutional_hook_generated","rule_type":"required-pair","severity":"warn","slug":"structuredsearch-callers-must-normalize-document-content-fir","summary":"structuredSearch callers must normalize document content first"}
+{"timestamp":"2026-06-07T17:29:57-05:00","event":"agent_generated","name":"ss-db-migration-implementer","task_type":"Database migration","trigger":"database migration"}
+{"timestamp":"2026-06-07T17:29:57-05:00","event":"agent_generated","name":"ss-test-implementer","task_type":"Test suite","trigger":"test"}
+{"timestamp":"2026-06-07T17:29:57-05:00","event":"agent_generated","name":"ss-typescript-module-implementer","task_type":"TypeScript module","trigger":"typescript module"}
+{"timestamp":"2026-06-07T17:32:54-05:00","event":"principle_unhandled","reason":"unknown_rule_type","rule_type":"...","summary":"Unnamed principle"}
+{"timestamp":"2026-06-07T17:32:54-05:00","event":"constitutional_hook_generated","rule_type":"required-pair","severity":"warn","slug":"structuredsearch-callers-must-normalize-document-content-fir","summary":"structuredSearch callers must normalize document content first"}

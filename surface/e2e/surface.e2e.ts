@@ -324,6 +324,17 @@ test('global shortcut keys stay suppressed while focus is in CodeMirror', async 
 	await expect(page.getByRole('dialog', { name: 'Quick capture' })).toBeHidden();
 });
 
+test('Tab key inserts indent in CodeMirror instead of tabbing out', async ({ page }) => {
+	await openWorkingEditor(page);
+
+	const editor = page.locator('.cm-content');
+	await editor.click();
+	await page.keyboard.press('Tab');
+
+	await expect(editor).toBeFocused();
+	await expect(page.locator('.cm-line')).toContainText(/^\s{2,}\S/);
+});
+
 test('back from a home-opened document returns to Home', async ({ page }) => {
 	await mockBackNavigationData(page);
 	await page.goto('/');

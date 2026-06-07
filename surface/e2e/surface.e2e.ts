@@ -314,10 +314,18 @@ async function mockTrackingData(page: Page) {
 		}
 		if (path === '/api/tracks/bins' && method === 'POST') {
 			const body = request.postDataJSON() as { name: string };
+			const normalizedName = body.name.trim().toLowerCase().replace(/\s+/g, ' ');
+			const existing = bins.find((candidate) => candidate.normalized_name === normalizedName);
+			if (existing) {
+				return route.fulfill({
+					status: 409,
+					body: JSON.stringify({ error: 'bin already exists', bin: existing })
+				});
+			}
 			const bin = {
 				id: nextBinId++,
 				name: body.name,
-				normalized_name: body.name.toLowerCase()
+				normalized_name: normalizedName
 			};
 			bins = [...bins, bin];
 			return route.fulfill({ status: 201, body: JSON.stringify({ bin }) });
@@ -543,7 +551,7 @@ test('tracking workspace searches, opens history, and restores stable detail lin
 	await expect(page.getByRole('heading', { name: 'keys by the router' })).toBeVisible();
 });
 
-test('tracking workspace creates records, moves cards by keyboard controls, and filters checkouts', async ({
+test('tracking workspace creates records, moves cards by drag/drop and keyboard controls, and filters checkouts', async ({
 	page
 }) => {
 	const tracking = await mockTrackingData(page);
@@ -574,6 +582,21 @@ test('tracking workspace creates records, moves cards by keyboard controls, and 
 
 	await page.getByPlaceholder('garage shelf').fill('Office Shelf');
 	await page.getByRole('button', { name: 'Create bin', exact: true }).click();
+	await expect(page.getByText('Created bin Office Shelf.')).toBeVisible();
+	await page.getByPlaceholder('garage shelf').fill('office shelf');
+	await page.getByRole('button', { name: 'Create bin', exact: true }).click();
+	await expect(page.getByText('Place already exists: Office Shelf.')).toBeVisible();
+	const officeBin = page.locator('article.bin-card', { hasText: 'Office Shelf' });
+	const cameraCard = page.locator('article.board-card', { hasText: 'camera' });
+	const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+	await cameraCard.dispatchEvent('dragstart', { dataTransfer });
+	await officeBin.dispatchEvent('dragenter', { dataTransfer });
+	await officeBin.dispatchEvent('dragover', { dataTransfer });
+	await officeBin.dispatchEvent('drop', { dataTransfer });
+	await expect(officeBin.locator('article.board-card', { hasText: 'camera' })).toContainText(
+		'Office Shelf'
+	);
+	await expect(page.getByText('Moved camera to Office Shelf.')).toBeVisible();
 	await bikeCard.getByRole('button', { name: 'Move' }).click();
 	await bikeCard.getByLabel('Destination bin').selectOption({ label: 'Office Shelf' });
 	await bikeCard.getByRole('button', { name: 'Place' }).click();
@@ -612,7 +635,7 @@ test('tracking follow-ups close still, moved, and skipped rows without reappeari
 	await flashlightFollowup.getByRole('button', { name: 'Skip' }).click();
 	await expect(flashlightFollowup).toHaveCount(0);
 
-	await expect(page.getByText('No follow-ups right now.')).toBeVisible();
+	await expect(page.getByLabel('Tracking follow-ups')).toHaveCount(0);
 });
 
 test('quick capture: c → type → ⌘↵ shows toast', async ({ page }) => {

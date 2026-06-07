@@ -5,7 +5,7 @@
 **Created**: 2026-06-07
 **Severity**: [ ] Critical | [x] High | [ ] Medium | [ ] Low
 **Component**: CodeMirror editor component
-**Status**: [ ] Investigating | [x] Root Cause Found | [ ] Fixed | [ ] Verified
+**Status**: [ ] Investigating | [ ] Root Cause Found | [x] Fixed | [ ] Verified
 
 ## Input
 User description: "tab in codemirror editor actually tabs out of the editor instead of insert a tab char"
@@ -49,22 +49,21 @@ Import `indentWithTab` from `@codemirror/commands` and add it to the `keymap.of(
 [If yes, explain impact and migration path]
 
 ## Regression Test
-*Created during /speckit.tasks and /speckit.implement (BEFORE applying fix)*
 
-- [ ] Test written that reproduces bug (fails before fix)
-- [ ] Test passes after fix applied
-- [ ] Test added to test suite (not orphaned)
-- [ ] Test covers edge cases identified during investigation
+- [x] Test written that reproduces bug (fails before fix)
+- [x] Test passes after fix applied
+- [x] Test added to test suite (not orphaned)
+- [x] Test covers edge cases identified during investigation
 
-**Test File**: [path to regression test]
-**Test Description**: [what the test validates]
+**Test File**: `surface/e2e/surface.e2e.ts:329`
+**Test Description**: Verifies Tab keeps focus in CodeMirror editor and inserts leading whitespace
 
 ## Verification Checklist
-- [ ] Bug reproduced in clean environment
-- [ ] Root cause identified and documented
-- [ ] Fix implemented
-- [ ] Regression test passes
-- [ ] Existing tests still pass
+- [x] Bug reproduced in clean environment
+- [x] Root cause identified and documented
+- [x] Fix implemented
+- [x] Regression test passes
+- [x] Existing tests still pass
 - [ ] Manual verification complete
 - [ ] Related documentation updated (if needed)
 

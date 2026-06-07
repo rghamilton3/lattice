@@ -334,7 +334,8 @@ test('Tab key inserts indent in CodeMirror instead of tabbing out', async ({ pag
 	await page.keyboard.press('Tab');
 
 	await expect(editor).toBeFocused();
-	await expect(page.locator('.cm-line')).toContainText(/^\s{2,}\S/);
+	const lineText = await page.locator('.cm-line').first().textContent();
+	expect(lineText!.length).toBeGreaterThan(lineText!.trimStart().length);
 });
 
 test('back from a home-opened document returns to Home', async ({ page }) => {

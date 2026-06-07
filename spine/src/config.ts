@@ -2,6 +2,8 @@ import { parse } from 'smol-toml';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
+// Intentional structural subset of QMD's internal ModelsConfig (remote-api fields only).
+// ModelsConfig is not in @tobilu/qmd's public exports, so we maintain a local copy.
 interface QmdModelsConfig {
 	embed_api_url?: string;
 	embed_api_model?: string;
@@ -48,5 +50,8 @@ export function getDatabasePath(): string {
 }
 
 export function getQmdModelsConfig(): QmdModelsConfig | undefined {
+	// QMD reads QMD_EMBED_API_URL / QMD_EMBED_API_MODEL etc. via remoteConfigFromEnv(),
+	// giving env vars precedence over these config.toml values. QMD also throws at startup
+	// if embed_api_url and embed_api_model are only partially configured (either both or neither).
 	return readLatticeConfig().spine?.qmd;
 }

@@ -11,6 +11,7 @@
 		"lint": "oxlint src/"
 	},
 	"dependencies": {
+		"//vendor": "Remove vendor/tobilu-qmd-*.tgz and switch to a semver range once @tobilu/qmd >=2.6.0 lands on npm",
 		"@elysiajs/static": "^1.4.10",
 		"@tobilu/qmd": "file:./vendor/tobilu-qmd-2.5.3.tgz",
 		"elysia": "^1.4.28",

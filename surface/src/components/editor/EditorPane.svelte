@@ -11,7 +11,7 @@
 		drawSelection,
 		highlightActiveLine
 	} from '@codemirror/view';
-	import { defaultKeymap, historyKeymap, history } from '@codemirror/commands';
+	import { defaultKeymap, historyKeymap, history, indentWithTab } from '@codemirror/commands';
 	import { searchKeymap } from '@codemirror/search';
 	import { markdown } from '@codemirror/lang-markdown';
 	import { oneDark } from '@codemirror/theme-one-dark';
@@ -307,6 +307,7 @@
 							return true;
 						}
 					},
+					indentWithTab,
 					...defaultKeymap,
 					...historyKeymap,
 					...searchKeymap

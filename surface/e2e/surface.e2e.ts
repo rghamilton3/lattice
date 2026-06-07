@@ -189,6 +189,8 @@ async function openPreviewWorkingEditor(
 }
 
 async function openPreviewSplit(page: Page) {
+	const dismiss = page.getByRole('button', { name: 'Dismiss' });
+	if (await dismiss.isVisible()) await dismiss.click();
 	const splitButton = page.getByRole('button', { name: 'Open preview in split pane' });
 	await splitButton.click();
 	await expect(page.getByRole('region', { name: 'Pane 2' })).toBeVisible();
@@ -322,6 +324,18 @@ test('global shortcut keys stay suppressed while focus is in CodeMirror', async 
 	await page.keyboard.press('c');
 
 	await expect(page.getByRole('dialog', { name: 'Quick capture' })).toBeHidden();
+});
+
+test('Tab key inserts indent in CodeMirror instead of tabbing out', async ({ page }) => {
+	await openWorkingEditor(page);
+
+	const editor = page.locator('.cm-content');
+	await editor.click();
+	await page.keyboard.press('Tab');
+
+	await expect(editor).toBeFocused();
+	const lineText = await page.locator('.cm-line').first().textContent();
+	expect(lineText!.length).toBeGreaterThan(lineText!.trimStart().length);
 });
 
 test('back from a home-opened document returns to Home', async ({ page }) => {
@@ -699,9 +713,13 @@ test('working doc editor keyboard navigation reaches controls and preview withou
 			const element = document.activeElement as HTMLElement | null;
 			return {
 				aria: element?.getAttribute('aria-label') ?? '',
-				text: element?.textContent ?? ''
+				text: element?.textContent ?? '',
+				inEditor: element?.closest('.cm-content') !== null
 			};
 		});
+		if (active.inEditor) {
+			await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+		}
 		reached.back ||= active.aria === 'Back to previous view';
 		reached.split ||= active.aria === 'Open preview in split pane';
 		reached.diagram ||= active.aria === 'Insert diagram';

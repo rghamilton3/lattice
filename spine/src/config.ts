@@ -2,10 +2,23 @@ import { parse } from 'smol-toml';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
+interface QmdModelsConfig {
+	embed_api_url?: string;
+	embed_api_model?: string;
+	embed_api_key?: string;
+	rerank_api_url?: string;
+	rerank_api_model?: string;
+	rerank_api_key?: string;
+	expand_api_url?: string;
+	expand_api_model?: string;
+	expand_api_key?: string;
+}
+
 interface LatticeConfig {
 	spine?: {
 		agent_token?: string;
 		database_path?: string;
+		qmd?: QmdModelsConfig;
 	};
 }
 
@@ -32,4 +45,8 @@ export function getDatabasePath(): string {
 	return (
 		process.env.DATABASE_PATH ?? readLatticeConfig().spine?.database_path ?? './lattice.dev.db'
 	);
+}
+
+export function getQmdModelsConfig(): QmdModelsConfig | undefined {
+	return readLatticeConfig().spine?.qmd;
 }

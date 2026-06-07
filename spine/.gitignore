@@ -38,6 +38,7 @@ yarn-error.log*
 **/*.zip
 **/*.tar.gz
 **/*.tgz
+!vendor/*.tgz
 **/*.log
 package-lock.json
 **/*.bun

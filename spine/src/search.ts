@@ -1,4 +1,5 @@
 import { createStore } from '@tobilu/qmd';
+import { getQmdModelsConfig } from './config';
 import type { QMDStore } from '@tobilu/qmd';
 import type { Database } from 'bun:sqlite';
 import { join, dirname, basename, resolve } from 'path';
@@ -283,6 +284,7 @@ export async function initSearch(db: Database): Promise<void> {
 					archives: { path: archivesMd, pattern: '**/*.md' },
 					annotations: { path: annotationsMd, pattern: '**/*.md' },
 				},
+				models: getQmdModelsConfig(),
 			},
 		});
 	} catch (e) {

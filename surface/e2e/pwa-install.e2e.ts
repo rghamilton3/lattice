@@ -56,10 +56,14 @@ test('keeps primary shell controls reachable on narrow viewports', async ({ page
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto('/');
 
-	await expect(page.getByRole('navigation').getByRole('button', { name: 'Home' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Quick capture' })).toBeVisible();
 	await expect(page.getByRole('button', { name: /Find anything|Command palette/i })).toBeVisible();
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
 		true
 	);
+
+	// At phone width the inline nav collapses into the toolbar menu; primary
+	// navigation stays reachable there.
+	await page.getByRole('button', { name: 'Menu' }).click();
+	await expect(page.getByRole('menu').getByRole('menuitem', { name: 'Home' })).toBeVisible();
 });

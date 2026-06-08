@@ -162,6 +162,18 @@
 	color-scheme: light;
 }
 
+/* ---- Responsive breakpoints (single source of truth) ----
+   These drive Tailwind's responsive variants in markup: `tablet:` / `phone:`
+   (min-width) and `max-tablet:` / `max-phone:` (max-width). Plain CSS files
+   that need a media query mirror these exact values as literals, because CSS
+   does not allow var() inside @media conditions. Keep them in sync:
+     phone  = 30rem = 480px   (phone / desktop-narrow boundary)
+     tablet = 64rem = 1024px  (tablet / desktop boundary) */
+@theme {
+	--breakpoint-phone: 30rem;
+	--breakpoint-tablet: 64rem;
+}
+
 /* ---- Tailwind utility-class bindings ----
    `@theme inline` keeps utility classes referencing the design-token vars
    directly, so flipping [data-theme] cascades through to bg-*, text-*, etc. */

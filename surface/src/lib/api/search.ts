@@ -18,15 +18,17 @@ export const searchKeys = {
 		['nearby', { timestamp, window_hours }] as const
 };
 
-export function fetchSearch(q: string, deep = false): Promise<{ results: SearchResult[] }> {
-	const url = `/api/search?q=${encodeURIComponent(q)}${deep ? '&deep=true' : ''}`;
-	return apiFetch(url);
+export interface SearchResponse {
+	results: SearchResult[];
+	/** True when results are BM25 keyword-only because the inference endpoint is unavailable. */
+	degraded: boolean;
 }
 
-export function fetchSimilar(
-	id: number | string,
-	kind: DocKind
-): Promise<{ results: SearchResult[] }> {
+export function fetchSearch(q: string): Promise<SearchResponse> {
+	return apiFetch(`/api/search?q=${encodeURIComponent(q)}`);
+}
+
+export function fetchSimilar(id: number | string, kind: DocKind): Promise<SearchResponse> {
 	return apiFetch(`/api/similar?id=${encodeURIComponent(id)}&kind=${kind}`);
 }
 

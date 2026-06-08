@@ -83,7 +83,10 @@ describe('GET /api/status', () => {
 			'active_agent_count',
 			'agents',
 			'checks',
+			'index_failures',
+			'needs_embedding',
 			'ready',
+			'search_degraded',
 			'state',
 		]);
 		expect(Object.keys(body.checks).sort()).toEqual([
@@ -210,6 +213,28 @@ describe('GET /api/status', () => {
 		const body = await json(res);
 		expect(body.active_agent_count).toBe(2);
 		expect(body.agents).toHaveLength(2);
+	});
+
+	it('reports healthy inference fields when the endpoint is up', async () => {
+		const res = await app.app.handle(req('/api/status'));
+		const body = await json(res);
+		expect(body.search_degraded).toBe(false);
+		expect(body.needs_embedding).toBe(0);
+		expect(body.index_failures).toBe(0);
+	});
+
+	it('reports search_degraded and the embedding backlog after a degraded search', async () => {
+		// Drive the search module into degraded mode via a failed full-quality search,
+		// and stage a backlog that getIndexHealth() will report.
+		app.qmd.setSearchError(new Error('Remote embedding circuit breaker is open'));
+		app.qmd.setNeedsEmbedding(7);
+		await app.app.handle(req('/api/search?q=hello'));
+
+		const res = await app.app.handle(req('/api/status'));
+		const body = await json(res);
+		expect(body.search_degraded).toBe(true);
+		expect(body.needs_embedding).toBe(7);
+		expect(body.index_failures).toBe(0);
 	});
 
 	it('does not count stale agents (reported_at older than 5 min)', async () => {

@@ -28,6 +28,11 @@ spine-start:
 relay:
     cd spine && bun run relay
 
+# Run a local stand-in for the remote inference endpoint (embed/rerank/expand via llama.cpp).
+# Set LATTICE_MODELS_DIR to the dir holding the .gguf weights. Ctrl+C stops all three.
+inference:
+    ./scripts/inference-server.sh
+
 # Run all tests
 test:
     cd spine && bun test

@@ -8,11 +8,19 @@ export interface FakeSearchHit {
 	displayPath: string;
 }
 
+export interface FakeLexHit {
+	filepath: string;
+	displayPath: string;
+	body: string;
+	score: number;
+}
+
 interface FakeStoreState {
 	updateCalls: number;
 	embedCalls: number;
 	needsEmbedding: number;
 	searchHits: FakeSearchHit[];
+	lexHits: FakeLexHit[];
 	searchThrows: Error | null;
 	updateThrows: Error | null;
 	lastSearchArgs: unknown;
@@ -28,6 +36,7 @@ interface FakeStoreState {
 export interface FakeStoreHandle {
 	state: FakeStoreState;
 	setHits(hits: FakeSearchHit[]): void;
+	setLexHits(hits: FakeLexHit[]): void;
 	setNeedsEmbedding(n: number): void;
 	setUpdateError(err: Error | null): void;
 	setSearchError(err: Error | null): void;
@@ -47,6 +56,7 @@ export function installQmdMock(): FakeStoreHandle {
 		embedCalls: 0,
 		needsEmbedding: 0,
 		searchHits: [],
+		lexHits: [],
 		searchThrows: null,
 		updateThrows: null,
 		lastSearchArgs: undefined,
@@ -97,16 +107,39 @@ export function installQmdMock(): FakeStoreHandle {
 			}
 			return state.searchHits;
 		},
+		async searchLex() {
+			return state.lexHits.map((h) => ({
+				filepath: h.filepath,
+				displayPath: h.displayPath,
+				body: h.body,
+				score: h.score,
+				source: 'fts',
+			}));
+		},
+		async getIndexHealth() {
+			return { needsEmbedding: state.needsEmbedding, totalDocs: 0, daysStale: null };
+		},
 	};
 
 	mock.module('@tobilu/qmd', () => ({
 		createStore: async () => fakeStore,
+		// Lightweight stand-in for QMD's snippet extractor (degraded keyword path).
+		extractSnippet: (body: string) => ({
+			line: 0,
+			snippet: body.slice(0, 200),
+			linesBefore: 0,
+			linesAfter: 0,
+			snippetLines: 1,
+		}),
 	}));
 
 	handle = {
 		state,
 		setHits(hits) {
 			state.searchHits = hits;
+		},
+		setLexHits(hits) {
+			state.lexHits = hits;
 		},
 		setNeedsEmbedding(n) {
 			state.needsEmbedding = n;

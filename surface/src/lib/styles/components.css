@@ -332,31 +332,34 @@
 	background: var(--c-alarm);
 }
 
-/* tablet breakpoint - mirrors --breakpoint-tablet (64rem) in layout.css */
+/* Narrow toolbar menu trigger: hidden by default (desktop + tablet keep inline
+   nav); revealed at the phone breakpoint where the toolbar no longer fits. */
+.toolbar-menu-btn {
+	display: none;
+}
+
+/* tablet breakpoint - mirrors --breakpoint-tablet (64rem) in layout.css
+   The toolbar stays a single row here: nav goes icon-only and secondary labels
+   are dropped rather than wrapping the palette onto a second bar. The status bar
+   is ambient and is hidden on narrow viewports (connection trouble still
+   surfaces via the recovery-mode notice in the main pane). */
 @media (width < 64rem) {
 	.shell {
-		grid-template-rows: auto 1fr auto;
+		grid-template-rows: 48px 1fr;
 	}
-	.toolbar,
 	.statusbar {
-		flex-wrap: wrap;
-		height: auto;
-		min-height: 48px;
-		padding-block: 8px;
-	}
-	.toolbar-center {
-		order: 3;
-		flex-basis: 100%;
+		display: none;
 	}
 	.brand-name,
 	.palette-button-label,
-	.palette-kbd,
-	.statusbar-tagline {
+	.palette-kbd {
 		display: none;
 	}
-	.statusbar {
-		gap: 8px;
-		justify-content: flex-start;
+	.toolbar-nav .nav-btn span {
+		display: none;
+	}
+	.capture-button .kbd {
+		display: none;
 	}
 	.pwa-notice {
 		position: static;
@@ -369,6 +372,72 @@
 	.pwa-notice-actions {
 		flex-wrap: wrap;
 	}
+}
+
+/* phone breakpoint - mirrors --breakpoint-phone (30rem) in layout.css
+   Below phone width the inline nav, brand, and auxiliary controls collapse into
+   the toolbar menu so the row reduces to [menu] [palette] [Capture]. */
+@media (width < 30rem) {
+	.toolbar-menu-btn {
+		display: inline-flex;
+	}
+	.brand,
+	.toolbar-nav,
+	.toolbar-aux {
+		display: none;
+	}
+}
+/* The menu only exists below phone width; never leave it on after a resize up. */
+@media (width >= 30rem) {
+	.toolbar-menu-backdrop,
+	.toolbar-menu-pop {
+		display: none;
+	}
+}
+
+/* Toolbar navigation menu (phone) */
+.toolbar-menu-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 39;
+}
+.toolbar-menu-pop {
+	position: absolute;
+	top: calc(100% + 4px);
+	left: 8px;
+	z-index: 40;
+	min-width: 208px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 6px;
+	background: var(--bg-raised);
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	box-shadow: var(--shadow-pop);
+}
+.toolbar-menu-pop button {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	min-height: 44px;
+	padding: 10px 12px;
+	border-radius: var(--radius-sm);
+	font-size: var(--fs-small);
+	color: var(--text-soft);
+	text-align: left;
+	background: transparent;
+}
+.toolbar-menu-pop button:hover,
+.toolbar-menu-pop button[aria-checked='true'] {
+	background: var(--bg-high);
+	color: var(--text);
+}
+.toolbar-menu-sep {
+	height: 1px;
+	margin: 4px 0;
+	background: var(--line);
 }
 
 /* ── Doc view ────────────────────────────────────────────────────────────── */

@@ -127,7 +127,9 @@ test('G4: tasks view does not overflow at phone width', async ({ page }) => {
 	);
 	await page.goto('/');
 	await expect(page.getByRole('heading', { name: /Where you were/i })).toBeVisible();
-	await page.getByRole('button', { name: 'Tasks' }).click();
+	// At phone width the inline nav is collapsed into the toolbar menu.
+	await page.getByRole('button', { name: 'Menu' }).click();
+	await page.getByRole('menu').getByRole('menuitem', { name: 'Tasks' }).click();
 	await expect(page.getByText(/deliberately long task title/)).toBeVisible();
 	await assertNoHorizontalOverflow(page);
 	await page.screenshot({ path: 'test-results/responsive-tasks-phone.png' });
@@ -207,4 +209,59 @@ test.describe('coarse pointer (touch device)', () => {
 		expect(capture?.height ?? 0).toBeGreaterThanOrEqual(44);
 		expect(nav?.height ?? 0).toBeGreaterThanOrEqual(44);
 	});
+});
+
+// Toolbar collapse: a single row at every width (no 2-bar wrap), inline icon nav
+// in the tablet band, and a menu only at phone width where it stops fitting.
+test('responsive toolbar stays a single row across the breakpoint band', async ({ page }) => {
+	await page.goto('/');
+	await expect(page.getByRole('heading', { name: /Where you were/i })).toBeVisible();
+	for (const width of [1100, 1000, 800, 640, 480, 390]) {
+		await page.setViewportSize({ width, height: 900 });
+		// The toolbar is a single nowrap row pinned to the grid height, and the
+		// shell clips overflow-x, so a too-wide toolbar would be silently cut off
+		// rather than wrap. Assert its content actually fits within its own box.
+		const fits = await page
+			.locator('.toolbar')
+			.evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
+		expect(fits, `toolbar content overflowed/clipped at ${width}px`).toBe(true);
+		await page.screenshot({ path: `test-results/responsive-toolbar-${width}.png` });
+	}
+});
+
+test('tablet band keeps inline nav and hides the status bar', async ({ page }) => {
+	await page.setViewportSize({ width: 800, height: 1000 });
+	await page.goto('/');
+	await expect(page.getByRole('heading', { name: /Where you were/i })).toBeVisible();
+	await expect(page.locator('.toolbar-nav')).toBeVisible();
+	await expect(page.locator('.toolbar-menu-btn')).toBeHidden();
+	await expect(page.locator('.statusbar')).toBeHidden();
+});
+
+test('phone collapses nav into a menu; Settings stays reachable', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 780 });
+	await page.goto('/');
+	await expect(page.getByRole('heading', { name: /Where you were/i })).toBeVisible();
+	await expect(page.locator('.toolbar-nav')).toBeHidden();
+
+	const trigger = page.getByRole('button', { name: 'Menu' });
+	await expect(trigger).toBeVisible();
+	await trigger.click();
+	const menu = page.getByRole('menu', { name: 'Navigation menu' });
+	await expect(menu).toBeVisible();
+	await page.screenshot({ path: 'test-results/responsive-menu-390.png' });
+
+	// Settings moved off the inline toolbar into the menu - regression guard.
+	await menu.getByRole('menuitem', { name: 'Settings' }).click();
+	await expect(page.locator('.settings-drawer')).toBeVisible();
+});
+
+test('phone menu navigates to Tasks', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 780 });
+	await page.route('**/api/tasks', (route) => route.fulfill({ status: 200, body: '[]' }));
+	await page.goto('/');
+	await expect(page.getByRole('heading', { name: /Where you were/i })).toBeVisible();
+	await page.getByRole('button', { name: 'Menu' }).click();
+	await page.getByRole('menu').getByRole('menuitem', { name: 'Tasks' }).click();
+	await expect(page.getByRole('heading', { name: 'Tasks' })).toBeVisible();
 });

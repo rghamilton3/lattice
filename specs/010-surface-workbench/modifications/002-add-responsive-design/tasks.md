@@ -134,9 +134,33 @@ wording; recorded here for honesty:
 - **T008 (pane chrome)**: No change needed; the pane header (title + close)
   remains visible at the top of each stacked pane.
 
+### Follow-up: toolbar collapse + status bar (post-review UX feedback)
+
+The first pass left the toolbar wrapping onto a second row below the tablet
+breakpoint (the `.toolbar-center` palette took its own row) and the status bar
+wrapped awkwardly. Reworked per user feedback:
+
+- **Toolbar is now a single row at every width.** Tablet band (480-1024px): nav
+  goes icon-only, secondary labels drop, no wrap. Phone (<480px): the inline
+  nav, brand, focus, and settings collapse into a new hamburger menu
+  (`AppShell.svelte`, `Icon` gains a `menu` glyph) so the row reduces to
+  `[menu] [palette] [Capture]`. The collapse point was chosen by fit, not by the
+  token: with icon-only controls the toolbar fits down to ~480px, which is the
+  existing phone token, so no third breakpoint was needed.
+- **Status bar is hidden below the tablet breakpoint** (ambient info; connection
+  trouble still surfaces via the recovery-mode notice in the main pane).
+- **Menu a11y**: `aria-haspopup`/`aria-expanded` trigger, `role="menu"` +
+  `menuitem`/`menuitemcheckbox`, focus moves into the menu on open and Escape
+  returns it to the trigger, backdrop closes on outside click. Settings (theme/
+  density) is reachable from the menu - guarded by an e2e test.
+- **Fit guard**: the toolbar is `nowrap` and the shell clips overflow-x, so a
+  too-wide toolbar would be silently cut off rather than wrap. The e2e asserts
+  `toolbar.scrollWidth <= clientWidth` across the band (a height check would be
+  meaningless), backed by screenshots at 1100/1000/800/640/480/390.
+
 **Verification result**: `bun run build`, `bun run check` (0 errors),
 `bun run lint` (prettier + eslint clean), `bun run test:unit` (51 passed), and
-`bun run test:e2e` (43 passed, including 7 new responsive specs) all green.
+`bun run test:e2e` (47 passed, including 11 responsive specs) all green.
 
 ## Dependencies & Ordering
 

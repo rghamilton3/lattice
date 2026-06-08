@@ -139,12 +139,19 @@
 	<ProcessMode />
 {:else}
 	<AppShell oncapture={() => (wb.activeOverlay = 'capture')} onnav={handleNav}>
-		<div class="flex h-full w-full">
-			<div class={wb.isSplit ? 'w-1/2 border-r border-border' : 'w-full'}>
+		<!-- Below the tablet breakpoint a split view stacks vertically (one pane
+		     above the other, each full width) instead of squeezing two panes side
+		     by side. At tablet+ it restores the two-column layout unchanged. -->
+		<div class="flex h-full w-full flex-col tablet:flex-row">
+			<div
+				class={wb.isSplit
+					? 'h-1/2 w-full border-b border-border tablet:h-full tablet:w-1/2 tablet:border-r tablet:border-b-0'
+					: 'h-full w-full'}
+			>
 				<PaneContainer paneIndex={0} content={wb.panes[0]} />
 			</div>
 			{#if wb.isSplit && wb.panes[1]}
-				<div class="w-1/2">
+				<div class="h-1/2 w-full tablet:h-full tablet:w-1/2">
 					<PaneContainer paneIndex={1} content={wb.panes[1]} />
 				</div>
 			{/if}
@@ -174,7 +181,7 @@
 			aria-modal="true"
 			aria-label="New working doc"
 		>
-			<div class="w-96 rounded border border-border bg-surface-raised p-4">
+			<div class="mx-4 w-full max-w-[24rem] rounded border border-border bg-surface-raised p-4">
 				<p class="mb-2 text-base text-text">New working doc</p>
 				<!-- svelte-ignore a11y_autofocus -->
 				<input

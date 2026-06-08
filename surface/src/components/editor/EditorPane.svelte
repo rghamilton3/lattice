@@ -490,7 +490,8 @@
 		font-size: 12px;
 	}
 
-	@media (max-width: 820px) {
+	/* tablet breakpoint - mirrors --breakpoint-tablet (64rem) in layout.css */
+	@media (width < 64rem) {
 		.editor-status {
 			align-items: flex-start;
 		}

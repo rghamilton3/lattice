@@ -332,7 +332,8 @@
 	background: var(--c-alarm);
 }
 
-@media (max-width: 760px) {
+/* tablet breakpoint - mirrors --breakpoint-tablet (64rem) in layout.css */
+@media (width < 64rem) {
 	.shell {
 		grid-template-rows: auto 1fr auto;
 	}
@@ -402,6 +403,25 @@
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
+}
+
+/* Reading pane: below the tablet breakpoint stack the document body above the
+   attachment rail instead of side by side, and let the expanded rail span the
+   full width (overriding its desktop resizable inline width).
+   tablet breakpoint - mirrors --breakpoint-tablet (64rem) in layout.css */
+@media (width < 64rem) {
+	.doc-content {
+		flex-direction: column;
+	}
+	.doc-content .att-rail:not(.att-rail--min) {
+		width: 100% !important;
+		max-height: 40%;
+		border-left: 0;
+		border-top: 1px solid var(--line);
+	}
+	.doc-content .att-rail .att-resize-handle {
+		display: none;
+	}
 }
 
 /* Related rail — inline at bottom of reading */
@@ -634,7 +654,8 @@
 	flex-direction: column;
 	animation: drawer-slide-in var(--t-base) var(--ease);
 }
-@media (max-width: 520px) {
+/* phone breakpoint - mirrors --breakpoint-phone (30rem) in layout.css */
+@media (width < 30rem) {
 	.settings-drawer {
 		left: 0;
 		width: auto;
@@ -733,4 +754,22 @@
 	opacity: 0.55;
 	pointer-events: none;
 	z-index: 1;
+}
+
+/* ── Touch targets ───────────────────────────────────────────────────────────
+   On coarse pointers (touch), raise interactive controls to a minimum 44px tap
+   target. Gated by pointer: coarse so fine-pointer (mouse) desktop sizing is
+   unchanged. */
+@media (pointer: coarse) {
+	.btn,
+	.btn-mini,
+	.nav-btn,
+	.capture-button,
+	.palette-button,
+	.seg button {
+		min-height: 44px;
+	}
+	.btn-mini {
+		padding-block: 6px;
+	}
 }

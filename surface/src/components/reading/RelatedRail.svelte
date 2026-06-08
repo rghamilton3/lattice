@@ -103,6 +103,10 @@
 	const hasContent = $derived(
 		relatedQuery.isError || (!!relatedQuery.data && relatedQuery.data.results.length > 0)
 	);
+
+	// Keyword-only mode: the inference endpoint is down, so these are BM25 matches
+	// (no semantic ranking) — mirror the search box's degraded signal.
+	const degraded = $derived(relatedQuery.data?.degraded ?? false);
 </script>
 
 {#if wb.featureFlags.relatedRail && hasContent}
@@ -126,6 +130,8 @@
 			<div class="row" style="gap:6px">
 				{#if relatedQuery.isError && !minimized}
 					<span style="font-size:12px; color:var(--c-alarm)">spine unavailable</span>
+				{:else if !relatedQuery.isError && degraded}
+					<span style="font-size:12px; color:var(--c-alarm)">keyword-only (BM25)</span>
 				{:else if !relatedQuery.isError}
 					<span class="faint" style="font-size:12px">semantic neighbors · QMD cosine</span>
 				{/if}

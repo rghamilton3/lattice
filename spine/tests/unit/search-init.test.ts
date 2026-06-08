@@ -117,11 +117,11 @@ describe('initSearch', () => {
 });
 
 describe('search() before initSearch', () => {
-	it('returns [] when the store has not been initialized', async () => {
+	it('returns empty results when the store has not been initialized', async () => {
 		const { search, __resetSearchForTests } = await import('../../src/search');
 		__resetSearchForTests();
-		const results = await search('any query');
-		expect(results).toEqual([]);
+		const res = await search('any query');
+		expect(res).toEqual({ results: [], degraded: false });
 	});
 });
 

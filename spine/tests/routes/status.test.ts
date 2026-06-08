@@ -83,7 +83,9 @@ describe('GET /api/status', () => {
 			'active_agent_count',
 			'agents',
 			'checks',
+			'needs_embedding',
 			'ready',
+			'search_degraded',
 			'state',
 		]);
 		expect(Object.keys(body.checks).sort()).toEqual([

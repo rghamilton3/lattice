@@ -2,9 +2,10 @@ import { Elysia } from 'elysia';
 import type { Database } from 'bun:sqlite';
 import type { AgentStatusRow } from '../db/rows';
 import type { PlatformStatus } from '../status';
+import { isSearchDegraded, needsEmbeddingCount } from '../search';
 
 export const statusRoutes = (db: Database, platformStatus: () => PlatformStatus) =>
-	new Elysia().get('/api/status', () => {
+	new Elysia().get('/api/status', async () => {
 		const agents = db
 			.query(
 				'SELECT machine_id, state, last_scan_at, last_indexed, last_skipped, last_errors, spine_ok, last_error_msg, reported_at FROM agent_status',
@@ -24,5 +25,8 @@ export const statusRoutes = (db: Database, platformStatus: () => PlatformStatus)
 				last_indexed: a.last_indexed,
 			})),
 			active_agent_count,
+			// Remote inference health: keyword-only mode + embedding backlog awaiting recovery.
+			search_degraded: isSearchDegraded(),
+			needs_embedding: await needsEmbeddingCount(),
 		};
 	});

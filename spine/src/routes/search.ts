@@ -1,5 +1,5 @@
 import { Elysia, t } from 'elysia';
-import { search, searchDeep } from '../search';
+import { search } from '../search';
 
 export const searchRoutes = () =>
 	new Elysia().get(
@@ -10,8 +10,10 @@ export const searchRoutes = () =>
 				set.status = 400;
 				return { error: 'q is required' };
 			}
-			const results = await (query.deep === 'true' ? searchDeep(q) : search(q));
-			return { results };
+			// One adaptive path: full-quality via the remote endpoint, degrading to
+			// BM25 keyword-only when it is unavailable. `degraded` drives the surface badge.
+			const { results, degraded } = await search(q);
+			return { results, degraded };
 		},
-		{ query: t.Object({ q: t.Optional(t.String()), deep: t.Optional(t.String()) }) },
+		{ query: t.Object({ q: t.Optional(t.String()) }) },
 	);

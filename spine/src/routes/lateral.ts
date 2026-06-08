@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia';
 import type { Database } from 'bun:sqlite';
-import { search } from '../search';
+import { searchRelated } from '../search';
 import { WorkingNotFoundError, readWorking } from '../working';
 
 type LateralSourceKind = 'capture' | 'local-file' | 'working' | 'archive';
@@ -85,7 +85,7 @@ export const lateralRoutes = (db: Database) =>
 					}
 				}
 
-				const raw = await search(sourceText.slice(0, 2000));
+				const raw = await searchRelated(sourceText.slice(0, 2000));
 				const filtered = raw
 					.filter((r) => {
 						if (source.kind === 'capture' && r.kind === 'capture' && r.id === source.id)

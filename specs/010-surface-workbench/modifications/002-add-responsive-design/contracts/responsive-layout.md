@@ -13,9 +13,9 @@ Defined as CSS custom properties in `surface/src/routes/layout.css`:
 
 | Token | Value | Meaning |
 |-------|-------|---------|
-| `--bp-phone` | `480px` | At or below: phone layout |
-| `--bp-tablet` | `1024px` | At or below: tablet (and narrow desktop) layout |
-| (above `--bp-tablet`) | `> 1024px` | Desktop layout (current default) |
+| `--breakpoint-phone` | `30rem` (480px) | Below: phone layout |
+| `--breakpoint-tablet` | `64rem` (1024px) | Below: tablet (and narrow desktop) layout |
+| (at or above `--breakpoint-tablet`) | `>= 64rem` | Desktop layout (current default) |
 
 Rules:
 - No component may define its own phone/tablet pixel value. Existing ad-hoc
@@ -26,12 +26,12 @@ Rules:
 
 ## Behavioral guarantees
 
-### G1. Single-pane collapse
-- **Given** `isSplit === true` and viewport width `<= --bp-tablet`
-- **Then** exactly one pane (the focused pane) renders at full width.
-- **And** the other pane is not shown side by side.
+### G1. Split-pane collapse
+- **Given** `isSplit === true` and viewport width `< --breakpoint-tablet`
+- **Then** each pane renders at full width in a vertical stack (one above the
+  other), not side by side.
 - **And** `wb.panes` / `wb.isSplit` state is unchanged (resize to desktop
-  restores two-pane view).
+  restores the two-column side-by-side view).
 
 ### G2. Primary actions reachable
 - **At every breakpoint** (phone, tablet, desktop) the following are visible and
@@ -39,25 +39,28 @@ Rules:
   capture entry, command palette entry, primary navigation, editor save/delete.
 
 ### G3. Touch-target sizing
-- **Given** a coarse-pointer or `<= --bp-tablet` viewport
+- **Given** a coarse-pointer device (`@media (pointer: coarse)`)
 - **Then** interactive controls (nav buttons, action rows, overlay buttons)
   present an effective tap target of at least `44x44px`.
 
 ### G4. Reflow, no overflow
-- **At `<= --bp-phone`** the tasks view, inbox action rows, and the
+- **At `< --breakpoint-phone`** the tasks view, inbox action rows, and the
   capture/command/settings overlays stack and reflow within the viewport; no
   horizontal page-level scrollbar appears.
 
 ### G5. Desktop regression
-- **At `> --bp-tablet`** layout is identical to pre-modification behavior.
-  Verified by desktop e2e snapshots taken before and after.
+- **At `>= --breakpoint-tablet`** layout is identical to pre-modification
+  behavior. Verified by desktop e2e snapshots taken before and after.
 
 ## Verification matrix
 
 | Guarantee | Phone (390px) | Tablet (820px) | Desktop (1280px) |
 |-----------|---------------|----------------|------------------|
-| G1 split collapse | single pane | single pane | two panes |
+| G1 split collapse | stacked | stacked | side by side |
 | G2 actions reachable | yes | yes | yes |
-| G3 touch targets | >= 44px | >= 44px | n/a (fine pointer) |
+| G3 touch targets | >= 44px (coarse) | >= 44px (coarse) | n/a (fine pointer) |
 | G4 reflow | yes | yes | n/a |
 | G5 regression | n/a | n/a | unchanged |
+
+G3 is gated on `pointer: coarse`, not viewport width: a touch phone/tablet gets
+44px targets; a narrow but mouse-driven desktop window does not.

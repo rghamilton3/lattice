@@ -350,6 +350,11 @@
 	.statusbar {
 		display: none;
 	}
+	/* The status bar is hidden in this band, so the drawer's default
+	   bottom: 28px (which reserves room for it) would leave a stale gap. */
+	.settings-drawer {
+		bottom: 0;
+	}
 	.brand-name,
 	.palette-button-label,
 	.palette-kbd {

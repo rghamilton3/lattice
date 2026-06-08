@@ -10,10 +10,10 @@ export const searchRoutes = () =>
 				set.status = 400;
 				return { error: 'q is required' };
 			}
-			// One adaptive path: full-quality via the remote endpoint, degrading to
-			// BM25 keyword-only when it is unavailable. `degraded` drives the surface badge.
-			const { results, degraded } = await search(q);
-			return { results, degraded };
+			// One adaptive path: full-quality via the remote endpoint, degrading to BM25
+			// keyword-only when it is unavailable. Returned verbatim ({ results, degraded });
+			// `degraded` drives the surface badge.
+			return search(q);
 		},
 		{ query: t.Object({ q: t.Optional(t.String()) }) },
 	);

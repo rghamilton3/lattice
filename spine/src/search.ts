@@ -169,12 +169,21 @@ export function annotationToMarkdown({
 let _db: Database | null = null;
 let _store: QMDStore | null = null;
 let _initFailed = false;
+// Consecutive index-refresh (update) failures; reset to 0 on the next success.
+// A nonzero value means new documents may not be findable even by keyword, so it
+// is surfaced on /api/status rather than silently swallowed.
 let _indexFailures = 0;
 // Serial lock: ensures update() and embed() calls never overlap.
 let _indexLock: Promise<void> = Promise.resolve();
 // Degraded mode: the remote inference endpoint is unreachable, so search serves
-// BM25 keyword-only results. Inferred by catching the failure on the search path
-// (QMD's circuit-breaker state is private) and refreshed by the backfill loop.
+// BM25 keyword-only results. QMD's circuit-breaker state is private, so we infer
+// it from the inference calls themselves.
+//
+// Invariant: _degraded is set true by ANY failed inference call (search,
+// searchRelated, embed) and set false by ANY successful one. A code path that
+// makes no inference call (e.g. a backfill tick that finds nothing pending) must
+// leave it unchanged — it cannot confirm recovery, so it must not clear the flag.
+// This biases the indicator toward stale-true (safe) over false-healthy.
 let _degraded = false;
 // Embedding backfill: when the endpoint is down, docs are indexed lexically now
 // and embedded later. QMD persists `needsEmbedding` in its own DB, so this resumes
@@ -184,20 +193,44 @@ let _backfillRunning = false;
 const BACKFILL_MIN_MS = 30_000;
 const BACKFILL_MAX_MS = 10 * 60_000;
 let _backfillDelayMs = BACKFILL_MIN_MS;
+// Short-lived memo for the embedding-backlog count. /api/status may be polled
+// frequently and getIndexHealth() runs a COUNT join, so cache it briefly. A null
+// `value` means the count is currently unknown (store not ready / read failed).
+const NEEDS_EMBEDDING_TTL_MS = 5_000;
+let _needsEmbeddingCache: { value: number | null; at: number } | null = null;
 
-/** Whether the latest search/embed attempt found the remote endpoint unavailable. */
+/** Whether the latest inference attempt found the remote endpoint unavailable. */
 export function isSearchDegraded(): boolean {
 	return _degraded;
 }
 
-/** Count of documents indexed but still awaiting embedding (0 when unknown). */
-export async function needsEmbeddingCount(): Promise<number> {
-	if (!_store) return 0;
-	try {
-		return (await _store.getIndexHealth()).needsEmbedding;
-	} catch {
-		return 0;
+/** Consecutive index-refresh failures (lexical update); 0 when the index is current. */
+export function indexFailureCount(): number {
+	return _indexFailures;
+}
+
+/**
+ * Documents indexed but still awaiting embedding. Returns `null` when the count is
+ * unknown — the store is not initialized yet, or `getIndexHealth()` threw — so callers
+ * can distinguish "unknown" from a genuine zero backlog. Memoized for a few seconds so
+ * frequent /api/status polls do not each run the underlying COUNT.
+ */
+export async function needsEmbeddingCount(): Promise<number | null> {
+	const now = Date.now();
+	if (_needsEmbeddingCache && now - _needsEmbeddingCache.at < NEEDS_EMBEDDING_TTL_MS) {
+		return _needsEmbeddingCache.value;
 	}
+	let value: number | null = null;
+	if (_store) {
+		try {
+			value = (await _store.getIndexHealth()).needsEmbedding;
+		} catch (e) {
+			console.warn('[qmd] needsEmbeddingCount: getIndexHealth failed — reporting unknown:', e);
+			value = null;
+		}
+	}
+	_needsEmbeddingCache = { value, at: now };
+	return value;
 }
 
 /** @internal test-only — do not use from production code. */
@@ -211,6 +244,12 @@ export function __resetSearchForTests(): void {
 	_degraded = false;
 	_backfillRunning = false;
 	_backfillDelayMs = BACKFILL_MIN_MS;
+	_needsEmbeddingCache = null;
+}
+
+/** @internal test-only — current backfill backoff delay in ms. */
+export function __getBackfillDelayForTests(): number {
+	return _backfillDelayMs;
 }
 
 /** @internal test-only — inject a fake store to exercise search/backfill paths. */
@@ -429,6 +468,9 @@ export function refreshIndex(): void {
 			// update() indexes lexically (FTS) and persists which docs still need
 			// embedding. This must succeed for captures to be keyword-findable now.
 			const result = await store.update();
+			// update() succeeded: the lexical index is current. Clear the failure streak
+			// so indexFailureCount() reflects consecutive failures, not lifetime total.
+			_indexFailures = 0;
 			if (result.needsEmbedding > 0) {
 				// Embedding goes through the remote endpoint. If it is down this throws;
 				// the doc stays keyword-findable and the backfill loop retries later.
@@ -436,11 +478,16 @@ export function refreshIndex(): void {
 			}
 		})
 		.catch((e) => {
-			// A failure here means update() itself failed (not embedding) — the lexical
-			// index could not be written. Embedding failures are swallowed by tryEmbed.
+			// A failure here means update() itself failed (not embedding): the collection
+			// could not be re-indexed (filesystem scan or lexical write). New documents may
+			// not be findable even by keyword. Embedding failures are swallowed by tryEmbed
+			// and never reach here. The streak is surfaced via indexFailureCount() on
+			// /api/status so a stuck lexical index does not read as "healthy".
 			_indexFailures++;
-			if (_indexFailures === 1 || _indexFailures % 10 === 0) {
-				console.warn(`[qmd] index refresh failed (${_indexFailures}x):`, e);
+			if (_indexFailures === 1) {
+				console.warn('[qmd] index refresh failed:', e);
+			} else if (_indexFailures % 10 === 0) {
+				console.error(`[qmd] index refresh still failing (${_indexFailures}x consecutive):`, e);
 			}
 		});
 }
@@ -482,33 +529,39 @@ function scheduleBackfill(): void {
 		void runBackfill();
 	}, _backfillDelayMs);
 	// Do not keep the process alive solely for backfill.
-	(_backfillTimer as { unref?: () => void }).unref?.();
+	_backfillTimer.unref();
 }
 
 async function runBackfill(): Promise<void> {
 	if (_backfillRunning || !_store) return;
 	const store = _store;
 	_backfillRunning = true;
+	let moreWork = false;
 	try {
 		const pending = (await store.getIndexHealth()).needsEmbedding;
 		if (pending <= 0) {
-			_degraded = false;
+			// Nothing to embed. This pass makes no inference call, so it cannot confirm the
+			// endpoint recovered — leave _degraded unchanged (see its invariant above). The
+			// next successful live search clears it.
 			_backfillDelayMs = BACKFILL_MIN_MS;
 			return;
 		}
 		await store.embed();
-		// Success: endpoint recovered. Reset backoff and re-check for more pending work.
+		// Success: the endpoint is reachable. Reset backoff and re-check for more work.
 		_degraded = false;
 		_backfillDelayMs = BACKFILL_MIN_MS;
-		if ((await store.getIndexHealth()).needsEmbedding > 0) scheduleBackfill();
+		moreWork = (await store.getIndexHealth()).needsEmbedding > 0;
 	} catch (e) {
 		// Still down — back off (capped) and retry.
 		_degraded = true;
 		_backfillDelayMs = Math.min(_backfillDelayMs * 2, BACKFILL_MAX_MS);
 		console.warn(`[qmd] embedding backfill retry in ${_backfillDelayMs}ms:`, e);
-		scheduleBackfill();
+		moreWork = true;
 	} finally {
 		_backfillRunning = false;
+		// Reschedule from one place so a run skipped by the _backfillRunning guard (a timer
+		// that fired mid-pass) never loses the next tick.
+		if (moreWork) scheduleBackfill();
 	}
 }
 
@@ -560,8 +613,12 @@ function mapResults(
 			let modified_at = '';
 			try {
 				modified_at = statSync(join(workingDir(), `${slug}.md`)).mtime.toISOString();
-			} catch {
-				// file missing between index and search
+			} catch (e) {
+				// ENOENT is expected — the file can vanish between index and search; modified_at
+				// stays ''. Anything else (permissions, I/O) is unexpected, so surface it.
+				if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+					console.warn(`[qmd] statSync failed for working/${slug}.md:`, e);
+				}
 			}
 			return [
 				{
@@ -702,21 +759,26 @@ export async function search(q: string): Promise<SearchResponse> {
 	if (!_store) {
 		if (_initFailed)
 			console.warn('[qmd] search called but initSearch failed — returning empty results');
+		else console.info('[qmd] search called before init completed — returning empty results');
 		return { results: [], degraded: _degraded };
 	}
 	const store = _store;
+	let hits: Parameters<typeof mapResults>[0];
 	try {
-		// single-query form — QMD auto-expands, retrieves, and reranks via the remote endpoint
-		const results = await store.search({ query: q, limit: 20 });
-		_degraded = false;
-		return { results: mapResults(results), degraded: false };
+		// single-query form — QMD auto-expands, retrieves, and reranks via the remote endpoint.
+		// Only the retrieval call is guarded: mapping/DB errors below are real bugs and must
+		// surface, not masquerade as a degraded endpoint.
+		hits = await store.search({ query: q, limit: 20 });
 	} catch (e) {
 		// Remote inference unavailable: serve BM25 keyword-only results. This keeps search up
 		// during an outage; newly-captured (lexically-indexed) docs are findable immediately.
 		_degraded = true;
+		scheduleBackfill();
 		console.warn('[qmd] full-quality search unavailable — serving keyword-only (BM25):', e);
 		return { results: await bm25Fallback(store, q), degraded: true };
 	}
+	_degraded = false;
+	return { results: mapResults(hits), degraded: false };
 }
 
 /** Run a BM25 keyword-only search and adapt its rows into mapped SearchResults. */
@@ -742,11 +804,12 @@ async function bm25Fallback(store: QMDStore, q: string): Promise<SearchResult[]>
  * tuned for short queries. It uses a lightweight lex+vec retrieval (rerank disabled) and,
  * when the endpoint is down, degrades to BM25 keyword-only.
  */
-export async function searchRelated(q: string): Promise<SearchResult[]> {
+export async function searchRelated(q: string): Promise<SearchResponse> {
 	if (!_store) {
 		if (_initFailed)
 			console.warn('[qmd] searchRelated called but initSearch failed — returning empty results');
-		return [];
+		else console.info('[qmd] searchRelated called before init completed — returning empty results');
+		return { results: [], degraded: _degraded };
 	}
 	const store = _store;
 	// Document content is passed as pre-expanded queries to structuredSearch, which rejects
@@ -755,8 +818,10 @@ export async function searchRelated(q: string): Promise<SearchResult[]> {
 	const quoteCount = (singleLine.match(/"/g) ?? []).length;
 	const lexQuery = quoteCount % 2 === 0 ? singleLine : singleLine.replace(/"/g, '');
 	const vecQuery = singleLine.replace(/(^|\s)-(?=[\w"])/g, '$1');
+	let hits: Parameters<typeof mapResults>[0];
 	try {
-		const results = await store.search({
+		// Only the retrieval call is guarded so mapping/DB errors still surface as real errors.
+		hits = await store.search({
 			queries: [
 				{ type: 'lex', query: lexQuery },
 				{ type: 'vec', query: vecQuery },
@@ -764,12 +829,13 @@ export async function searchRelated(q: string): Promise<SearchResult[]> {
 			rerank: false,
 			limit: 20,
 		});
-		_degraded = false;
-		return mapResults(results);
 	} catch (e) {
 		// The vec query needs remote embedding; on outage fall back to BM25 keyword-only.
 		_degraded = true;
+		scheduleBackfill();
 		console.warn('[qmd] related-items search unavailable — serving keyword-only (BM25):', e);
-		return bm25Fallback(store, lexQuery);
+		return { results: await bm25Fallback(store, lexQuery), degraded: true };
 	}
+	_degraded = false;
+	return { results: mapResults(hits), degraded: false };
 }

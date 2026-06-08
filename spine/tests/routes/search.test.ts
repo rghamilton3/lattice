@@ -282,4 +282,26 @@ describe('GET /api/search', () => {
 		expect(body.degraded).toBe(true);
 		expect(body.results[0]).toMatchObject({ kind: 'working', slug: 'my-note', score: 0.42 });
 	});
+
+	it('surfaces a mapping/DB error instead of masking it as a degraded endpoint', async () => {
+		// Full-quality retrieval succeeds, but mapping the hit hits the DB. Only the
+		// retrieval call is guarded, so a DB fault must propagate as a real error and must
+		// NOT flip degraded (which would mislabel a bug as an inference outage).
+		app.qmd.setHits([
+			{
+				file: 'qmd://captures/42.md',
+				score: 0.9,
+				bestChunk: 'x',
+				body: 'x',
+				displayPath: 'captures/42.md',
+			},
+		]);
+		app.db.close(); // any prepared-statement use in mapResults() now throws
+
+		const res = await app.app.handle(req('/api/search?q=hello'));
+		expect(res.status).toBeGreaterThanOrEqual(500);
+
+		const { isSearchDegraded } = await import('../../src/search');
+		expect(isSearchDegraded()).toBe(false);
+	});
 });

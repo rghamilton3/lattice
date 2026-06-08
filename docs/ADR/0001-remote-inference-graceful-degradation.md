@@ -38,3 +38,10 @@ Detection uses #705's per-endpoint circuit breakers and startup probe as the sig
 - **Spine-local CPU inference.** Rejected: it is the bottleneck this decision exists to remove; #705 itself characterises CPU embedding of the small models as unacceptably slow.
 - **Local CPU fallback for rerank/expansion** (HybridLLM's built-in behaviour). Rejected for those operations: it turns every inference hiccup into the slow path on the interactive route, which is worse than the pre-GPU opt-in it would replace.
 - **Spine-local embedding kept on the write path** for outage independence. Rejected in favour of remote + durable queue: keeping embedding on the CPU reintroduces the write-side bottleneck, and the durable queue already provides outage-safety without it.
+
+## Correction (2026-06-08)
+
+Two phrases above describe the decision inaccurately. Per the append-only convention they are corrected here rather than rewritten in place, since the decision itself never changed (the rest of this ADR, and `specs/016-remote-inference`, already describe the implemented behavior).
+
+- **Read path is strictly BM25, with no local query embedding.** The Decision says "keyword-only (BM25 + best-effort local query embedding)". There is no local query embedding: the deployment is remote-only, and a query embedded by any non-remote model matches zero stored vectors (QMD filters by `model`/`embed_fingerprint`). The fallback is `store.searchLex()` only — consistent with the "does not fall back to running rerank/expansion on the CPU" sentence in the same section and with the rejected "Local CPU fallback" alternative.
+- **Degraded detection infers breaker state; the surface does not read it.** The Detection paragraph says "the surface reads breaker state to choose mode and render the indicator". QMD's circuit breakers are `private`, so spine infers degradation by catching the failure thrown from `store.search()` and falling back to BM25, then reports a per-response `degraded` flag (and the last-known state on `/api/status`). The surface renders the indicator from that flag, not from breaker state.

@@ -6,10 +6,12 @@ import {
 	refreshIndex,
 	isSearchDegraded,
 	needsEmbeddingCount,
+	stopEmbeddingBackfill,
 	__resetSearchForTests,
 	__setStoreForTests,
 	__runBackfillForTests,
 	__awaitIndexLockForTests,
+	__getBackfillDelayForTests,
 } from './search';
 
 afterEach(() => {
@@ -179,13 +181,14 @@ test('related-items search skips expansion/rerank and degrades to BM25 when the 
 	});
 	__setStoreForTests(store);
 
-	const results = await searchRelated('a document body\nwith newlines and "quotes');
+	const res = await searchRelated('a document body\nwith newlines and "quotes');
 
 	// Uses the lightweight lex+vec path (not the single-query expand+rerank pipeline),
-	// then falls back to BM25 on failure.
+	// then falls back to BM25 on failure and reports degraded through the response.
 	expect(calls.searchLex).toBe(1);
+	expect(res.degraded).toBe(true);
 	expect(isSearchDegraded()).toBe(true);
-	expect(results[0]).toMatchObject({ kind: 'working', slug: 'beta' });
+	expect(res.results[0]).toMatchObject({ kind: 'working', slug: 'beta' });
 });
 
 // Headline Done criterion: a capture made while the endpoint is down is keyword-findable
@@ -229,4 +232,75 @@ test('write path: index lexically when embedding fails, then backfill on recover
 	await __runBackfillForTests();
 	expect(isSearchDegraded()).toBe(false);
 	expect(await needsEmbeddingCount()).toBe(0);
+});
+
+// A backfill pass with nothing pending makes no inference call, so it cannot confirm
+// recovery — it must leave a degraded flag (set by a failed live search) untouched.
+test('backfill leaves degraded set when there is no pending work to probe recovery', async () => {
+	const { store, calls } = fakeStore({
+		search: async () => {
+			throw new Error('Remote embedding circuit breaker is open');
+		},
+		getIndexHealth: async () => ({ needsEmbedding: 0, totalDocs: 5, daysStale: null }),
+	});
+	__setStoreForTests(store);
+
+	// A failed live search marks the endpoint degraded.
+	await search('anything');
+	expect(isSearchDegraded()).toBe(true);
+
+	// Backfill finds nothing to embed: it must NOT clear degraded.
+	await __runBackfillForTests();
+	expect(calls.embed).toBe(0);
+	expect(isSearchDegraded()).toBe(true);
+});
+
+test('backfill backoff doubles on repeated failure and caps at the maximum', async () => {
+	const { store } = fakeStore({
+		embed: async () => {
+			throw new Error('endpoint still unavailable');
+		},
+		getIndexHealth: async () => ({ needsEmbedding: 5, totalDocs: 5, daysStale: null }),
+	});
+	__setStoreForTests(store);
+
+	const delays: number[] = [];
+	for (let i = 0; i < 12; i++) {
+		await __runBackfillForTests();
+		delays.push(__getBackfillDelayForTests());
+		// Cancel the timer the failed pass scheduled so it cannot fire during the test.
+		stopEmbeddingBackfill();
+	}
+
+	// 30s base → 60s → 120s ... doubling, capped at the 10-minute maximum.
+	expect(delays[0]).toBe(60_000);
+	expect(delays[1]).toBe(120_000);
+	expect(delays[delays.length - 1]).toBe(10 * 60_000);
+	for (let i = 1; i < delays.length; i++) {
+		expect(delays[i]).toBeGreaterThanOrEqual(delays[i - 1]);
+	}
+});
+
+test('backfill resets backoff to the minimum after a successful embed', async () => {
+	let down = true;
+	let pending = 5;
+	const { store } = fakeStore({
+		embed: async () => {
+			if (down) throw new Error('endpoint down');
+			pending = 0;
+			return { embedded: 5, failures: [] };
+		},
+		getIndexHealth: async () => ({ needsEmbedding: pending, totalDocs: 5, daysStale: null }),
+	});
+	__setStoreForTests(store);
+
+	await __runBackfillForTests(); // fails → backoff doubles to 60s
+	stopEmbeddingBackfill();
+	expect(__getBackfillDelayForTests()).toBe(60_000);
+
+	down = false;
+	await __runBackfillForTests(); // succeeds → backoff resets to the 30s minimum
+	stopEmbeddingBackfill();
+	expect(__getBackfillDelayForTests()).toBe(30_000);
+	expect(isSearchDegraded()).toBe(false);
 });

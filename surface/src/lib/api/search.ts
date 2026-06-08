@@ -28,10 +28,7 @@ export function fetchSearch(q: string): Promise<SearchResponse> {
 	return apiFetch(`/api/search?q=${encodeURIComponent(q)}`);
 }
 
-export function fetchSimilar(
-	id: number | string,
-	kind: DocKind
-): Promise<{ results: SearchResult[] }> {
+export function fetchSimilar(id: number | string, kind: DocKind): Promise<SearchResponse> {
 	return apiFetch(`/api/similar?id=${encodeURIComponent(id)}&kind=${kind}`);
 }
 

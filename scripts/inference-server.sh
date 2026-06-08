@@ -18,7 +18,8 @@ set -euo pipefail
 MODELS_DIR="${LATTICE_MODELS_DIR:-${HOME}/.cache/lattice/models}"
 # Bind address for the servers. localhost keeps them off the network by default.
 HOST="${LATTICE_INFERENCE_HOST:-127.0.0.1}"
-# Extra args forwarded verbatim to every llama-server (e.g. "--n-gpu-layers 99").
+# Extra flags appended to every llama-server, split on whitespace (e.g. "--n-gpu-layers 99").
+# Flag values containing spaces are not supported (each whitespace-separated token is one arg).
 read -r -a EXTRA_ARGS <<<"${LLAMA_SERVER_EXTRA_ARGS:-}"
 
 # name | model file | port | mode-specific flags
@@ -89,7 +90,8 @@ for entry in "${SERVERS[@]}"; do
 	PIDS+=("$!")
 done
 
-# Wait for each /health to report ready so the config is usable when this returns.
+# Best-effort readiness probe: wait up to 60s per server for /health, then proceed
+# regardless so one slow or failed server does not block the others (or this script).
 echo "Waiting for servers to become ready..."
 for entry in "${SERVERS[@]}"; do
 	IFS='|' read -r name _ port _ <<<"$entry"

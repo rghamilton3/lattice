@@ -2,7 +2,7 @@ import { Elysia } from 'elysia';
 import type { Database } from 'bun:sqlite';
 import type { AgentStatusRow } from '../db/rows';
 import type { PlatformStatus } from '../status';
-import { isSearchDegraded, needsEmbeddingCount } from '../search';
+import { isSearchDegraded, needsEmbeddingCount, indexFailureCount } from '../search';
 
 export const statusRoutes = (db: Database, platformStatus: () => PlatformStatus) =>
 	new Elysia().get('/api/status', async () => {
@@ -25,8 +25,10 @@ export const statusRoutes = (db: Database, platformStatus: () => PlatformStatus)
 				last_indexed: a.last_indexed,
 			})),
 			active_agent_count,
-			// Remote inference health: keyword-only mode + embedding backlog awaiting recovery.
+			// Remote inference health: keyword-only mode, embedding backlog awaiting recovery
+			// (null when unknown), and consecutive lexical-index failures (0 when healthy).
 			search_degraded: isSearchDegraded(),
 			needs_embedding: await needsEmbeddingCount(),
+			index_failures: indexFailureCount(),
 		};
 	});

@@ -2,7 +2,7 @@
 	import { createQuery, createMutation, useQueryClient } from '@tanstack/svelte-query';
 	import { browser } from '$app/environment';
 	import { untrack } from 'svelte';
-	import { EditorState, Compartment } from '@codemirror/state';
+	import { EditorState, EditorSelection, Compartment } from '@codemirror/state';
 	import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
 	import { EditorView, keymap, drawSelection } from '@codemirror/view';
 	import { defaultKeymap, historyKeymap, history, indentWithTab } from '@codemirror/commands';
@@ -11,6 +11,7 @@
 	import { oneDark } from '@codemirror/theme-one-dark';
 	import { vim, Vim } from '@replit/codemirror-vim';
 	import { livePreview } from '$lib/editor/livePreview';
+	import { shouldAdoptServerContent, clampPos } from '$lib/editor/docSync';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { workingKeys, fetchWorking, updateWorking, deleteWorking } from '$lib/api/working';
 	import type { PaneContent } from '$lib/types';
@@ -59,18 +60,28 @@
 	const docQuery = createQuery(() => ({
 		queryKey: workingKeys.detail(slug ?? ''),
 		queryFn: () => fetchWorking(slug ?? ''),
-		enabled: browser && !!slug
+		enabled: browser && !!slug,
+		// The editor is the live source of truth while open; refetching behind the
+		// user's back (e.g. on window focus) would clobber edits and jump the cursor.
+		refetchOnWindowFocus: false
 	}));
 
 	const saveMutation = createMutation(() => ({
 		mutationFn: ({ content }: { content: string }) => updateWorking(slug ?? '', content),
-		onSuccess: () => {
-			isDirty = false;
-			saveStatus = 'saved';
+		onSuccess: (_data, { content }) => {
+			// The saved content is now the synced baseline. If the user kept typing
+			// during the round-trip the editor is still ahead of the server, so keep
+			// the dirty flag accurate rather than blindly clearing it.
+			loadedContent = content;
+			const current = view?.state.doc.toString();
+			isDirty = current !== undefined && current !== content;
+			saveStatus = isDirty ? '' : 'saved';
 			if (statusTimer) clearTimeout(statusTimer);
-			statusTimer = setTimeout(() => {
-				saveStatus = '';
-			}, 2000);
+			if (!isDirty) {
+				statusTimer = setTimeout(() => {
+					saveStatus = '';
+				}, 2000);
+			}
 			qc.invalidateQueries({ queryKey: workingKeys.detail(slug ?? '') });
 		},
 		onError: (err) => {
@@ -266,10 +277,22 @@
 
 		if (view && mountedSlug === slug) {
 			const content = docQuery.data.content;
-			if (content !== loadedContent && !isDirty && view.state.doc.toString() !== content) {
-				view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
+			const current = view.state.doc.toString();
+			// Adopt server content only when the editor holds the last synced
+			// baseline (no un-synced local edits). Otherwise an autosave round-trip
+			// or background refetch would clobber in-progress text and reset the
+			// cursor to the top — preserve and clamp the selection when we do sync.
+			if (shouldAdoptServerContent(current, content, loadedContent)) {
+				const { anchor, head } = view.state.selection.main;
+				view.dispatch({
+					changes: { from: 0, to: view.state.doc.length, insert: content },
+					selection: EditorSelection.range(
+						clampPos(anchor, content.length),
+						clampPos(head, content.length)
+					)
+				});
+				loadedContent = content;
 			}
-			loadedContent = content;
 			return;
 		}
 

@@ -4,18 +4,13 @@
 	import { untrack } from 'svelte';
 	import { EditorState, Compartment } from '@codemirror/state';
 	import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
-	import {
-		EditorView,
-		keymap,
-		lineNumbers,
-		drawSelection,
-		highlightActiveLine
-	} from '@codemirror/view';
+	import { EditorView, keymap, drawSelection } from '@codemirror/view';
 	import { defaultKeymap, historyKeymap, history, indentWithTab } from '@codemirror/commands';
 	import { searchKeymap } from '@codemirror/search';
-	import { markdown } from '@codemirror/lang-markdown';
+	import { markdown, markdownLanguage, markdownKeymap } from '@codemirror/lang-markdown';
 	import { oneDark } from '@codemirror/theme-one-dark';
 	import { vim, Vim } from '@replit/codemirror-vim';
+	import { livePreview } from '$lib/editor/livePreview';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { workingKeys, fetchWorking, updateWorking, deleteWorking } from '$lib/api/working';
 	import type { PaneContent } from '$lib/types';
@@ -156,6 +151,9 @@
 
 	function buildEditorTheme(theme: string) {
 		const palette = editorPalette(theme);
+		// Obsidian-style editing surface: proportional reading font, a centered
+		// reading column, wrapped lines, no gutter — the Live Preview extension
+		// renders markdown inline on top of this base.
 		const shellTheme = EditorView.theme(
 			{
 				'&': {
@@ -165,25 +163,27 @@
 				},
 				'.cm-scroller': {
 					overflow: 'auto',
-					fontFamily: 'var(--font-mono)',
-					fontSize: '0.933rem'
+					fontFamily: 'var(--font-reading)',
+					fontSize: '1rem',
+					lineHeight: '1.6'
 				},
-				'.cm-content': { caretColor: palette.accent },
-				'.cm-cursor, .cm-dropCursor': { borderLeftColor: palette.accent },
-				'.cm-gutters': {
-					backgroundColor: palette.background,
-					borderRightColor: palette.line,
-					color: palette.muted
+				'.cm-content': {
+					caretColor: palette.accent,
+					maxWidth: '46rem',
+					margin: '0 auto',
+					padding: '2.2rem 1.6rem 4rem'
 				},
-				'.cm-activeLine, .cm-activeLineGutter': { backgroundColor: palette.activeLine },
+				'.cm-cursor, .cm-dropCursor': { borderLeftColor: palette.accent, borderLeftWidth: '2px' },
 				'.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
 					backgroundColor: palette.selection
 				},
-				'.cm-line': { color: palette.foreground }
+				'.cm-line': { color: palette.foreground, padding: '0 2px' }
 			},
 			{ dark: theme === 'dark' }
 		);
 
+		// Reuse default code-token highlighting (used inside code blocks); the
+		// one-dark palette only for dark mode to match the shell background.
 		return theme === 'dark'
 			? [oneDark, shellTheme]
 			: [
@@ -286,10 +286,10 @@
 			doc: docQuery.data.content,
 			extensions: [
 				history(),
-				lineNumbers(),
 				drawSelection(),
-				highlightActiveLine(),
-				markdown(),
+				EditorView.lineWrapping,
+				markdown({ base: markdownLanguage }),
+				livePreview(),
 				themeCompartment.of(buildEditorTheme(untrack(() => themeKey))),
 				vimCompartment.of(buildVimExtension(untrack(() => wb.vimMode))),
 				keymap.of([
@@ -308,6 +308,7 @@
 						}
 					},
 					indentWithTab,
+					...markdownKeymap,
 					...defaultKeymap,
 					...historyKeymap,
 					...searchKeymap

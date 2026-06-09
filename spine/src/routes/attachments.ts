@@ -3,8 +3,9 @@ import type { Database } from 'bun:sqlite';
 import { mkdirSync, writeFileSync, unlinkSync, existsSync, realpathSync } from 'node:fs';
 import { realpath } from 'node:fs/promises';
 import { join, sep } from 'node:path';
-import type { CaptureAttachmentRow } from '../db/rows';
+import type { CaptureAttachmentRow, AttachmentDescriptionRow } from '../db/rows';
 import { writeAttachmentIndex, refreshIndex, attachmentsMdDir } from '../search';
+import { queueAttachment } from '../extraction-queue';
 
 export interface AttachmentRoutesOptions {
 	attachmentsDir: string;
@@ -35,7 +36,7 @@ export const attachmentRoutes = (db: Database, { attachmentsDir }: AttachmentRou
 				}
 				return db
 					.query(
-						'SELECT id, capture_id, filename, content_type, size_bytes, stored_path, upload_source, created_at FROM capture_attachments WHERE capture_id = ? ORDER BY created_at ASC',
+						'SELECT id, capture_id, filename, content_type, size_bytes, stored_path, upload_source, created_at, extraction_status FROM capture_attachments WHERE capture_id = ? ORDER BY created_at ASC',
 					)
 					.all(captureId) as CaptureAttachmentRow[];
 			},
@@ -82,8 +83,8 @@ export const attachmentRoutes = (db: Database, { attachmentsDir }: AttachmentRou
 					const inserted = db
 						.prepare(
 							`INSERT INTO capture_attachments
-               (capture_id, signal_id, content_type, filename, size_bytes, stored_path, upload_source, created_at)
-             VALUES (?, '', ?, ?, ?, '', 'browser', ?) RETURNING id`,
+               (capture_id, signal_id, content_type, filename, size_bytes, stored_path, upload_source, created_at, extraction_status, extracted_text)
+             VALUES (?, '', ?, ?, ?, '', 'browser', ?, 'pending', '') RETURNING id`,
 						)
 						.get(captureId, contentType, filename, bytes.length, now) as { id: number };
 
@@ -102,6 +103,7 @@ export const attachmentRoutes = (db: Database, { attachmentsDir }: AttachmentRou
 
 				writeAttachmentIndex(row.id, captureId, filename, contentType, bytes.length, now);
 				refreshIndex();
+				queueAttachment(row.id, 'capture', join(attachmentsDir, row.stored_path), contentType, db);
 
 				return {
 					id: row.id,
@@ -112,6 +114,7 @@ export const attachmentRoutes = (db: Database, { attachmentsDir }: AttachmentRou
 					stored_path: row.stored_path,
 					upload_source: 'browser',
 					created_at: now,
+					extraction_status: 'pending',
 				};
 			},
 			{ params: t.Object({ id: t.String() }) },
@@ -215,5 +218,136 @@ export const attachmentRoutes = (db: Database, { attachmentsDir }: AttachmentRou
 				return {};
 			},
 			{ params: t.Object({ id: t.String(), attId: t.String() }) },
+		)
+		.get(
+			'/api/captures/:id/attachments/:attId/description',
+			({ params, set }) => {
+				const captureId = parseInt(params.id, 10);
+				const attId = parseInt(params.attId, 10);
+				if (isNaN(captureId) || isNaN(attId)) {
+					set.status = 400;
+					return { error: 'Invalid id' };
+				}
+
+				const att = db
+					.query(
+						'SELECT extraction_status FROM capture_attachments WHERE id = ? AND capture_id = ?',
+					)
+					.get(attId, captureId) as { extraction_status: string } | null;
+				if (!att) {
+					set.status = 404;
+					return { error: 'Not found' };
+				}
+				if (att.extraction_status !== 'dark') {
+					set.status = 409;
+					return { error: 'Attachment is not dark' };
+				}
+
+				const desc = db
+					.query(
+						`SELECT * FROM attachment_descriptions
+					 WHERE attachment_kind = 'capture' AND attachment_id = ? AND supersedes IS NULL`,
+					)
+					.get(attId) as AttachmentDescriptionRow | null;
+				if (!desc) {
+					set.status = 404;
+					return { error: 'No description yet' };
+				}
+				return { ...desc, confirmed: desc.confirmed === 1 };
+			},
+			{ params: t.Object({ id: t.String(), attId: t.String() }) },
+		)
+		.patch(
+			'/api/captures/:id/attachments/:attId/description',
+			({ params, body, set }) => {
+				const captureId = parseInt(params.id, 10);
+				const attId = parseInt(params.attId, 10);
+				if (isNaN(captureId) || isNaN(attId)) {
+					set.status = 400;
+					return { error: 'Invalid id' };
+				}
+
+				const { final_text, confirmed } = body;
+				if (final_text === undefined && confirmed === undefined) {
+					set.status = 400;
+					return { error: 'Nothing to update' };
+				}
+				if (final_text !== undefined && final_text.trim() === '') {
+					set.status = 400;
+					return { error: 'final_text cannot be empty' };
+				}
+
+				const att = db
+					.query(
+						'SELECT extraction_status FROM capture_attachments WHERE id = ? AND capture_id = ?',
+					)
+					.get(attId, captureId) as { extraction_status: string } | null;
+				if (!att) {
+					set.status = 404;
+					return { error: 'Not found' };
+				}
+
+				const desc = db
+					.query(
+						`SELECT * FROM attachment_descriptions
+					 WHERE attachment_kind = 'capture' AND attachment_id = ? AND supersedes IS NULL`,
+					)
+					.get(attId) as AttachmentDescriptionRow | null;
+				if (!desc) {
+					set.status = 404;
+					return { error: 'No description' };
+				}
+
+				const updates: string[] = [];
+				const vals: unknown[] = [];
+				if (final_text !== undefined) {
+					updates.push('final_text = ?');
+					vals.push(final_text);
+				}
+				if (confirmed !== undefined) {
+					updates.push('confirmed = ?');
+					vals.push(confirmed ? 1 : 0);
+				}
+				vals.push(desc.id);
+				db.prepare(`UPDATE attachment_descriptions SET ${updates.join(', ')} WHERE id = ?`).run(
+					...(vals as (string | number | boolean | null)[]),
+				);
+
+				if (final_text !== undefined) {
+					const row = db
+						.query(
+							'SELECT id, capture_id, filename, content_type, size_bytes, created_at FROM capture_attachments WHERE id = ?',
+						)
+						.get(attId) as {
+						id: number;
+						capture_id: number;
+						filename: string;
+						content_type: string;
+						size_bytes: number;
+						created_at: string;
+					} | null;
+					if (row) {
+						writeAttachmentIndex(
+							row.id,
+							row.capture_id,
+							row.filename,
+							row.content_type,
+							row.size_bytes,
+							row.created_at,
+							final_text,
+						);
+						refreshIndex();
+					}
+				}
+
+				const updated = db
+					.query('SELECT * FROM attachment_descriptions WHERE id = ?')
+					.get(desc.id) as AttachmentDescriptionRow;
+				return { ...updated, confirmed: updated.confirmed === 1 };
+			},
+			{
+				params: t.Object({ id: t.String(), attId: t.String() }),
+				body: t.Object({ final_text: t.Optional(t.String()), confirmed: t.Optional(t.Boolean()) }),
+			},
 		);
 };

@@ -13,18 +13,18 @@
 
 ## Completion Tracker
 
-- [ ] T001 Write DB migration 013 (extraction columns) — `spine/migrations/013_attachment_extraction.sql`
-- [ ] T002 Write DB migration 014 (attachment_descriptions table) — `spine/migrations/014_attachment_descriptions.sql`
-- [ ] T003 Add ExtractionStatus type and new row columns to DB types; add OCR/VLM config exports — `spine/src/db/rows.ts`, `spine/src/config.ts`
-- [ ] T004 [P] Implement Tier 0 inline extraction (text/csv/md) in extract.ts — `spine/src/extract.ts`
-- [ ] T005 [P] Implement Tier 0 subprocess extraction (PDF via pdftotext; DOCX/PPTX/XLSX via pandoc) in extract.ts — `spine/src/extract.ts`
-- [ ] T006 Implement Tier 1 OCR (ocrImage) via inference endpoint in extract.ts — `spine/src/extract.ts`
-- [ ] T007 Implement extraction queue module (queueAttachment, sweepPending, _queueLock chain) — `spine/src/extraction-queue.ts`
-- [ ] T008 Extend search index functions to accept and write extracted text — `spine/src/search.ts`
-- [ ] T009 Set extraction_status='pending' on upload; expose status in list/upload responses; wire queueAttachment — `spine/src/routes/attachments.ts`, `spine/src/routes/working.ts`
-- [ ] T010 Wire sweepPending into startup before HTTP listen — `spine/src/index.ts`
-- [ ] T011 [P] Implement generateDescription (VLM call + attachment_descriptions write) and description GET/PATCH routes — `spine/src/describe.ts`, `spine/src/routes/attachments.ts`, `spine/src/routes/working.ts`
-- [ ] T012 [P] Write tests for extraction pipeline and description endpoints — `spine/tests/routes/attachment-extraction.test.ts`, `spine/tests/extract.test.ts`
+- [x] T001 Write DB migration 013 (extraction columns) — `spine/migrations/013_attachment_extraction.sql`
+- [x] T002 Write DB migration 014 (attachment_descriptions table) — `spine/migrations/014_attachment_descriptions.sql`
+- [x] T003 Add ExtractionStatus type and new row columns to DB types; add OCR/VLM config exports — `spine/src/db/rows.ts`, `spine/src/config.ts`
+- [x] T004 [P] Implement Tier 0 inline extraction (text/csv/md) in extract.ts — `spine/src/extract.ts`
+- [x] T005 [P] Implement Tier 0 subprocess extraction (PDF via pdftotext; DOCX/PPTX/XLSX via pandoc) in extract.ts — `spine/src/extract.ts`
+- [x] T006 Implement Tier 1 OCR (ocrImage) via inference endpoint in extract.ts — `spine/src/extract.ts`
+- [x] T007 Implement extraction queue module (queueAttachment, sweepPending, _queueLock chain) — `spine/src/extraction-queue.ts`
+- [x] T008 Extend search index functions to accept and write extracted text — `spine/src/search.ts`
+- [x] T009 Set extraction_status='pending' on upload; expose status in list/upload responses; wire queueAttachment — `spine/src/routes/attachments.ts`, `spine/src/routes/working.ts`
+- [x] T010 Wire sweepPending into startup before HTTP listen — `spine/src/index.ts`
+- [x] T011 [P] Implement generateDescription (VLM call + attachment_descriptions write) and description GET/PATCH routes — `spine/src/describe.ts`, `spine/src/routes/attachments.ts`, `spine/src/routes/working.ts`
+- [x] T012 [P] Write tests for extraction pipeline and description endpoints — `spine/tests/routes/attachment-extraction.test.ts`, `spine/tests/extract.test.ts`
 
 ---
 
@@ -33,7 +33,7 @@
 These tasks must complete before any other task. No application code can reference the new columns until the migrations and types exist.
 
 ### T001 - Write migration 013: extraction columns
-- [ ] T001 Write DB migration 013 (extraction columns) — `spine/migrations/013_attachment_extraction.sql`
+- [x] T001 Write DB migration 013 (extraction columns) — `spine/migrations/013_attachment_extraction.sql`
 
 **File**: `spine/migrations/013_attachment_extraction.sql`
 
@@ -50,7 +50,7 @@ Write this file exactly. No other changes.
 ---
 
 ### T002 - Write migration 014: attachment_descriptions table
-- [ ] T002 Write DB migration 014 (attachment_descriptions table) — `spine/migrations/014_attachment_descriptions.sql`
+- [x] T002 Write DB migration 014 (attachment_descriptions table) — `spine/migrations/014_attachment_descriptions.sql`
 
 **File**: `spine/migrations/014_attachment_descriptions.sql`
 
@@ -76,7 +76,7 @@ Write this file exactly. No other changes.
 ---
 
 ### T003 - DB row types and config additions
-- [ ] T003 Add ExtractionStatus type and new row columns to DB types; add OCR/VLM config exports — `spine/src/db/rows.ts`, `spine/src/config.ts`
+- [x] T003 Add ExtractionStatus type and new row columns to DB types; add OCR/VLM config exports — `spine/src/db/rows.ts`, `spine/src/config.ts`
 
 **`spine/src/db/rows.ts`** - add after the existing imports:
 ```typescript
@@ -118,7 +118,7 @@ US1 (searchable document attachments) and US2 (consistent extraction status) are
 **Independent test for US1+US2**: Upload a plain-text attachment. Confirm `extraction_status` transitions from `pending` to `done` and the filename+content appears in the QMD index.
 
 ### T004 - extract.ts: Tier 0 inline
-- [ ] T004 [P] Implement Tier 0 inline extraction (text/csv/md) in extract.ts — `spine/src/extract.ts`
+- [x] T004 [P] Implement Tier 0 inline extraction (text/csv/md) in extract.ts — `spine/src/extract.ts`
 
 **File**: `spine/src/extract.ts` (create new)
 
@@ -154,7 +154,7 @@ T005 will add subprocess extraction to this file. T006 will add OCR. Do not impl
 ---
 
 ### T005 - extract.ts: Tier 0 subprocess
-- [ ] T005 [P] Implement Tier 0 subprocess extraction (PDF via pdftotext; DOCX/PPTX/XLSX via pandoc) in extract.ts — `spine/src/extract.ts`
+- [x] T005 [P] Implement Tier 0 subprocess extraction (PDF via pdftotext; DOCX/PPTX/XLSX via pandoc) in extract.ts — `spine/src/extract.ts`
 
 **File**: `spine/src/extract.ts` (extend T004's file)
 
@@ -203,7 +203,7 @@ export async function extractSubprocess(storedFullPath: string, contentType: str
 ---
 
 ### T006 - extract.ts: Tier 1 OCR via inference endpoint
-- [ ] T006 Implement Tier 1 OCR (ocrImage) via inference endpoint in extract.ts — `spine/src/extract.ts`
+- [x] T006 Implement Tier 1 OCR (ocrImage) via inference endpoint in extract.ts — `spine/src/extract.ts`
 
 **File**: `spine/src/extract.ts` (extend T004+T005 file)
 
@@ -284,7 +284,7 @@ export async function extractText(
 ---
 
 ### T007 - extraction-queue.ts
-- [ ] T007 Implement extraction queue module (queueAttachment, sweepPending, _queueLock chain) — `spine/src/extraction-queue.ts`
+- [x] T007 Implement extraction queue module (queueAttachment, sweepPending, _queueLock chain) — `spine/src/extraction-queue.ts`
 
 **File**: `spine/src/extraction-queue.ts` (create new)
 
@@ -349,7 +349,7 @@ For index writes: call the appropriate `writeAttachmentIndex` / `writeWorkingAtt
 ---
 
 ### T008 - search.ts: extend markdown functions with extracted text
-- [ ] T008 Extend search index functions to accept and write extracted text — `spine/src/search.ts`
+- [x] T008 Extend search index functions to accept and write extracted text — `spine/src/search.ts`
 
 **File**: `spine/src/search.ts`
 
@@ -376,7 +376,7 @@ For index writes: call the appropriate `writeAttachmentIndex` / `writeWorkingAtt
 ---
 
 ### T009 - Route changes: set pending on upload; expose status in responses
-- [ ] T009 Set extraction_status='pending' on upload; expose status in list/upload responses; wire queueAttachment — `spine/src/routes/attachments.ts`, `spine/src/routes/working.ts`
+- [x] T009 Set extraction_status='pending' on upload; expose status in list/upload responses; wire queueAttachment — `spine/src/routes/attachments.ts`, `spine/src/routes/working.ts`
 
 **`spine/src/routes/attachments.ts`**:
 
@@ -410,7 +410,7 @@ For index writes: call the appropriate `writeAttachmentIndex` / `writeWorkingAtt
 ---
 
 ### T010 - Startup wiring
-- [ ] T010 Wire sweepPending into startup before HTTP listen — `spine/src/index.ts`
+- [x] T010 Wire sweepPending into startup before HTTP listen — `spine/src/index.ts`
 
 **File**: `spine/src/index.ts`
 
@@ -435,7 +435,7 @@ US3 depends on the extraction pipeline from Phase 2 being complete (`dark` statu
 **Independent test for US3**: Upload an image with no text content. Confirm `extraction_status = 'dark'` after processing, and a description row exists in `attachment_descriptions`. Edit `final_text` via the PATCH endpoint; confirm GET returns updated text.
 
 ### T011 - describe.ts and description routes
-- [ ] T011 [P] Implement generateDescription (VLM call + attachment_descriptions write) and description GET/PATCH routes — `spine/src/describe.ts`, `spine/src/routes/attachments.ts`, `spine/src/routes/working.ts`
+- [x] T011 [P] Implement generateDescription (VLM call + attachment_descriptions write) and description GET/PATCH routes — `spine/src/describe.ts`, `spine/src/routes/attachments.ts`, `spine/src/routes/working.ts`
 
 **`spine/src/describe.ts`** (create new):
 
@@ -599,7 +599,7 @@ Add identical routes to `spine/src/routes/working.ts` substituting `capture_id`/
 ## Phase 4: Tests
 
 ### T012 - Tests for extraction pipeline and description endpoints
-- [ ] T012 [P] Write tests for extraction pipeline and description endpoints — `spine/tests/routes/attachment-extraction.test.ts`, `spine/tests/extract.test.ts`
+- [x] T012 [P] Write tests for extraction pipeline and description endpoints — `spine/tests/routes/attachment-extraction.test.ts`, `spine/tests/extract.test.ts`
 
 **`spine/tests/extract.test.ts`**:
 - Test `extractInline` with a temp plain-text file → returns exact content

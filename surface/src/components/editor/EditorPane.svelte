@@ -30,6 +30,10 @@
 	let editorReady = $state(false);
 	let mountedSlug: string | null = null;
 	let loadedContent = '';
+	// Set while we programmatically replace the doc with adopted server content,
+	// so the update listener doesn't schedule a redundant autosave of content we
+	// just received from the server.
+	let adoptingServerContent = false;
 	const vimCompartment = new Compartment();
 	const themeCompartment = new Compartment();
 	let themeKey = $state('dark');
@@ -284,6 +288,8 @@
 			// cursor to the top — preserve and clamp the selection when we do sync.
 			if (shouldAdoptServerContent(current, content, loadedContent)) {
 				const { anchor, head } = view.state.selection.main;
+				loadedContent = content;
+				adoptingServerContent = true;
 				view.dispatch({
 					changes: { from: 0, to: view.state.doc.length, insert: content },
 					selection: EditorSelection.range(
@@ -291,7 +297,7 @@
 						clampPos(head, content.length)
 					)
 				});
-				loadedContent = content;
+				adoptingServerContent = false;
 			}
 			return;
 		}
@@ -337,7 +343,9 @@
 					...searchKeymap
 				]),
 				EditorView.updateListener.of((update) => {
-					if (update.docChanged) scheduleAutosave(update.state.doc.toString());
+					if (update.docChanged && !adoptingServerContent) {
+						scheduleAutosave(update.state.doc.toString());
+					}
 				})
 			]
 		});

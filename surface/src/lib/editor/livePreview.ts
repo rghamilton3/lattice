@@ -101,6 +101,9 @@ class HrWidget extends WidgetType {
 		hr.setAttribute('aria-hidden', 'true');
 		return hr;
 	}
+	ignoreEvent() {
+		return true;
+	}
 }
 
 class ImageWidget extends WidgetType {
@@ -122,6 +125,9 @@ class ImageWidget extends WidgetType {
 		img.loading = 'lazy';
 		wrap.appendChild(img);
 		return wrap;
+	}
+	ignoreEvent() {
+		return true;
 	}
 }
 
@@ -148,6 +154,25 @@ const INLINE_MARK: Record<string, { cls: string; mark: string }> = {
 
 function conceal(decos: Range<Decoration>[], from: number, to: number) {
 	if (to > from) decos.push(Decoration.replace({}).range(from, to));
+}
+
+/**
+ * Stamp a line decoration on every line a node spans. `node.to` can sit at the
+ * start of the line *after* the construct (when the range includes a trailing
+ * newline), so clamp with `to - 1` to avoid decorating that following line.
+ */
+function decorateLines(
+	state: EditorState,
+	from: number,
+	to: number,
+	cls: string,
+	decos: Range<Decoration>[]
+) {
+	const firstLine = state.doc.lineAt(from).number;
+	const lastLine = state.doc.lineAt(Math.max(from, to - 1)).number;
+	for (let n = firstLine; n <= lastLine; n++) {
+		decos.push(Decoration.line({ class: cls }).range(state.doc.line(n).from));
+	}
 }
 
 function handleNode(
@@ -221,12 +246,7 @@ function handleNode(
 
 	// --- Blockquotes --------------------------------------------------------
 	if (name === 'Blockquote') {
-		let pos = node.from;
-		while (pos <= node.to) {
-			const line = state.doc.lineAt(pos);
-			decos.push(Decoration.line({ class: 'cm-lp-quote' }).range(line.from));
-			pos = line.to + 1;
-		}
+		decorateLines(state, node.from, node.to, 'cm-lp-quote', decos);
 		for (const m of node.node.getChildren('QuoteMark')) {
 			if (!selectionOnLine(state, m.from)) {
 				// Conceal the `>` plus a single trailing space when present.
@@ -247,12 +267,7 @@ function handleNode(
 
 	// --- Fenced / indented code blocks --------------------------------------
 	if (name === 'FencedCode' || name === 'CodeBlock') {
-		let pos = node.from;
-		while (pos <= node.to) {
-			const line = state.doc.lineAt(pos);
-			decos.push(Decoration.line({ class: 'cm-lp-codeblock' }).range(line.from));
-			pos = line.to + 1;
-		}
+		decorateLines(state, node.from, node.to, 'cm-lp-codeblock', decos);
 		return;
 	}
 

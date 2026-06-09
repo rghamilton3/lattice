@@ -126,4 +126,44 @@ describe('markdownDecorations', () => {
 		const decos = decorate(doc);
 		expect(hasClass(decos, 'cm-lp-codeblock')).toBe(true);
 	});
+
+	it('does not stamp the code-block class on the following line', () => {
+		const doc = 'x\n\n```\ncode\n```\nafter\n';
+		const decos = decorate(doc);
+		// The fenced block spans 3 lines (``` / code / ```); the trailing
+		// "after" line must not pick up the code-block decoration.
+		const codeLines = decos.filter((d) => d.cls === 'cm-lp-codeblock');
+		expect(codeLines.length).toBe(3);
+	});
+
+	it('conceals link syntax and styles the text when the cursor is away', () => {
+		const doc = 'x\n\n[label](https://example.com)\n';
+		const decos = decorate(doc);
+		expect(hasClass(decos, 'cm-lp-link')).toBe(true);
+		const text = visibleText(doc, decos);
+		expect(text).toContain('label');
+		expect(text).not.toContain('https://example.com');
+		expect(text).not.toContain('](');
+	});
+
+	it('reveals the raw link syntax when the cursor is inside it', () => {
+		const doc = '[label](https://example.com)\n';
+		const decos = decorate(doc, 3);
+		expect(hasClass(decos, 'cm-lp-link-raw')).toBe(true);
+		expect(visibleText(doc, decos)).toContain('[label](https://example.com)');
+	});
+
+	it('conceals strikethrough markers when the cursor is away', () => {
+		const doc = 'x\n\n~~gone~~\n';
+		const decos = decorate(doc);
+		expect(hasClass(decos, 'cm-lp-strike')).toBe(true);
+		expect(visibleText(doc, decos)).toContain('gone');
+		expect(visibleText(doc, decos)).not.toContain('~~');
+	});
+
+	it('replaces an image with a widget when the cursor is away', () => {
+		const doc = 'x\n\n![alt text](https://example.com/i.png)\n';
+		const decos = decorate(doc);
+		expect(decos.some((d) => d.widget === 'ImageWidget')).toBe(true);
+	});
 });

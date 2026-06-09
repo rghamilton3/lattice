@@ -1,7 +1,7 @@
 ---
 parent_branch: main
 feature_number: "017"
-status: In Progress
+status: Complete
 created_at: 2026-06-08T00:00:00+00:00
 references_consulted:
   - specs/005-attachments/spec.md

@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { generateDescription } from '../src/describe';
+import { __resetSearchForTests } from '../src/search';
 import { buildTestApp, type TestApp } from './helpers/app';
 
 let app: TestApp;
@@ -37,6 +38,10 @@ afterEach(async () => {
 	} else {
 		delete process.env.XDG_CONFIG_HOME;
 	}
+	// Reset search module's _db to null before closing the test DB. Without this,
+	// test files that run after this one (e.g. search.test.ts) inherit a stale
+	// closed-DB reference and crash with "Cannot use a closed database".
+	__resetSearchForTests();
 	await app?.cleanup();
 });
 

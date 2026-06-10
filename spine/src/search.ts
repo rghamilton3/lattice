@@ -197,6 +197,10 @@ export function isSearchDegraded(): boolean {
 	return _degraded;
 }
 
+export function getQmdStore(): QMDStore | null {
+	return _store;
+}
+
 /** Consecutive index-refresh failures (lexical update); 0 when the index is current. */
 export function indexFailureCount(): number {
 	return _indexFailures;

@@ -1,7 +1,9 @@
 import { Elysia, t } from 'elysia';
 import type { Database } from 'bun:sqlite';
+import { existsSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 import type { CaptureRow } from '../db/rows';
-import { writeCaptureFile, refreshIndex } from '../search';
+import { writeCaptureFile, deleteCaptureFile, attachmentsMdDir, refreshIndex } from '../search';
 
 const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
 const MAX_TASK_TEXT_LENGTH = 10_000;
@@ -24,7 +26,11 @@ function sortActive(rows: CaptureRow[]): CaptureRow[] {
 	});
 }
 
-export const tasksRoutes = (db: Database) =>
+export interface TasksRoutesOptions {
+	attachmentsDir: string;
+}
+
+export const tasksRoutes = (db: Database, { attachmentsDir }: TasksRoutesOptions) =>
 	new Elysia()
 		.get('/api/tasks', () => {
 			const rows = db
@@ -94,23 +100,54 @@ export const tasksRoutes = (db: Database) =>
 					set.status = 400;
 					return { error: 'Invalid id' };
 				}
+
+				if (body.text !== undefined) {
+					const newText = body.text.trim();
+					if (newText.length === 0) {
+						set.status = 422;
+						return { error: 'Task text is required' };
+					}
+					if (newText.length > MAX_TASK_TEXT_LENGTH) {
+						set.status = 422;
+						return { error: 'Task text must be 10,000 characters or fewer' };
+					}
+				}
+
 				const result = db
 					.prepare(
-						`UPDATE captures SET task_due_date = ?, task_priority = ?, task_notes = ?
-						WHERE id = ? AND triage_action = 'task' RETURNING id`,
+						`UPDATE captures
+						SET task_due_date = ?, task_priority = ?, task_notes = ?, text = COALESCE(?, text)
+						WHERE id = ? AND triage_action = 'task'
+						RETURNING id, text, captured_at`,
 					)
-					.get(body.due_date ?? null, body.priority ?? null, body.notes ?? null, id) as {
-					id: number;
-				} | null;
+					.get(
+						body.due_date ?? null,
+						body.priority ?? null,
+						body.notes ?? null,
+						body.text !== undefined ? body.text.trim() : null,
+						id,
+					) as { id: number; text: string; captured_at: string } | null;
+
 				if (!result) {
 					set.status = 404;
 					return { error: 'Not found' };
 				}
+
+				if (body.text !== undefined) {
+					try {
+						writeCaptureFile(result.id, result.text, 'task', result.captured_at);
+					} catch (e) {
+						console.warn(`[tasks] failed to write capture file ${result.id}:`, e);
+					}
+					refreshIndex();
+				}
+
 				return {};
 			},
 			{
 				params: t.Object({ id: t.String() }),
 				body: t.Object({
+					text: t.Optional(t.String()),
 					due_date: t.Optional(t.Nullable(t.String())),
 					priority: t.Optional(
 						t.Nullable(t.Union([t.Literal('high'), t.Literal('medium'), t.Literal('low')])),
@@ -157,6 +194,59 @@ export const tasksRoutes = (db: Database) =>
 					set.status = 404;
 					return { error: 'Not found' };
 				}
+				return {};
+			},
+			{ params: t.Object({ id: t.String() }) },
+		)
+		.delete(
+			'/api/tasks/:id',
+			({ params, set }) => {
+				const id = parseInt(params.id, 10);
+				if (isNaN(id)) {
+					set.status = 400;
+					return { error: 'Invalid id' };
+				}
+
+				const atts: { id: number; stored_path: string }[] = [];
+				const result = db.transaction(() => {
+					const check = db
+						.prepare(`SELECT id FROM captures WHERE id = ? AND triage_action = 'task'`)
+						.get(id) as { id: number } | null;
+					if (!check) return null;
+					const rows = db
+						.query('SELECT id, stored_path FROM capture_attachments WHERE capture_id = ?')
+						.all(id) as { id: number; stored_path: string }[];
+					atts.push(...rows);
+					db.prepare('DELETE FROM capture_attachments WHERE capture_id = ?').run(id);
+					return db.prepare(`DELETE FROM captures WHERE id = ? RETURNING id`).get(id);
+				})() as { id: number } | null;
+
+				if (!result) {
+					set.status = 404;
+					return { error: 'Not found' };
+				}
+
+				for (const att of atts) {
+					try {
+						const binPath = join(attachmentsDir, att.stored_path);
+						if (existsSync(binPath)) unlinkSync(binPath);
+					} catch (e) {
+						console.warn(`[tasks] failed to delete attachment binary ${att.id}:`, e);
+					}
+					try {
+						const mdPath = join(attachmentsMdDir(), `${att.id}.md`);
+						if (existsSync(mdPath)) unlinkSync(mdPath);
+					} catch (e) {
+						console.warn(`[tasks] failed to delete attachment index ${att.id}:`, e);
+					}
+				}
+
+				try {
+					deleteCaptureFile(id);
+				} catch (e) {
+					console.warn(`[tasks] failed to delete capture file ${id}:`, e);
+				}
+				refreshIndex();
 				return {};
 			},
 			{ params: t.Object({ id: t.String() }) },

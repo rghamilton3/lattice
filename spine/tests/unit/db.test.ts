@@ -43,6 +43,8 @@ describe('db.initDb', () => {
 			'010_archives.sql',
 			'011_tracks.sql',
 			'012_annotations.sql',
+			'013_attachment_extraction.sql',
+			'014_attachment_descriptions.sql',
 		]);
 		db.close();
 	});
@@ -81,7 +83,7 @@ describe('db.initDb', () => {
 		const { initDb, getMigrationStatus } = await import('../../src/db');
 		const db = initDb();
 
-		expect(getMigrationStatus(db)).toEqual({ ready: true, applied: 12 });
+		expect(getMigrationStatus(db)).toEqual({ ready: true, applied: 14 });
 		db.close();
 	});
 

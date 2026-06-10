@@ -2,6 +2,20 @@
 // import these (or a `Pick<>` of them) rather than declare ad-hoc interfaces,
 // so a column added in a migration causes a compile error at every read site.
 
+export type ExtractionStatus = 'pending' | 'done' | 'failed' | 'dark';
+
+export interface AttachmentDescriptionRow {
+	id: number;
+	attachment_kind: 'capture' | 'working';
+	attachment_id: number;
+	produced_text: string;
+	final_text: string;
+	confirmed: number;
+	model_id: string;
+	supersedes: number | null;
+	created_at: string;
+}
+
 export interface CaptureRow {
 	id: number;
 	text: string;
@@ -49,6 +63,8 @@ export interface WorkingAttachmentRow {
 	size_bytes: number;
 	stored_path: string;
 	created_at: string;
+	extraction_status: ExtractionStatus;
+	extracted_text: string;
 }
 
 export interface CaptureAttachmentRow {
@@ -61,6 +77,8 @@ export interface CaptureAttachmentRow {
 	stored_path: string;
 	upload_source: string;
 	created_at: string;
+	extraction_status: ExtractionStatus;
+	extracted_text: string;
 }
 
 export interface TrackRow {

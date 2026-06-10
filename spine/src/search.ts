@@ -116,26 +116,19 @@ export function captureToMarkdown({ id, text, source, captured_at }: CaptureData
 	return `---\nid: ${id}\nsource: ${sanitize(source)}\ncaptured_at: ${sanitize(captured_at)}\n---\n\n${text}\n`;
 }
 
-export function attachmentToMarkdown({
-	id,
-	capture_id,
-	filename,
-	content_type,
-	size_bytes,
-	created_at,
-}: AttachmentData): string {
-	return `---\nid: ${id}\ncapture_id: ${capture_id}\nfilename: ${sanitize(filename)}\ncontent_type: ${sanitize(content_type)}\nsize_bytes: ${size_bytes}\ncreated_at: ${sanitize(created_at)}\n---\n\n${sanitize(filename)}\n`;
+export function attachmentToMarkdown(data: AttachmentData, extractedText = ''): string {
+	const { id, capture_id, filename, content_type, size_bytes, created_at } = data;
+	const body = extractedText ? `${sanitize(filename)}\n\n${extractedText}` : sanitize(filename);
+	return `---\nid: ${id}\ncapture_id: ${capture_id}\nfilename: ${sanitize(filename)}\ncontent_type: ${sanitize(content_type)}\nsize_bytes: ${size_bytes}\ncreated_at: ${sanitize(created_at)}\n---\n\n${body}\n`;
 }
 
-export function workingAttachmentToMarkdown({
-	id,
-	slug,
-	filename,
-	content_type,
-	size_bytes,
-	created_at,
-}: WorkingAttachmentData): string {
-	return `---\nid: ${id}\nslug: ${sanitize(slug)}\nfilename: ${sanitize(filename)}\ncontent_type: ${sanitize(content_type)}\nsize_bytes: ${size_bytes}\ncreated_at: ${sanitize(created_at)}\n---\n\n${sanitize(filename)}\n`;
+export function workingAttachmentToMarkdown(
+	data: WorkingAttachmentData,
+	extractedText = '',
+): string {
+	const { id, slug, filename, content_type, size_bytes, created_at } = data;
+	const body = extractedText ? `${sanitize(filename)}\n\n${extractedText}` : sanitize(filename);
+	return `---\nid: ${id}\nslug: ${sanitize(slug)}\nfilename: ${sanitize(filename)}\ncontent_type: ${sanitize(content_type)}\nsize_bytes: ${size_bytes}\ncreated_at: ${sanitize(created_at)}\n---\n\n${body}\n`;
 }
 
 export function localFileToMarkdown(machineId: string, path: string, text: string): string {
@@ -306,27 +299,51 @@ export async function initSearch(db: Database): Promise<void> {
 
 	const attachmentRows = db
 		.query(
-			'SELECT id, capture_id, filename, content_type, size_bytes, created_at FROM capture_attachments',
+			`SELECT ca.id, ca.capture_id, ca.filename, ca.content_type, ca.size_bytes, ca.created_at,
+			        ca.extraction_status, ca.extracted_text,
+			        ad.final_text as description_text
+			 FROM capture_attachments ca
+			 LEFT JOIN attachment_descriptions ad ON (
+			   ad.attachment_kind = 'capture' AND ad.attachment_id = ca.id AND ad.supersedes IS NULL
+			 )`,
 		)
-		.all() as AttachmentData[];
+		.all() as (AttachmentData & {
+		extraction_status: string;
+		extracted_text: string;
+		description_text: string | null;
+	})[];
 
 	for (const row of attachmentRows) {
 		const filePath = join(attachmentsMd, `${row.id}.md`);
 		if (!existsSync(filePath)) {
-			writeFileSync(filePath, attachmentToMarkdown(row));
+			const text =
+				row.extraction_status === 'dark' ? (row.description_text ?? '') : row.extracted_text;
+			writeFileSync(filePath, attachmentToMarkdown(row, text));
 		}
 	}
 
 	const workingAttachmentRows = db
 		.query(
-			'SELECT id, slug, filename, content_type, size_bytes, created_at FROM working_attachments',
+			`SELECT wa.id, wa.slug, wa.filename, wa.content_type, wa.size_bytes, wa.created_at,
+			        wa.extraction_status, wa.extracted_text,
+			        ad.final_text as description_text
+			 FROM working_attachments wa
+			 LEFT JOIN attachment_descriptions ad ON (
+			   ad.attachment_kind = 'working' AND ad.attachment_id = wa.id AND ad.supersedes IS NULL
+			 )`,
 		)
-		.all() as WorkingAttachmentData[];
+		.all() as (WorkingAttachmentData & {
+		extraction_status: string;
+		extracted_text: string;
+		description_text: string | null;
+	})[];
 
 	for (const row of workingAttachmentRows) {
 		const filePath = join(workingAttachmentsMd, `${row.id}.md`);
 		if (!existsSync(filePath)) {
-			writeFileSync(filePath, workingAttachmentToMarkdown(row));
+			const text =
+				row.extraction_status === 'dark' ? (row.description_text ?? '') : row.extracted_text;
+			writeFileSync(filePath, workingAttachmentToMarkdown(row, text));
 		}
 	}
 
@@ -418,10 +435,14 @@ export function writeWorkingAttachmentIndex(
 	content_type: string,
 	size_bytes: number,
 	created_at: string,
+	extractedText = '',
 ): void {
 	writeFileSync(
 		join(workingAttachmentsMdDir(), `${id}.md`),
-		workingAttachmentToMarkdown({ id, slug, filename, content_type, size_bytes, created_at }),
+		workingAttachmentToMarkdown(
+			{ id, slug, filename, content_type, size_bytes, created_at },
+			extractedText,
+		),
 	);
 }
 
@@ -437,10 +458,14 @@ export function writeAttachmentIndex(
 	content_type: string,
 	size_bytes: number,
 	created_at: string,
+	extractedText = '',
 ): void {
 	writeFileSync(
 		join(attachmentsMdDir(), `${id}.md`),
-		attachmentToMarkdown({ id, capture_id, filename, content_type, size_bytes, created_at }),
+		attachmentToMarkdown(
+			{ id, capture_id, filename, content_type, size_bytes, created_at },
+			extractedText,
+		),
 	);
 }
 

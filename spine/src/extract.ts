@@ -54,7 +54,7 @@ export function isImageType(contentType: string): boolean {
 }
 
 export function isSubprocessType(contentType: string): boolean {
-	return contentType.split(';')[0].trim().toLowerCase() in SUBPROCESS_TYPES;
+	return Object.hasOwn(SUBPROCESS_TYPES, contentType.split(';')[0].trim().toLowerCase());
 }
 
 export function extractInline(storedFullPath: string): string {
@@ -94,6 +94,7 @@ export async function ocrImage(storedFullPath: string, contentType: string): Pro
 
 	const resp = await fetch(`${baseUrl}/chat/completions`, {
 		method: 'POST',
+		signal: AbortSignal.timeout(30_000),
 		headers: {
 			'Content-Type': 'application/json',
 			...(getQmdApiKey() ? { Authorization: `Bearer ${getQmdApiKey()}` } : {}),

@@ -286,6 +286,10 @@ export const attachmentRoutes = (db: Database, { attachmentsDir }: AttachmentRou
 					set.status = 404;
 					return { error: 'Not found' };
 				}
+				if (att.extraction_status !== 'dark') {
+					set.status = 409;
+					return { error: 'Attachment is not dark' };
+				}
 
 				const desc = db
 					.query(

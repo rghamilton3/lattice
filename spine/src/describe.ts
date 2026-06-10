@@ -43,6 +43,7 @@ export async function generateDescription(
 
 	const resp = await fetch(`${baseUrl}/chat/completions`, {
 		method: 'POST',
+		signal: AbortSignal.timeout(30_000),
 		headers: {
 			'Content-Type': 'application/json',
 			...(getQmdApiKey() ? { Authorization: `Bearer ${getQmdApiKey()}` } : {}),
@@ -75,11 +76,20 @@ export async function generateDescription(
 
 	const now = new Date().toISOString();
 	db.transaction(() => {
-		db.prepare(
-			`INSERT INTO attachment_descriptions
+		const { lastInsertRowid } = db
+			.prepare(
+				`INSERT INTO attachment_descriptions
                (attachment_kind, attachment_id, produced_text, final_text, confirmed, model_id, supersedes, created_at)
-             VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
-		).run(kind, attachmentId, text, text, model, existing?.id ?? null, now);
+             VALUES (?, ?, ?, ?, 0, ?, NULL, ?)`,
+			)
+			.run(kind, attachmentId, text, text, model, now);
+
+		if (existing) {
+			db.prepare('UPDATE attachment_descriptions SET supersedes = ? WHERE id = ?').run(
+				lastInsertRowid,
+				existing.id,
+			);
+		}
 
 		if (kind === 'capture') {
 			const row = db

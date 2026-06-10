@@ -58,6 +58,8 @@ export function getQmdModelsConfig(): QmdModelsConfig | undefined {
 	return readLatticeConfig().spine?.qmd;
 }
 
+// OCR and VLM inference calls share this endpoint (embed_api_url). All three functions
+// are expected to be served by the same local inference server (e.g. LMStudio, Ollama).
 export function getQmdBaseUrl(): string | undefined {
 	return readLatticeConfig().spine?.qmd?.embed_api_url;
 }

@@ -22,6 +22,8 @@
 				return `edit: ${c.slug}`;
 			case 'tasks':
 				return 'tasks';
+			case 'cluster':
+				return `cluster #${c.clusterId}`;
 		}
 	}
 </script>

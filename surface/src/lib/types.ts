@@ -257,7 +257,32 @@ export type PaneContent =
 	| { kind: 'results'; source: LateralSource }
 	| { kind: 'doc'; ref: DocRef; revealAnnotationId?: string }
 	| { kind: 'editor'; slug: string }
-	| { kind: 'tasks' };
+	| { kind: 'tasks' }
+	| { kind: 'cluster'; clusterId: number };
+
+// ── Resurfacing & Clustering ──────────────────────────────────────────────────
+
+export interface ResurfacedItem {
+	id: number;
+	target_kind: 'capture' | 'working' | 'local-file';
+	target_id: string;
+	reason: string | null;
+	snippet: string;
+	title: string;
+}
+
+export interface ClusterMember {
+	target_kind: 'capture' | 'working' | 'local-file';
+	target_id: string;
+	title: string;
+	snippet: string;
+}
+
+export interface ClusterDetail {
+	id: number;
+	run_at: string;
+	members: ClusterMember[];
+}
 
 // ── Workbench ─────────────────────────────────────────────────────────────────
 

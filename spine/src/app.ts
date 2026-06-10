@@ -15,6 +15,8 @@ import { tasksRoutes } from './routes/tasks';
 import { attachmentRoutes } from './routes/attachments';
 import { archivesRoutes } from './routes/archives';
 import { annotationsRoutes } from './routes/annotations';
+import { resurfacedRoutes } from './routes/resurfaced';
+import { clusterRoutes } from './routes/clusters';
 import { buildPlatformStatus } from './status';
 
 export interface AppDeps {
@@ -55,7 +57,9 @@ export function buildApp(deps: AppDeps) {
 				)
 				.use(attachmentRoutes(db, { attachmentsDir }))
 				.use(annotationsRoutes(db))
-				.use(archivesRoutes(db, { archiveDir })),
+				.use(archivesRoutes(db, { archiveDir }))
+				.use(resurfacedRoutes(db))
+				.use(clusterRoutes(db)),
 		)
 		.group('/api/agent', (app) =>
 			app.guard({ beforeHandle: agentBeforeHandle({ allowHttp, agentToken }) }, (inner) =>

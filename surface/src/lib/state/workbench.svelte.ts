@@ -213,6 +213,8 @@ export class WorkbenchStore {
 				return this.isSameRef(a.ref, (b as typeof a).ref);
 			case 'results':
 				return this.isSameSource(a.source, (b as typeof a).source);
+			case 'cluster':
+				return a.clusterId === (b as typeof a).clusterId;
 			default: {
 				const _exhaustive: never = a;
 				return _exhaustive;

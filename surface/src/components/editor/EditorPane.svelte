@@ -2,20 +2,16 @@
 	import { createQuery, createMutation, useQueryClient } from '@tanstack/svelte-query';
 	import { browser } from '$app/environment';
 	import { untrack } from 'svelte';
-	import { EditorState, Compartment } from '@codemirror/state';
+	import { EditorState, EditorSelection, Compartment } from '@codemirror/state';
 	import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
-	import {
-		EditorView,
-		keymap,
-		lineNumbers,
-		drawSelection,
-		highlightActiveLine
-	} from '@codemirror/view';
+	import { EditorView, keymap, drawSelection } from '@codemirror/view';
 	import { defaultKeymap, historyKeymap, history, indentWithTab } from '@codemirror/commands';
 	import { searchKeymap } from '@codemirror/search';
-	import { markdown } from '@codemirror/lang-markdown';
+	import { markdown, markdownLanguage, markdownKeymap } from '@codemirror/lang-markdown';
 	import { oneDark } from '@codemirror/theme-one-dark';
 	import { vim, Vim } from '@replit/codemirror-vim';
+	import { livePreview } from '$lib/editor/livePreview';
+	import { shouldAdoptServerContent, clampPos } from '$lib/editor/docSync';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { workingKeys, fetchWorking, updateWorking, deleteWorking } from '$lib/api/working';
 	import type { PaneContent } from '$lib/types';
@@ -34,6 +30,10 @@
 	let editorReady = $state(false);
 	let mountedSlug: string | null = null;
 	let loadedContent = '';
+	// Set while we programmatically replace the doc with adopted server content,
+	// so the update listener doesn't schedule a redundant autosave of content we
+	// just received from the server.
+	let adoptingServerContent = false;
 	const vimCompartment = new Compartment();
 	const themeCompartment = new Compartment();
 	let themeKey = $state('dark');
@@ -64,18 +64,28 @@
 	const docQuery = createQuery(() => ({
 		queryKey: workingKeys.detail(slug ?? ''),
 		queryFn: () => fetchWorking(slug ?? ''),
-		enabled: browser && !!slug
+		enabled: browser && !!slug,
+		// The editor is the live source of truth while open; refetching behind the
+		// user's back (e.g. on window focus) would clobber edits and jump the cursor.
+		refetchOnWindowFocus: false
 	}));
 
 	const saveMutation = createMutation(() => ({
 		mutationFn: ({ content }: { content: string }) => updateWorking(slug ?? '', content),
-		onSuccess: () => {
-			isDirty = false;
-			saveStatus = 'saved';
+		onSuccess: (_data, { content }) => {
+			// The saved content is now the synced baseline. If the user kept typing
+			// during the round-trip the editor is still ahead of the server, so keep
+			// the dirty flag accurate rather than blindly clearing it.
+			loadedContent = content;
+			const current = view?.state.doc.toString();
+			isDirty = current !== undefined && current !== content;
+			saveStatus = isDirty ? '' : 'saved';
 			if (statusTimer) clearTimeout(statusTimer);
-			statusTimer = setTimeout(() => {
-				saveStatus = '';
-			}, 2000);
+			if (!isDirty) {
+				statusTimer = setTimeout(() => {
+					saveStatus = '';
+				}, 2000);
+			}
 			qc.invalidateQueries({ queryKey: workingKeys.detail(slug ?? '') });
 		},
 		onError: (err) => {
@@ -156,6 +166,9 @@
 
 	function buildEditorTheme(theme: string) {
 		const palette = editorPalette(theme);
+		// Obsidian-style editing surface: proportional reading font, a centered
+		// reading column, wrapped lines, no gutter — the Live Preview extension
+		// renders markdown inline on top of this base.
 		const shellTheme = EditorView.theme(
 			{
 				'&': {
@@ -165,25 +178,27 @@
 				},
 				'.cm-scroller': {
 					overflow: 'auto',
-					fontFamily: 'var(--font-mono)',
-					fontSize: '0.933rem'
+					fontFamily: 'var(--font-reading)',
+					fontSize: '1rem',
+					lineHeight: '1.6'
 				},
-				'.cm-content': { caretColor: palette.accent },
-				'.cm-cursor, .cm-dropCursor': { borderLeftColor: palette.accent },
-				'.cm-gutters': {
-					backgroundColor: palette.background,
-					borderRightColor: palette.line,
-					color: palette.muted
+				'.cm-content': {
+					caretColor: palette.accent,
+					maxWidth: '46rem',
+					margin: '0 auto',
+					padding: '2.2rem 1.6rem 4rem'
 				},
-				'.cm-activeLine, .cm-activeLineGutter': { backgroundColor: palette.activeLine },
+				'.cm-cursor, .cm-dropCursor': { borderLeftColor: palette.accent, borderLeftWidth: '2px' },
 				'.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
 					backgroundColor: palette.selection
 				},
-				'.cm-line': { color: palette.foreground }
+				'.cm-line': { color: palette.foreground, padding: '0 2px' }
 			},
 			{ dark: theme === 'dark' }
 		);
 
+		// Reuse default code-token highlighting (used inside code blocks); the
+		// one-dark palette only for dark mode to match the shell background.
 		return theme === 'dark'
 			? [oneDark, shellTheme]
 			: [
@@ -266,10 +281,24 @@
 
 		if (view && mountedSlug === slug) {
 			const content = docQuery.data.content;
-			if (content !== loadedContent && !isDirty && view.state.doc.toString() !== content) {
-				view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
+			const current = view.state.doc.toString();
+			// Adopt server content only when the editor holds the last synced
+			// baseline (no un-synced local edits). Otherwise an autosave round-trip
+			// or background refetch would clobber in-progress text and reset the
+			// cursor to the top — preserve and clamp the selection when we do sync.
+			if (shouldAdoptServerContent(current, content, loadedContent)) {
+				const { anchor, head } = view.state.selection.main;
+				loadedContent = content;
+				adoptingServerContent = true;
+				view.dispatch({
+					changes: { from: 0, to: view.state.doc.length, insert: content },
+					selection: EditorSelection.range(
+						clampPos(anchor, content.length),
+						clampPos(head, content.length)
+					)
+				});
+				adoptingServerContent = false;
 			}
-			loadedContent = content;
 			return;
 		}
 
@@ -286,10 +315,10 @@
 			doc: docQuery.data.content,
 			extensions: [
 				history(),
-				lineNumbers(),
 				drawSelection(),
-				highlightActiveLine(),
-				markdown(),
+				EditorView.lineWrapping,
+				markdown({ base: markdownLanguage }),
+				livePreview(),
 				themeCompartment.of(buildEditorTheme(untrack(() => themeKey))),
 				vimCompartment.of(buildVimExtension(untrack(() => wb.vimMode))),
 				keymap.of([
@@ -308,12 +337,15 @@
 						}
 					},
 					indentWithTab,
+					...markdownKeymap,
 					...defaultKeymap,
 					...historyKeymap,
 					...searchKeymap
 				]),
 				EditorView.updateListener.of((update) => {
-					if (update.docChanged) scheduleAutosave(update.state.doc.toString());
+					if (update.docChanged && !adoptingServerContent) {
+						scheduleAutosave(update.state.doc.toString());
+					}
 				})
 			]
 		});

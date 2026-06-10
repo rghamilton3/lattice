@@ -54,7 +54,10 @@ export function isImageType(contentType: string): boolean {
 }
 
 export function isSubprocessType(contentType: string): boolean {
-	return Object.hasOwn(SUBPROCESS_TYPES, contentType.split(';')[0].trim().toLowerCase());
+	return Object.prototype.hasOwnProperty.call(
+		SUBPROCESS_TYPES,
+		contentType.split(';')[0].trim().toLowerCase(),
+	);
 }
 
 export function extractInline(storedFullPath: string): string {

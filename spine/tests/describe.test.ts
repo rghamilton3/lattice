@@ -40,12 +40,12 @@ afterEach(async () => {
 	await app?.cleanup();
 });
 
-function makeFetch(text: string): typeof globalThis.fetch {
+function makeFetch(text: string) {
 	return async () =>
 		new Response(JSON.stringify({ choices: [{ message: { content: text } }] }), {
 			status: 200,
 			headers: { 'Content-Type': 'application/json' },
-		}) as Response;
+		});
 }
 
 function insertDarkAttachment(captureId: number): number {
@@ -73,7 +73,7 @@ function insertCapture(): number {
 
 describe('generateDescription supersedes chain', () => {
 	it('creates first description with supersedes = NULL', async () => {
-		globalThis.fetch = makeFetch('First description.');
+		globalThis.fetch = makeFetch('First description.') as unknown as typeof globalThis.fetch;
 		const captureId = insertCapture();
 		const attId = insertDarkAttachment(captureId);
 
@@ -93,10 +93,10 @@ describe('generateDescription supersedes chain', () => {
 		const captureId = insertCapture();
 		const attId = insertDarkAttachment(captureId);
 
-		globalThis.fetch = makeFetch('First description.');
+		globalThis.fetch = makeFetch('First description.') as unknown as typeof globalThis.fetch;
 		await generateDescription(attId, 'capture', tmpImagePath, app.db);
 
-		globalThis.fetch = makeFetch('Second description.');
+		globalThis.fetch = makeFetch('Second description.') as unknown as typeof globalThis.fetch;
 		await generateDescription(attId, 'capture', tmpImagePath, app.db);
 
 		const all = app.db
@@ -123,10 +123,10 @@ describe('generateDescription supersedes chain', () => {
 		const captureId = insertCapture();
 		const attId = insertDarkAttachment(captureId);
 
-		globalThis.fetch = makeFetch('Old text.');
+		globalThis.fetch = makeFetch('Old text.') as unknown as typeof globalThis.fetch;
 		await generateDescription(attId, 'capture', tmpImagePath, app.db);
 
-		globalThis.fetch = makeFetch('New text.');
+		globalThis.fetch = makeFetch('New text.') as unknown as typeof globalThis.fetch;
 		await generateDescription(attId, 'capture', tmpImagePath, app.db);
 
 		const current = app.db
@@ -142,7 +142,7 @@ describe('generateDescription supersedes chain', () => {
 		const captureId = insertCapture();
 		const attId = insertDarkAttachment(captureId);
 
-		globalThis.fetch = makeFetch('Confirmed text.');
+		globalThis.fetch = makeFetch('Confirmed text.') as unknown as typeof globalThis.fetch;
 		await generateDescription(attId, 'capture', tmpImagePath, app.db);
 
 		// Mark it confirmed
@@ -154,10 +154,10 @@ describe('generateDescription supersedes chain', () => {
 			.run(attId);
 
 		let fetchCalled = false;
-		globalThis.fetch = async () => {
+		globalThis.fetch = (async () => {
 			fetchCalled = true;
 			return makeFetch('Should not be called.')();
-		};
+		}) as unknown as typeof globalThis.fetch;
 		await generateDescription(attId, 'capture', tmpImagePath, app.db);
 
 		expect(fetchCalled).toBe(false);

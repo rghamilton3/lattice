@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
 COPY spine/package.json spine/bun.lock ./
+COPY spine/vendor ./vendor
 RUN bun install --frozen-lockfile --production
 
 # ── Stage 3: runtime ──────────────────────────────────────────────────────────

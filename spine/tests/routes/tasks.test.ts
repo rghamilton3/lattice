@@ -282,6 +282,13 @@ describe('DELETE /api/tasks/:id', () => {
 		expect(row).not.toBeNull();
 	});
 
+	it('hard-deletes a completed task', async () => {
+		const id = seedTask('done task', { completed_at: '2026-01-07T00:00:00Z' });
+		const res = await app.app.handle(req(`/api/tasks/${id}`, { method: 'DELETE' }));
+		expect(res.status).toBe(200);
+		expect(app.db.query('SELECT id FROM captures WHERE id = ?').get(id)).toBeNull();
+	});
+
 	it('deletes a task with attachments without FK error', async () => {
 		const id = seedTask('task with attachment');
 		app.db

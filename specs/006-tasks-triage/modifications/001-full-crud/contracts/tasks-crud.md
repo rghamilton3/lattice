@@ -44,6 +44,8 @@ PATCH /api/captures/:id/task
 **New body field**:
 - `text?: string` - if provided, must be non-empty after trim and at most 10 000 characters
 
+> **Important**: `due_date`, `priority`, and `notes` use absent-field-as-NULL semantics — an omitted field is stored as `NULL`, clearing any existing value. Callers that want to update only `text` (or only some metadata fields) must include the current values of all three metadata fields to avoid clearing them. The surface always sends all three together.
+
 **Error responses** (additions to existing):
 - `422 { error: "Task text is required" }` - `text` provided but empty after trim
 - `422 { error: "Task text must be 10,000 characters or fewer" }` - `text` too long

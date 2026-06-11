@@ -207,25 +207,25 @@ export const tasksRoutes = (db: Database, { attachmentsDir }: TasksRoutesOptions
 					return { error: 'Invalid id' };
 				}
 
-				const atts: { id: number; stored_path: string }[] = [];
-				const result = db.transaction(() => {
+				const txResult = db.transaction(() => {
 					const check = db
 						.prepare(`SELECT id FROM captures WHERE id = ? AND triage_action = 'task'`)
 						.get(id) as { id: number } | null;
 					if (!check) return null;
-					const rows = db
+					const atts = db
 						.query('SELECT id, stored_path FROM capture_attachments WHERE capture_id = ?')
 						.all(id) as { id: number; stored_path: string }[];
-					atts.push(...rows);
 					db.prepare('DELETE FROM capture_attachments WHERE capture_id = ?').run(id);
-					return db.prepare(`DELETE FROM captures WHERE id = ? RETURNING id`).get(id);
-				})() as { id: number } | null;
+					const capture = db.prepare(`DELETE FROM captures WHERE id = ? RETURNING id`).get(id);
+					return { capture, atts };
+				})() as { capture: { id: number }; atts: { id: number; stored_path: string }[] } | null;
 
-				if (!result) {
+				if (!txResult) {
 					set.status = 404;
 					return { error: 'Not found' };
 				}
 
+				const { atts } = txResult;
 				for (const att of atts) {
 					try {
 						const binPath = join(attachmentsDir, att.stored_path);

@@ -66,7 +66,13 @@ bump_version() {
             run sed -i "0,/^version = \".*\"/{s/^version = \".*\"/version = \"$new_ver\"/}" \
                 "$REPO_ROOT/agent/Cargo.toml"
             # Update Cargo.lock without building
-            run bash -c "cd '$REPO_ROOT/agent' && cargo update --workspace 2>/dev/null || true"
+            if $dry_run; then
+                echo "  [dry-run] cargo update --workspace (in agent/)"
+            elif command -v cargo >/dev/null 2>&1; then
+                (cd "$REPO_ROOT/agent" && cargo update --workspace)
+            else
+                echo "  warning: cargo not on PATH — Cargo.lock not updated (CI will catch drift)"
+            fi
             ;;
         spine)
             info "bumping spine/package.json to $new_ver"
@@ -106,11 +112,17 @@ manifest_files() {
 [[ $# -ge 1 ]] || { echo "usage: release.sh <prepare|tag> [--dry-run] <artifact>@<version> [...]"; exit 1; }
 subcmd="$1"; shift
 
-if [[ "${1:-}" == "--dry-run" ]]; then
-    dry_run=true
-    shift
-    info "dry-run mode — no files will be modified, no git/gh commands run"
-fi
+# Accept --dry-run anywhere in the remaining args
+declare -a remaining_args=()
+for arg in "$@"; do
+    if [[ "$arg" == "--dry-run" ]]; then
+        dry_run=true
+    else
+        remaining_args+=("$arg")
+    fi
+done
+set -- "${remaining_args[@]}"
+$dry_run && info "dry-run mode — no files will be modified, no git/gh commands run"
 
 declare -a artifacts=()
 declare -A versions=()
@@ -175,8 +187,8 @@ cmd_prepare() {
 
     info "staging manifest files"
     for art in "${artifacts[@]}"; do
-        # shellcheck disable=SC2046
-        run git add $(manifest_files "$art")
+        local files; mapfile -t files < <(manifest_files "$art")
+        run git add "${files[@]}"
     done
 
     info "committing"

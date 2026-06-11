@@ -7,6 +7,7 @@
 	import { workingKeys, fetchWorkingList } from '$lib/api/working';
 	import { fileKeys, fetchFileList } from '$lib/api/files';
 	import { searchKeys, fetchSearch } from '$lib/api/search';
+	import { statusKeys, fetchStatus } from '$lib/api/status';
 	import type { SearchResult } from '$lib/types';
 	import Icon from '$components/icons/Icon.svelte';
 	import Facets, { type Kind, type Sort } from '$components/search/Facets.svelte';
@@ -162,8 +163,22 @@
 		enabled: browser && debouncedQ.length > 0
 	}));
 
-	// Keyword-only mode: the inference endpoint is down, so spine served BM25 results.
-	const degraded = $derived(searchQuery.data?.degraded ?? false);
+	// Mirrors AppShell's 30s status poll (same query key, so TanStack dedupes the
+	// request) to read the inference breaker state.
+	const statusQuery = createQuery(() => ({
+		queryKey: statusKeys.all(),
+		queryFn: fetchStatus,
+		enabled: browser,
+		refetchInterval: 30_000,
+		retry: false
+	}));
+
+	// Keyword-only mode: driven by the breaker state from /api/status so the banner
+	// shows on arrival during an outage, OR by the last search response actually
+	// having been served from the BM25 fallback.
+	const degraded = $derived(
+		(searchQuery.data?.degraded ?? false) || (statusQuery.data?.search_degraded ?? false)
+	);
 
 	const defaultKinds: Kind[] = ['capture', 'local-file', 'working'];
 	const kindFilter = new SvelteSet<Kind>(defaultKinds);
@@ -261,6 +276,15 @@
 			<!-- Library default state: all items, filtered by kind -->
 			<div class="lib-scroll">
 				<div class="lib-container">
+					{#if degraded}
+						<div class="keyword-only-banner" role="status">
+							<span class="keyword-only-badge">Keyword-only</span>
+							<span class="faint"
+								>Inference endpoint is unavailable, so searches will be keyword matches only (no
+								semantic ranking) until it recovers.</span
+							>
+						</div>
+					{/if}
 					{#if libraryIsLoading}
 						<div class="lib-empty soft" role="status">Loading library items...</div>
 					{:else if libraryIsError}

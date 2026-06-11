@@ -181,7 +181,11 @@ async function openPreviewWorkingEditor(
 	await routePreviewDoc(page, content, options);
 
 	await page.goto('/?ref=working:preview-doc');
+	// The install-unsupported notice renders shortly after mount in this
+	// environment; a bare isVisible() check can race it and leave the notice
+	// intercepting toolbar clicks. Wait for it, then dismiss.
 	const dismissInstall = page.getByRole('button', { name: 'Dismiss' });
+	await dismissInstall.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {});
 	if (await dismissInstall.isVisible()) await dismissInstall.click();
 	await page.getByRole('button', { name: /Edit/i }).click();
 	await expect(page.getByLabel('Markdown editor for preview-doc.md')).toBeVisible();
@@ -216,6 +220,14 @@ test.beforeEach(async ({ page }) => {
 		}
 		return route.fulfill({ status: 200, body: '[]' });
 	});
+	// Object-shaped endpoints (resurfacing/clusters are on by default) — a bare
+	// `[]` would be the wrong shape for these.
+	await page.route('**/api/resurfaced**', (route) =>
+		route.fulfill({ status: 200, body: JSON.stringify({ items: [] }) })
+	);
+	await page.route('**/api/cluster/**', (route) =>
+		route.fulfill({ status: 200, body: JSON.stringify({ clusterId: null }) })
+	);
 });
 
 test('home view renders the canonical landing greeting', async ({ page }) => {

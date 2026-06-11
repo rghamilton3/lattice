@@ -41,7 +41,9 @@
 </script>
 
 {#if query.isSuccess}
-	{@const items = visibleItems(query.data.items)}
+	<!-- ?? [] so an unexpected response shape degrades to an empty panel
+	     instead of taking down the whole Home render. -->
+	{@const items = visibleItems(query.data.items ?? [])}
 	{#if items.length > 0}
 		<section class="card home-section">
 			<div class="home-section-head">

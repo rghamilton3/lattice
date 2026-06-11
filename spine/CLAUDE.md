@@ -93,6 +93,7 @@ Spine must fail closed on non-HTTPS requests (Caddy handles TLS, but defense in 
 - `POST /api/agent/capture` - ingest a capture `{ text, source, captured_at }`
 - `POST /api/agent/index` - upsert file index entries; idempotent on `(machine_id, path, hash)`
 - `GET /api/agent/status` - agent heartbeat / status report
+- `GET /api/agent/tasks` - returns active tasks `[{ id, text, task_priority, task_due_date }]`
 
 **Authentik auth (all other `/api/*`):**
 

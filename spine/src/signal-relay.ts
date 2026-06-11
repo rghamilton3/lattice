@@ -219,6 +219,19 @@ function handleMessage(msg: unknown): void {
 
 	sendReaction('👀', parsed.sourceNumber, parsed.sourceTimestamp);
 
+	if (parsed.action === 'list-tasks') {
+		fetchTasks()
+			.then((tasks) => {
+				sendReaction('✅', parsed.sourceNumber, parsed.sourceTimestamp);
+				sendReply(formatTaskList(tasks));
+			})
+			.catch((err: Error) => {
+				console.error('[signal-relay] failed to fetch tasks:', err.message);
+				sendReply('Could not fetch tasks — check spine connectivity.');
+			});
+		return;
+	}
+
 	const post =
 		parsed.action === 'track'
 			? postTrack({
@@ -245,6 +258,41 @@ function handleMessage(msg: unknown): void {
 			}
 		})
 		.catch((err: Error) => console.error('[signal-relay] failed to post message:', err.message));
+}
+
+export interface TaskItem {
+	id: number;
+	text: string;
+	task_priority: string | null;
+	task_due_date: string | null;
+}
+
+export async function fetchTasks(options: PostMessageOptions = {}): Promise<TaskItem[]> {
+	const fetchImpl = options.fetchImpl ?? fetch;
+	const spineBase =
+		options.spineBase ?? spineBaseFromCaptureUrl(options.spineUrl ?? config.spineUrl);
+	const res = await fetchImpl(`${spineBase}/api/agent/tasks`, {
+		headers: {
+			authorization: `Bearer ${options.agentToken ?? config.agentToken}`,
+			'x-forwarded-proto': 'https',
+		},
+	});
+	if (!res.ok) {
+		const body = await res.text().catch(() => '');
+		throw new Error(`GET /api/agent/tasks returned ${res.status}${body ? `: ${body}` : ''}`);
+	}
+	return (await res.json()) as TaskItem[];
+}
+
+export function formatTaskList(tasks: TaskItem[]): string {
+	if (tasks.length === 0) return 'No active tasks.';
+	// TODO: paginate if tasks.length > N to avoid Signal message size limits
+	const lines = tasks.map((t, i) => {
+		let line = `${i + 1}. ${t.text}`;
+		if (t.task_due_date) line += ` (due ${t.task_due_date})`;
+		return line;
+	});
+	return `Tasks (${tasks.length}):\n${lines.join('\n')}`;
 }
 
 export function firstImageAttachmentId(attachments: SignalAttachment[]): string | null {

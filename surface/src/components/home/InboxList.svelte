@@ -1,5 +1,11 @@
 <script lang="ts">
-	import type { ArchiveAction, InboxAction, InboxItem, TriageAction } from '$lib/types';
+	import type {
+		ArchiveAction,
+		InboxAction,
+		InboxActionDescriptor,
+		InboxItem,
+		TriageAction
+	} from '$lib/types';
 	import { attachmentRawUrl } from '$lib/api/attachments';
 	import { archiveRawUrl } from '$lib/api/archives';
 	import Icon from '$components/icons/Icon.svelte';
@@ -17,6 +23,15 @@
 	const { items, now, onOpenCapture, onOpenArchive, onTriage, onArchiveAction }: Props = $props();
 
 	let active = $state(0);
+	const visibleItems = $derived(items.slice(0, 5));
+
+	// Keep active index in bounds when items are removed after a triage.
+	$effect(() => {
+		if (active >= visibleItems.length && visibleItems.length > 0) {
+			active = visibleItems.length - 1;
+		}
+	});
+
 	const triageActions = new Set<InboxAction>(['keep', 'archive', 'promote', 'task', 'skip']);
 	const archiveActions = new Set<InboxAction>([
 		'keep',
@@ -55,7 +70,23 @@
 		}
 		if (isArchiveAction(action)) onArchiveAction(item.archive_id, action);
 	}
+
+	function handleKeydown(event: KeyboardEvent) {
+		const item = visibleItems[active];
+		if (!item) return;
+		const target = event.target as HTMLElement | null;
+		if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+		const match = item.actions.find((a: InboxActionDescriptor) => {
+			if (a.shortcut === 'Space') return event.key === ' ';
+			return event.key.toLowerCase() === a.shortcut.toLowerCase();
+		});
+		if (!match) return;
+		event.preventDefault();
+		onItemAction(item, match.action);
+	}
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 {#if items.length === 0}
 	<div class="inbox-empty soft">
@@ -67,7 +98,7 @@
 	</div>
 {:else}
 	<div class="inbox">
-		{#each items.slice(0, 5) as item, i (item.id)}
+		{#each visibleItems as item, i (item.id)}
 			<div
 				class="inbox-row"
 				aria-label={`Open ${item.item_type}: ${item.title}`}
@@ -111,11 +142,7 @@
 							>
 						{/if}
 					</div>
-					<ActionRow
-						actions={item.actions}
-						active={i === active}
-						onAction={(action) => onItemAction(item, action)}
-					/>
+					<ActionRow actions={item.actions} onAction={(action) => onItemAction(item, action)} />
 				</div>
 				{#if item.item_type === 'capture' && item.capture.first_image_id != null}
 					<img

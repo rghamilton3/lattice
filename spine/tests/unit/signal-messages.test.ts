@@ -298,6 +298,49 @@ describe('parseSignalMessage debug hook', () => {
 	});
 });
 
+describe('parseSignalMessage /task and /todo commands', () => {
+	it('returns list-tasks action for bare /task command', () => {
+		const msg = envelope({}, { message: '/task' });
+		const parsed = parseSignalMessage(msg, SELF);
+		expect(parsed?.action).toBe('list-tasks');
+	});
+
+	it('returns list-tasks action for /task with follow-on text', () => {
+		const msg = envelope({}, { message: '/task show my list' });
+		const parsed = parseSignalMessage(msg, SELF);
+		expect(parsed?.action).toBe('list-tasks');
+	});
+
+	it('returns list-tasks action for /todo command', () => {
+		const msg = envelope({}, { message: '/todo' });
+		const parsed = parseSignalMessage(msg, SELF);
+		expect(parsed?.action).toBe('list-tasks');
+	});
+
+	it('returns list-tasks action for /todo with follow-on text', () => {
+		const msg = envelope({}, { message: '/todo anything here' });
+		const parsed = parseSignalMessage(msg, SELF);
+		expect(parsed?.action).toBe('list-tasks');
+	});
+
+	it('is case-insensitive for /Task and /TODO', () => {
+		expect(parseSignalMessage(envelope({}, { message: '/Task' }), SELF)?.action).toBe('list-tasks');
+		expect(parseSignalMessage(envelope({}, { message: '/TODO' }), SELF)?.action).toBe('list-tasks');
+	});
+
+	it('does not treat /taskname as list-tasks (requires space or end)', () => {
+		const msg = envelope({}, { message: '/taskname foo' });
+		const parsed = parseSignalMessage(msg, SELF);
+		expect(parsed?.action).toBe('capture');
+	});
+
+	it('does not treat /todos as list-tasks', () => {
+		const msg = envelope({}, { message: '/todos' });
+		const parsed = parseSignalMessage(msg, SELF);
+		expect(parsed?.action).toBe('capture');
+	});
+});
+
 describe('isRpcError', () => {
 	it('returns true for objects with an error key', () => {
 		expect(isRpcError({ error: { code: -1, message: 'boom' } })).toBe(true);

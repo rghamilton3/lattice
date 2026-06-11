@@ -6,7 +6,7 @@ export interface SignalAttachment {
 }
 
 export interface ParsedSignalMessage {
-	action: 'capture' | 'track';
+	action: 'capture' | 'track' | 'list-tasks';
 	captureText: string;
 	trackText: string | null;
 	displaced: boolean;
@@ -100,8 +100,9 @@ export function parseSignalMessage(
 		return null;
 	}
 
-	const command = text.match(/^\/(track|checkout)\s+([\s\S]*\S)\s*$/i);
-	const action = command ? 'track' : 'capture';
+	const listCommand = /^\/(task|todo)(\s|$)/i.test(text);
+	const command = !listCommand ? text.match(/^\/(track|checkout)\s+([\s\S]*\S)\s*$/i) : null;
+	const action = listCommand ? 'list-tasks' : command ? 'track' : 'capture';
 	const trackText = command ? command[2].trim() : null;
 	const captureText = text || placeholderText(attachments);
 

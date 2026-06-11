@@ -17,7 +17,7 @@ const DEFAULT_BACK_FALLBACK: PaneContent = { kind: 'home' };
 export type Theme = 'light' | 'dark' | 'sepia' | 'system';
 export type Density = 'compact' | 'comfortable' | 'spacious';
 export type Posture = 'quiet' | 'standard' | 'active';
-export type View = 'home' | 'doc' | 'library' | 'tasks';
+export type View = 'home' | 'doc' | 'library' | 'tasks' | 'tracking';
 export type ActiveOverlay =
 	| 'none'
 	| 'capture'
@@ -93,12 +93,13 @@ export class WorkbenchStore {
 	isSplit = $derived(this.panes.length === 2);
 
 	// Nav highlight follows the focused pane's content. `doc`/`editor`/`results`
-	// fall through to `'doc'` — neither Home nor Library nor Tasks highlights.
+	// fall through to `'doc'` — neither Home nor Library nor Tasks nor Tracking highlights.
 	view = $derived.by<View>(() => {
 		const kind = this.panes[0].kind;
 		if (kind === 'home') return 'home';
 		if (kind === 'library') return 'library';
 		if (kind === 'tasks') return 'tasks';
+		if (kind === 'tracking' || kind === 'tracking-detail') return 'tracking';
 		return 'doc';
 	});
 
@@ -205,7 +206,10 @@ export class WorkbenchStore {
 		switch (a.kind) {
 			case 'home':
 			case 'tasks':
+			case 'tracking':
 				return true;
+			case 'tracking-detail':
+				return a.trackId === (b as typeof a).trackId;
 			case 'library':
 				return a.query === (b as typeof a).query;
 			case 'editor':

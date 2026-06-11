@@ -6,6 +6,7 @@
 	import ReadingPane from '$components/reading/ReadingPane.svelte';
 	import EditorPane from '$components/editor/EditorPane.svelte';
 	import TasksView from '$components/tasks/TasksView.svelte';
+	import TrackingView from '$components/tracking/TrackingView.svelte';
 	import ClusterView from '$components/cluster/ClusterView.svelte';
 
 	const { paneIndex, content }: { paneIndex: 0 | 1; content: PaneContent } = $props();
@@ -15,6 +16,10 @@
 	<HomeView {paneIndex} />
 {:else if content.kind === 'tasks'}
 	<TasksView {paneIndex} />
+{:else if content.kind === 'tracking'}
+	<TrackingView {paneIndex} />
+{:else if content.kind === 'tracking-detail'}
+	<TrackingView {paneIndex} trackId={content.trackId} />
 {:else if content.kind === 'library'}
 	<LibraryView {paneIndex} query={content.query} />
 {:else if content.kind === 'results'}

@@ -1,8 +1,15 @@
 import { afterEach, expect, test } from 'bun:test';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { createTestDb } from '../testSupport/db';
 import { agentJson, browserGet, browserJson, buildTestApp } from '../testSupport/http';
-import { scoreTrackMatch, tokenizeTrackText } from './tracks';
-import type { TrackFollowUp, TrackSearchResponse } from '../db/rows';
+import { MAX_PHOTO_UPLOAD_BYTES, scoreTrackMatch, tokenizeTrackText } from './tracks';
+import type {
+	TrackBoardResponse,
+	TrackDetailResponse,
+	TrackFollowUp,
+	TrackSearchResponse,
+} from '../db/rows';
 
 let cleanup: (() => void) | undefined;
 
@@ -35,6 +42,14 @@ function ageQuery(db: ReturnType<typeof createTestDb>['db'], queryId: number, qu
 
 function eligibleQueriedAt() {
 	return new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function browserMultipart(path: string, formData: FormData, username = 'test-user'): Request {
+	return new Request(`http://spine.test${path}`, {
+		method: 'POST',
+		headers: { 'x-authentik-username': username },
+		body: formData,
+	});
 }
 
 test('GET /api/tracks/search logs query and returns newest-first matching records', async () => {
@@ -163,6 +178,213 @@ test('POST /api/tracks/queries/:id/open records opened result and handles errors
 	).toBe(404);
 });
 
+test('GET /api/tracks/:id returns stable detail history, related location, and 404s', async () => {
+	const { app } = setup();
+	const oldDrill = await createTrack(app, 'drill in garage shelf', '2026-01-01T00:00:00.000Z');
+	const currentDrill = await createTrack(
+		app,
+		'drill in workbench drawer',
+		'2026-01-02T00:00:00.000Z',
+	);
+	await createTrack(app, 'hammer in workbench drawer', '2026-01-03T00:00:00.000Z');
+
+	const response = await app.handle(browserGet(`/api/tracks/${currentDrill.id}`));
+	expect(response.status).toBe(200);
+	const body = (await response.json()) as TrackDetailResponse;
+	expect(body.record).toMatchObject({ id: currentDrill.id, text: 'drill in workbench drawer' });
+	expect(body.same_item_history.map((row) => row.id)).toEqual([oldDrill.id]);
+	expect(body.related_location_tracks.map((row) => row.text)).toContain(
+		'hammer in workbench drawer',
+	);
+
+	expect((await app.handle(browserGet('/api/tracks/999'))).status).toBe(404);
+	expect((await app.handle(browserGet('/api/tracks/not-a-number'))).status).toBe(404);
+});
+
+test('POST /api/tracks validates browser-created surface records and makes them searchable', async () => {
+	const { app } = setup();
+	const recentDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+	await createTrack(app, 'drill in older shelf', recentDate);
+
+	const blank = await app.handle(
+		browserJson('/api/tracks/', {
+			text: ' ',
+			captured_at: '2026-01-02T00:00:00.000Z',
+			source: 'surface-form',
+			displaced: false,
+		}),
+	);
+	expect(blank.status).toBe(400);
+	expect(
+		(
+			await app.handle(
+				browserJson('/api/tracks/', {
+					text: 'drill in new shelf',
+					captured_at: '2026-01-02T00:00:00.000Z',
+					source: 'manual-followup',
+					displaced: false,
+				}),
+			)
+		).status,
+	).toBe(400);
+	expect(
+		(
+			await app.handle(
+				browserJson('/api/tracks/', {
+					text: 'drill in new shelf',
+					captured_at: '2026-01-02T00:00:00.000Z',
+					source: 'surface-form',
+					displaced: false,
+					supersedes: 999,
+				}),
+			)
+		).status,
+	).toBe(400);
+
+	const created = await app.handle(
+		browserJson('/api/tracks/', {
+			text: 'drill in new shelf',
+			captured_at: '2026-01-02T00:00:00.000Z',
+			source: 'surface-form',
+			displaced: false,
+		}),
+	);
+	expect(created.status).toBe(201);
+	const body = (await created.json()) as { id: number; possible_duplicates: unknown[] };
+	expect(body.id).toBeGreaterThan(0);
+	expect(body.possible_duplicates.length).toBeGreaterThan(0);
+
+	const search = (await (
+		await app.handle(browserGet('/api/tracks/search?q=new%20shelf'))
+	).json()) as TrackSearchResponse;
+	expect(search.primary?.id).toBe(body.id);
+});
+
+test('photo upload serves raw images and rejects unsupported or unsafe files', async () => {
+	const { app, db, dir } = setup();
+	const form = new FormData();
+	form.append(
+		'file',
+		new File([new Uint8Array([1, 2, 3])], 'item photo.png', { type: 'image/png' }),
+	);
+
+	const uploaded = await app.handle(browserMultipart('/api/tracks/photos', form));
+	expect(uploaded.status).toBe(201);
+	const uploadBody = (await uploaded.json()) as { ref: string; filename: string; url: string };
+	expect(uploadBody.filename).toBe('item_photo.png');
+	expect(uploadBody.url).toBe(`/api/tracks/photos/${uploadBody.ref}/raw`);
+
+	const raw = await app.handle(browserGet(uploadBody.url));
+	expect(raw.status).toBe(200);
+	expect(raw.headers.get('content-type')).toBe('image/png');
+	expect(raw.headers.get('x-content-type-options')).toBe('nosniff');
+	expect(new Uint8Array(await raw.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+
+	const unsupported = new FormData();
+	unsupported.append('file', new File(['nope'], 'note.txt', { type: 'text/plain' }));
+	expect((await app.handle(browserMultipart('/api/tracks/photos', unsupported))).status).toBe(415);
+	expect(
+		(
+			await app.handle(
+				new Request('http://spine.test/api/tracks/photos', {
+					method: 'POST',
+					headers: {
+						'x-authentik-username': 'test-user',
+						'content-length': String(MAX_PHOTO_UPLOAD_BYTES + 2 * 1024 * 1024),
+					},
+					body: 'too large',
+				}),
+			)
+		).status,
+	).toBe(413);
+
+	const tooLarge = new FormData();
+	tooLarge.append(
+		'file',
+		new File([new Uint8Array(MAX_PHOTO_UPLOAD_BYTES + 1)], 'huge.png', { type: 'image/png' }),
+	);
+	expect((await app.handle(browserMultipart('/api/tracks/photos', tooLarge))).status).toBe(413);
+
+	db.prepare('DELETE FROM track_photos WHERE ref = ?').run(uploadBody.ref);
+	db.prepare(
+		`INSERT INTO track_photos (ref, filename, content_type, size_bytes, stored_path, created_at)
+		 VALUES ('missing-ref', 'missing.png', 'image/png', 10, 'tracks/missing-ref', '2026-01-01T00:00:00.000Z')`,
+	).run();
+	expect((await app.handle(browserGet('/api/tracks/photos/missing-ref/raw'))).status).toBe(404);
+
+	writeFileSync(join(dir, 'escape.png'), 'escape');
+	db.prepare(
+		`INSERT INTO track_photos (ref, filename, content_type, size_bytes, stored_path, created_at)
+		 VALUES ('escape-ref', 'escape.png', 'image/png', 6, '../escape.png', '2026-01-01T00:00:00.000Z')`,
+	).run();
+	expect((await app.handle(browserGet('/api/tracks/photos/escape-ref/raw'))).status).toBe(403);
+});
+
+test('board endpoints derive bins, cards, moves, checkouts, and displaced filtering', async () => {
+	const { app } = setup();
+	const oldDrill = await createTrack(app, 'drill in garage shelf', '2026-01-01T00:00:00.000Z');
+	await createTrack(app, 'drill in workbench shelf', '2026-01-02T00:00:00.000Z');
+	await createTrack(app, 'drill bit in workbench shelf', '2026-01-03T00:00:00.000Z');
+	const ladder = await createTrack(app, 'ladder in shed', '2026-01-04T00:00:00.000Z');
+
+	const binResponse = await app.handle(
+		browserJson('/api/tracks/bins', { name: 'Workbench Shelf' }),
+	);
+	expect(binResponse.status).toBe(201);
+	const binBody = (await binResponse.json()) as { bin: { id: number; name: string } };
+	expect(
+		(await app.handle(browserJson('/api/tracks/bins', { name: ' workbench   shelf ' }))).status,
+	).toBe(409);
+
+	let board = (await (
+		await app.handle(browserGet('/api/tracks/board'))
+	).json()) as TrackBoardResponse;
+	expect(board.bins.map((bin) => bin.name)).toEqual(['Workbench Shelf']);
+	expect(board.cards.map((card) => card.item_phrase).sort()).toEqual(['drill', 'drill bit']);
+	expect(board.cards.find((card) => card.item_phrase === 'drill')?.current_track.id).not.toBe(
+		oldDrill.id,
+	);
+	expect(board.unbinned.map((card) => card.item_phrase)).toEqual(['ladder']);
+
+	const move = await app.handle(
+		browserJson('/api/tracks/board/move', {
+			item_phrase: 'ladder',
+			from_track_id: ladder.id,
+			to_bin_id: binBody.bin.id,
+			captured_at: '2026-01-05T00:00:00.000Z',
+			source: 'surface-drag',
+		}),
+	);
+	expect(move.status).toBe(201);
+	expect(await move.json()).toMatchObject({ text: 'ladder in Workbench Shelf', displaced: false });
+
+	board = (await (await app.handle(browserGet('/api/tracks/board'))).json()) as TrackBoardResponse;
+	const movedLadder = board.cards.find((card) => card.item_phrase === 'ladder');
+	expect(movedLadder?.bin_name).toBe('Workbench Shelf');
+
+	const checkout = await app.handle(
+		browserJson('/api/tracks/board/checkout', {
+			item_phrase: 'ladder',
+			from_track_id: movedLadder?.current_track.id,
+			context: 'with neighbor',
+			captured_at: '2026-01-06T00:00:00.000Z',
+		}),
+	);
+	expect(checkout.status).toBe(201);
+	expect(await checkout.json()).toMatchObject({
+		text: 'ladder checked out: with neighbor',
+		displaced: true,
+	});
+
+	const displacedOnly = (await (
+		await app.handle(browserGet('/api/tracks/board?displaced=only'))
+	).json()) as TrackBoardResponse;
+	expect(displacedOnly.displaced_count).toBe(1);
+	expect(
+		[...displacedOnly.cards, ...displacedOnly.unbinned].map((card) => card.item_phrase),
+	).toEqual(['ladder']);
+});
+
 test('GET /api/tracks/followups returns eligible opened queries with displaced-aware labels', async () => {
 	const { app, db } = setup();
 	const normal = await createTrack(app, 'drill on shelf', '2026-01-02T00:00:00.000Z');
@@ -288,7 +510,7 @@ test('follow-up endpoints close still-accurate, moved, and skipped outcomes', as
 		browserJson(`/api/tracks/followups/${moved.query_id}/moved`, {
 			text: 'wrench moved to tool bag',
 			captured_at: '2026-01-03T00:00:00.000Z',
-			source: 'manual-followup',
+			source: 'surface-followup',
 			displaced: false,
 		}),
 	);
@@ -309,4 +531,45 @@ test('follow-up endpoints close still-accurate, moved, and skipped outcomes', as
 		.query('SELECT supersedes FROM tracks WHERE text = ?')
 		.get('wrench moved to tool bag') as { supersedes: number };
 	expect(superseding.supersedes).toBe(movedTrack.id);
+});
+
+test('/followups/:query_id/moved rejects invalid source and unknown photo_ref', async () => {
+	const { app, db } = setup();
+	const track = await createTrack(app, 'hammer on workbench', '2026-01-02T00:00:00.000Z');
+	const search = (await (
+		await app.handle(browserGet('/api/tracks/search?q=hammer'))
+	).json()) as TrackSearchResponse;
+	await app.handle(
+		browserJson(`/api/tracks/queries/${search.query_id}/open`, { track_id: track.id }),
+	);
+	ageQuery(db, search.query_id, eligibleQueriedAt());
+
+	const base = {
+		text: 'hammer moved to tool bag',
+		captured_at: '2026-01-03T00:00:00.000Z',
+		displaced: false,
+	};
+
+	expect(
+		(
+			await app.handle(
+				browserJson(`/api/tracks/followups/${search.query_id}/moved`, {
+					...base,
+					source: 'manual-followup',
+				}),
+			)
+		).status,
+	).toBe(400);
+
+	expect(
+		(
+			await app.handle(
+				browserJson(`/api/tracks/followups/${search.query_id}/moved`, {
+					...base,
+					source: 'surface-followup',
+					photo_ref: 'nonexistent-ref.jpg',
+				}),
+			)
+		).status,
+	).toBe(400);
 });

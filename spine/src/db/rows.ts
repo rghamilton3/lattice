@@ -101,6 +101,24 @@ export interface TrackQueryRow {
 	loop_outcome: 'still_accurate' | 'moved' | 'skipped' | 'expired' | null;
 }
 
+export interface TrackBinRow {
+	id: number;
+	name: string;
+	normalized_name: string;
+	created_at: string;
+	updated_at: string;
+	archived_at: string | null;
+}
+
+export interface TrackPhoto {
+	ref: string;
+	filename: string;
+	content_type: string;
+	size_bytes: number;
+	stored_path: string;
+	created_at: string;
+}
+
 export interface TrackCreateRequest {
 	text: string;
 	captured_at: string;
@@ -150,4 +168,47 @@ export interface TrackFollowUp {
 	expires_at: string;
 	opened_track: TrackSearchResult;
 	affirmative_label: string;
+}
+
+export interface TrackDetailResponse {
+	record: TrackSearchResult;
+	same_item_history: TrackSearchResult[];
+	related_location_tracks: TrackSearchResult[];
+}
+
+export interface TrackBoardCard {
+	item_key: string;
+	item_phrase: string;
+	current_track: TrackSearchResult;
+	bin_id: number | null;
+	bin_name: string | null;
+	location_label: string | null;
+	displaced: boolean;
+	possible_duplicates: TrackDuplicateHint[];
+}
+
+export interface TrackBoardResponse {
+	bins: TrackBinRow[];
+	cards: TrackBoardCard[];
+	unbinned: TrackBoardCard[];
+	displaced_count: number;
+}
+
+export interface TrackBinCreateResponse {
+	bin: TrackBinRow;
+}
+
+export interface TrackBoardActionResponse {
+	track_id: number;
+	text: string;
+	displaced: boolean;
+	supersedes: number | null;
+}
+
+export interface TrackPhotoCreateResponse {
+	ref: string;
+	filename: string;
+	content_type: string;
+	size_bytes: number;
+	url: string;
 }

@@ -276,6 +276,12 @@
 					active={wb.view === 'tasks'}
 					onclick={() => onnav('tasks')}
 				/>
+				<NavBtn
+					label="Tracking"
+					icon="focus"
+					active={wb.view === 'tracking'}
+					onclick={() => onnav('tracking')}
+				/>
 			</nav>
 		</div>
 

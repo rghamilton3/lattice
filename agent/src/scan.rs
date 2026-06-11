@@ -1,4 +1,4 @@
-use crate::cache::Cache;
+use crate::cache::{Cache, FileState, OUTCOME_SKIPPED};
 use crate::config::{Config, WatchEntry};
 use crate::extract;
 use crate::status::{ScanState, SharedStatus};
@@ -233,11 +233,14 @@ async fn process_file(
 
     let path_str = path.to_string_lossy();
 
-    // Fast path: if mtime and size match the cache, skip hashing entirely.
+    // Fast path: if mtime and size match the cache, skip hashing entirely —
+    // unless the row is a stale skip from an older extractor generation, in
+    // which case the agent may have learned to extract it since.
     if !force
         && let Some(cached) = cache.get(&path_str)
         && cached.mtime_secs == mtime_secs
         && cached.size_bytes == size_bytes as i64
+        && !should_retry_skip(&cached)
     {
         return Ok(ProcessResult::Skipped);
     }
@@ -249,8 +252,25 @@ async fn process_file(
     if !force
         && let Some(cached) = cache.get(&path_str)
         && cached.hash == hash
+        && !should_retry_skip(&cached)
     {
-        cache.upsert(&path_str, mtime_secs, size_bytes as i64, &hash);
+        if cached.outcome == OUTCOME_SKIPPED {
+            cache.upsert_skipped(
+                &path_str,
+                mtime_secs,
+                size_bytes as i64,
+                &hash,
+                cached.extractor_gen,
+            );
+        } else {
+            cache.upsert(
+                &path_str,
+                mtime_secs,
+                size_bytes as i64,
+                &hash,
+                cached.extractor_gen,
+            );
+        }
         return Ok(ProcessResult::Skipped);
     }
 
@@ -258,12 +278,30 @@ async fn process_file(
         .first_or_octet_stream()
         .to_string();
 
-    let text = match extract::extract_text(path, &mime)? {
-        Some(t) => t,
-        None => {
-            debug!(path = %path.display(), mime = %mime, "unsupported mime type, skipping");
-            return Ok(ProcessResult::Skipped);
-        }
+    // A file that matched a configured watch pattern must never be dropped
+    // silently: with no dedicated extractor, fall back to indexing it as
+    // plain text when its bytes are valid UTF-8 (e.g. .org files guessed as
+    // Lotus Organizer). Only binary content is skipped — visibly, once.
+    let (text, mime) = match extract::extract_text(path, &mime)? {
+        Some(t) => (t, mime),
+        None => match fallback_text(content) {
+            Some(t) => (t, "text/plain".to_string()),
+            None => {
+                warn!(
+                    path = %path.display(),
+                    mime = %mime,
+                    "matches watch pattern but has no extractor and is not UTF-8 text — skipping"
+                );
+                cache.upsert_skipped(
+                    &path_str,
+                    mtime_secs,
+                    size_bytes as i64,
+                    &hash,
+                    extract::EXTRACTOR_GENERATION,
+                );
+                return Ok(ProcessResult::Skipped);
+            }
+        },
     };
 
     let modified_at = chrono_iso(mtime_secs);
@@ -303,11 +341,29 @@ async fn process_file(
             Ok(ProcessResult::SpineFail(format!("spine {http_status}")))
         }
         Ok(_) => {
-            cache.upsert(&path_str, mtime_secs, size_bytes as i64, &hash);
+            cache.upsert(
+                &path_str,
+                mtime_secs,
+                size_bytes as i64,
+                &hash,
+                extract::EXTRACTOR_GENERATION,
+            );
             debug!(path = %path.display(), "indexed");
             Ok(ProcessResult::Indexed)
         }
     }
+}
+
+/// A cached skip from an older extractor generation must be reprocessed:
+/// the supported extraction set has grown since the file was skipped.
+fn should_retry_skip(cached: &FileState) -> bool {
+    cached.outcome == OUTCOME_SKIPPED && cached.extractor_gen < extract::EXTRACTOR_GENERATION
+}
+
+/// Reconciliation fallback for pattern-matched files with no extractor:
+/// index the content as plain text when it is valid UTF-8, else `None`.
+fn fallback_text(content: Vec<u8>) -> Option<String> {
+    String::from_utf8(content).ok().map(extract::truncate_text)
 }
 
 fn is_hidden(entry: &walkdir::DirEntry) -> bool {
@@ -320,6 +376,59 @@ fn is_hidden(entry: &walkdir::DirEntry) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::cache::OUTCOME_INDEXED;
+
+    fn state(outcome: &str, extractor_gen: i64) -> FileState {
+        FileState {
+            mtime_secs: 1,
+            size_bytes: 2,
+            hash: "h".to_string(),
+            outcome: outcome.to_string(),
+            extractor_gen,
+        }
+    }
+
+    #[test]
+    fn indexed_rows_never_retry() {
+        assert!(!should_retry_skip(&state(OUTCOME_INDEXED, 0)));
+        assert!(!should_retry_skip(&state(
+            OUTCOME_INDEXED,
+            extract::EXTRACTOR_GENERATION
+        )));
+    }
+
+    #[test]
+    fn skipped_rows_from_older_generation_retry() {
+        assert!(should_retry_skip(&state(
+            OUTCOME_SKIPPED,
+            extract::EXTRACTOR_GENERATION - 1
+        )));
+    }
+
+    #[test]
+    fn skipped_rows_from_current_generation_do_not_retry() {
+        assert!(!should_retry_skip(&state(
+            OUTCOME_SKIPPED,
+            extract::EXTRACTOR_GENERATION
+        )));
+    }
+
+    #[test]
+    fn fallback_indexes_valid_utf8_as_text() {
+        let content = "* Org heading\nSome notes.".as_bytes().to_vec();
+        assert_eq!(
+            fallback_text(content).as_deref(),
+            Some("* Org heading\nSome notes.")
+        );
+    }
+
+    #[test]
+    fn fallback_rejects_binary_content() {
+        let content = vec![0x50, 0x4b, 0x03, 0x04, 0xff, 0xfe, 0x80];
+        assert!(fallback_text(content).is_none());
+    }
+
     #[test]
     fn glob_matches_root_depth() {
         let pat = glob::Pattern::new("**/*.md").unwrap();

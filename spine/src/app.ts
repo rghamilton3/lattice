@@ -1,6 +1,7 @@
 import { Elysia } from 'elysia';
 import { staticPlugin } from '@elysiajs/static';
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Database } from 'bun:sqlite';
 import { authentikBeforeHandle, agentBeforeHandle } from './guards';
 import { capturesRoutes } from './routes/captures';
@@ -37,10 +38,19 @@ export function buildApp(deps: AppDeps) {
 			? staticPlugin({ assets: surfaceBuild, prefix: '', indexHTML: true, alwaysStatic: false })
 			: new Elysia();
 
+	// SPA-shell fallback for the surface's client-side cluster route (018 F9:
+	// /cluster/:id is bookmarkable). Targeted rather than a catch-all so unknown
+	// paths still 404.
+	const spaFallback =
+		surfaceBuild && existsSync(join(surfaceBuild, 'index.html'))
+			? new Elysia().get('/cluster/:id', () => Bun.file(join(surfaceBuild, 'index.html')))
+			: new Elysia();
+
 	return new Elysia()
 		.get('/ping', () => ({ ok: true }))
 		.get('/favicon.ico', ({ redirect }) => redirect('/favicon.svg', 302))
 		.use(surface)
+		.use(spaFallback)
 		.guard({ beforeHandle: authentikBeforeHandle({ allowHttp, devUser }) }, (app) =>
 			app
 				.use(capturesRoutes(db))

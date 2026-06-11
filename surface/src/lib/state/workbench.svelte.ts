@@ -67,7 +67,9 @@ export class WorkbenchStore {
 	theme = $state<Theme>('light');
 	density = $state<Density>('comfortable');
 	font = $state('Inter');
-	posture = $state<Posture>('quiet');
+	// 'standard' so the resurfaced rail is visible on arrival (010-mod-003);
+	// 'quiet' remains the opt-out and persisted preferences override.
+	posture = $state<Posture>('standard');
 	focusMode = $state(false);
 
 	// One overlay (or fullscreen mode) owns the screen at a time. Mutually
@@ -78,12 +80,11 @@ export class WorkbenchStore {
 	// Text carried from QuickCapture when switching to the file upload overlay.
 	fileUploadInitialNote = $state('');
 
-	// TODO(spine): Resurfaced / clusters / triage need backing endpoints.
-	// Resurfaced renders hardcoded mock data when on — default off until
-	// /api/resurfaced ships. Env-overridable via PUBLIC_LATTICE_FEATURE_*.
+	// Resurfacing + clusters are backed by /api/resurfaced and /api/cluster (018)
+	// and default on; env-overridable via PUBLIC_LATTICE_FEATURE_* as a kill switch.
 	featureFlags = $state<FeatureFlags>({
-		resurfacing: flagFromEnv('PUBLIC_LATTICE_FEATURE_RESURFACING', false),
-		clusters: flagFromEnv('PUBLIC_LATTICE_FEATURE_CLUSTERS', false),
+		resurfacing: flagFromEnv('PUBLIC_LATTICE_FEATURE_RESURFACING', true),
+		clusters: flagFromEnv('PUBLIC_LATTICE_FEATURE_CLUSTERS', true),
 		relatedRail: flagFromEnv('PUBLIC_LATTICE_FEATURE_RELATED_RAIL', true),
 		triage: flagFromEnv('PUBLIC_LATTICE_FEATURE_TRIAGE', true)
 	});

@@ -1,10 +1,21 @@
 import { apiFetch, apiUpload } from './client';
-import type { CaptureAttachment, WorkingAttachment } from '$lib/types';
+import type { AttachmentDescription, CaptureAttachment, WorkingAttachment } from '$lib/types';
 
 export const attachmentKeys = {
 	captureList: (captureId: number) => ['attachments', 'capture', captureId] as const,
-	workingList: (slug: string) => ['attachments', 'working', slug] as const
+	workingList: (slug: string) => ['attachments', 'working', slug] as const,
+	captureDescription: (captureId: number, attachmentId: number) =>
+		['attachments', 'capture', captureId, 'description', attachmentId] as const,
+	workingDescription: (slug: string, attachmentId: number) =>
+		['attachments', 'working', slug, 'description', attachmentId] as const
 };
+
+// At least one field must be present (server 400s on `{}` or empty final_text);
+// un-confirming an already-confirmed description is rejected with 409.
+export interface DescriptionPatch {
+	final_text?: string;
+	confirmed?: boolean;
+}
 
 export function fetchAttachments(captureId: number): Promise<CaptureAttachment[]> {
 	return apiFetch(`/api/captures/${captureId}/attachments`);
@@ -26,6 +37,24 @@ export function attachmentRawUrl(captureId: number, attachmentId: number): strin
 	return `/api/captures/${captureId}/attachments/${attachmentId}/raw`;
 }
 
+export function fetchAttachmentDescription(
+	captureId: number,
+	attachmentId: number
+): Promise<AttachmentDescription> {
+	return apiFetch(`/api/captures/${captureId}/attachments/${attachmentId}/description`);
+}
+
+export function updateAttachmentDescription(
+	captureId: number,
+	attachmentId: number,
+	patch: DescriptionPatch
+): Promise<AttachmentDescription> {
+	return apiFetch(`/api/captures/${captureId}/attachments/${attachmentId}/description`, {
+		method: 'PATCH',
+		body: JSON.stringify(patch)
+	});
+}
+
 export function fetchWorkingAttachments(slug: string): Promise<WorkingAttachment[]> {
 	return apiFetch(`/api/working/${slug}/attachments`);
 }
@@ -44,4 +73,22 @@ export function deleteWorkingAttachment(slug: string, attachmentId: number): Pro
 
 export function workingAttachmentRawUrl(slug: string, attachmentId: number): string {
 	return `/api/working/${slug}/attachments/${attachmentId}/raw`;
+}
+
+export function fetchWorkingAttachmentDescription(
+	slug: string,
+	attachmentId: number
+): Promise<AttachmentDescription> {
+	return apiFetch(`/api/working/${slug}/attachments/${attachmentId}/description`);
+}
+
+export function updateWorkingAttachmentDescription(
+	slug: string,
+	attachmentId: number,
+	patch: DescriptionPatch
+): Promise<AttachmentDescription> {
+	return apiFetch(`/api/working/${slug}/attachments/${attachmentId}/description`, {
+		method: 'PATCH',
+		body: JSON.stringify(patch)
+	});
 }

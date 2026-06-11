@@ -103,6 +103,12 @@
 	background: color-mix(in srgb, var(--color-accent) 24%, var(--bg-high));
 	color: var(--color-accent);
 }
+.chip-keyword-only {
+	background: color-mix(in oklch, var(--c-alarm) 10%, transparent);
+	color: var(--c-alarm);
+	border: 1px solid color-mix(in oklch, var(--c-alarm) 40%, transparent);
+	font-weight: 600;
+}
 
 .card {
 	background: var(--bg-raised);

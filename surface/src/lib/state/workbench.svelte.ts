@@ -1,8 +1,6 @@
 import { getContext, setContext } from 'svelte';
-import type { DocRef, LateralSource, PaneContent, SearchResult } from '$lib/types';
+import type { DocRef, LateralSource, PaneContent } from '$lib/types';
 import { triageCapture, type TriageAction } from '$lib/api/captures';
-import { fetchSearch } from '$lib/api/search';
-import { ApiError } from '$lib/api/client';
 import { logError } from '$lib/utils/logError';
 import { env } from '$env/dynamic/public';
 
@@ -52,11 +50,6 @@ export interface Toast {
 	onclick?: () => void;
 }
 
-export type DeepSearchState =
-	| { q: string; status: 'running' }
-	| { q: string; status: 'done'; results: SearchResult[] }
-	| { q: string; status: 'error'; error: string };
-
 interface PersistedSession {
 	theme?: Theme;
 	density?: Density;
@@ -74,7 +67,9 @@ export class WorkbenchStore {
 	theme = $state<Theme>('light');
 	density = $state<Density>('comfortable');
 	font = $state('Inter');
-	posture = $state<Posture>('quiet');
+	// 'standard' so the resurfaced rail is visible on arrival (010-mod-003);
+	// 'quiet' remains the opt-out and persisted preferences override.
+	posture = $state<Posture>('standard');
 	focusMode = $state(false);
 
 	// One overlay (or fullscreen mode) owns the screen at a time. Mutually
@@ -85,17 +80,15 @@ export class WorkbenchStore {
 	// Text carried from QuickCapture when switching to the file upload overlay.
 	fileUploadInitialNote = $state('');
 
-	// TODO(spine): Resurfaced / clusters / triage need backing endpoints.
-	// Resurfaced renders hardcoded mock data when on — default off until
-	// /api/resurfaced ships. Env-overridable via PUBLIC_LATTICE_FEATURE_*.
+	// Resurfacing + clusters are backed by /api/resurfaced and /api/cluster (018)
+	// and default on; env-overridable via PUBLIC_LATTICE_FEATURE_* as a kill switch.
 	featureFlags = $state<FeatureFlags>({
-		resurfacing: flagFromEnv('PUBLIC_LATTICE_FEATURE_RESURFACING', false),
-		clusters: flagFromEnv('PUBLIC_LATTICE_FEATURE_CLUSTERS', false),
+		resurfacing: flagFromEnv('PUBLIC_LATTICE_FEATURE_RESURFACING', true),
+		clusters: flagFromEnv('PUBLIC_LATTICE_FEATURE_CLUSTERS', true),
 		relatedRail: flagFromEnv('PUBLIC_LATTICE_FEATURE_RELATED_RAIL', true),
 		triage: flagFromEnv('PUBLIC_LATTICE_FEATURE_TRIAGE', true)
 	});
 	toast = $state<Toast | null>(null);
-	deepSearch = $state<DeepSearchState | null>(null);
 
 	isSplit = $derived(this.panes.length === 2);
 
@@ -225,6 +218,8 @@ export class WorkbenchStore {
 				return this.isSameRef(a.ref, (b as typeof a).ref);
 			case 'results':
 				return this.isSameSource(a.source, (b as typeof a).source);
+			case 'cluster':
+				return a.clusterId === (b as typeof a).clusterId;
 			default: {
 				const _exhaustive: never = a;
 				return _exhaustive;
@@ -335,26 +330,6 @@ export class WorkbenchStore {
 			},
 			opts.onclick ? 5000 : 2600
 		);
-	}
-
-	async runDeepSearch(q: string) {
-		if (this.deepSearch?.status === 'running') return;
-		this.deepSearch = { q, status: 'running' };
-		try {
-			const data = await fetchSearch(q, true);
-			this.deepSearch = { q, status: 'done', results: data.results };
-			const count = data.results.length;
-			const label = count === 1 ? '1 result' : `${count} results`;
-			this.showToast(`Deep search: ${label} for "${q}"`, {
-				onclick: () => this.openInPane(0, { kind: 'library', query: q })
-			});
-		} catch (e) {
-			const httpStatus = e instanceof ApiError ? e.status : 0;
-			const detail = httpStatus >= 500 ? 'search index may be unavailable' : 'please try again';
-			this.deepSearch = { q, status: 'error', error: String(e) };
-			logError('deepSearch', e);
-			this.showToast(`Deep search failed for "${q}" — ${detail}`);
-		}
 	}
 
 	dismissToast() {

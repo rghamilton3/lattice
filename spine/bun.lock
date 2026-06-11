@@ -6,7 +6,7 @@
       "name": "spine",
       "dependencies": {
         "@elysiajs/static": "^1.4.10",
-        "@tobilu/qmd": "^2.5.1",
+        "@tobilu/qmd": "file:./vendor/tobilu-qmd-2.5.3.tgz",
         "elysia": "^1.4.28",
         "smol-toml": "^1.6.1",
       },
@@ -130,7 +130,7 @@
 
     "@tinyhttp/content-disposition": ["@tinyhttp/content-disposition@2.2.4", "", {}, "sha512-5Kc5CM2Ysn3vTTArBs2vESUt0AQiWZA86yc1TI3B+lxXmtEq133C1nxXNOgnzhrivdPZIh3zLj5gDnZjoLL5GA=="],
 
-    "@tobilu/qmd": ["@tobilu/qmd@2.5.1", "", { "dependencies": { "@modelcontextprotocol/sdk": "1.29.0", "better-sqlite3": "12.10.0", "fast-glob": "3.3.3", "node-llama-cpp": "3.18.1", "picomatch": "4.0.4", "sqlite-vec": "0.1.9", "tree-sitter-go": "0.25.0", "tree-sitter-python": "0.25.0", "tree-sitter-rust": "0.24.0", "tree-sitter-typescript": "0.23.2", "web-tree-sitter": "0.26.8", "yaml": "2.9.0", "zod": "4.2.1" }, "optionalDependencies": { "sqlite-vec-darwin-arm64": "0.1.9", "sqlite-vec-darwin-x64": "0.1.9", "sqlite-vec-linux-arm64": "0.1.9", "sqlite-vec-linux-x64": "0.1.9", "sqlite-vec-windows-x64": "0.1.9" }, "peerDependencies": { "typescript": "^5.9.3" }, "bin": { "qmd": "bin/qmd" } }, "sha512-Ep9ccOj1bNRinfTIszp5UZP8xfi5AJNtmzwWDD4ZVm2YdWVS+rFobWJQovj0HD2uIAFrryvbSpZYeGa3flEO7g=="],
+    "@tobilu/qmd": ["@tobilu/qmd@./vendor/tobilu-qmd-2.5.3.tgz", { "dependencies": { "@modelcontextprotocol/sdk": "1.29.0", "better-sqlite3": "12.10.0", "fast-glob": "3.3.3", "node-llama-cpp": "3.18.1", "picomatch": "4.0.4", "sqlite-vec": "0.1.9", "tree-sitter-go": "0.25.0", "tree-sitter-python": "0.25.0", "tree-sitter-rust": "0.24.0", "tree-sitter-typescript": "0.23.2", "web-tree-sitter": "0.26.8", "yaml": "2.9.0", "zod": "4.2.1" }, "optionalDependencies": { "sqlite-vec-darwin-arm64": "0.1.9", "sqlite-vec-darwin-x64": "0.1.9", "sqlite-vec-linux-arm64": "0.1.9", "sqlite-vec-linux-x64": "0.1.9", "sqlite-vec-windows-x64": "0.1.9" }, "peerDependencies": { "typescript": "^5.9.3" }, "bin": { "qmd": "bin/qmd" } }, "sha512-KM3qscqYZM5f2gvqUrw9xRoecfEtC/cYgQ7kApFrNJuRmqnRbpWHV2z4ReuY0UbvMmsdRi9fWZ7YJHtH1tU1/Q=="],
 
     "@tokenizer/inflate": ["@tokenizer/inflate@0.4.1", "", { "dependencies": { "debug": "^4.4.3", "token-types": "^6.1.1" } }, "sha512-2mAv+8pkG6GIZiF1kNg1jAjh27IDxEPKwdGul3snfztFerfPGI1LjDezZp3i7BElXompqEtPmoPx6c2wgtWsOA=="],
 

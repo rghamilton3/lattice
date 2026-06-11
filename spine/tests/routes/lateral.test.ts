@@ -156,6 +156,98 @@ describe('GET /api/similar', () => {
 		expect(results.map((r: any) => r.snippet)).toEqual(['other-file']);
 	});
 
+	// Helper: pull the lex/vec query strings searchRelated actually sent to the store.
+	// lastSearchArgs is recorded BEFORE the mock's structuredSearch validation throws, so
+	// asserting the SENT queries are clean distinguishes working normalization from none
+	// (without it, the bad query would throw, fall back to BM25, and still return 200).
+	function sentQueries() {
+		const args = app.qmd.getLastSearchArgs() as {
+			queries?: Array<{ type: string; query: string }>;
+		};
+		expect(args.queries, 'searchRelated should send structured lex/vec queries').toBeDefined();
+		const lex = args.queries!.find((q) => q.type === 'lex')!.query;
+		const vec = args.queries!.find((q) => q.type === 'vec')!.query;
+		return { lex, vec };
+	}
+
+	it('normalizes newlines out of the queries it sends (no structuredSearch 500)', async () => {
+		// Multi-line content fails QMD structuredSearch newline validation without the fix.
+		await app.app.handle(
+			req('/api/working', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ title: 'Multiline', content: '# Multiline\n\nsome content\n' }),
+			}),
+		);
+		app.qmd.setHits([]);
+		const res = await app.app.handle(req('/api/similar?id=multiline&kind=working'));
+		expect(res.status).toBe(200);
+		const { lex, vec } = sentQueries();
+		expect(lex).not.toMatch(/[\r\n]/);
+		expect(vec).not.toMatch(/[\r\n]/);
+	});
+
+	it('strips negation-style dashes from the vec query (no structuredSearch 500)', async () => {
+		// Single-line content with ` -word` trips validateSemanticQuery in QMD without the fix.
+		await app.app.handle(
+			req('/api/working', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					title: 'Negation',
+					content: '-deprecated release notes for v2 -removed',
+				}),
+			}),
+		);
+		app.qmd.setHits([]);
+		const res = await app.app.handle(req('/api/similar?id=negation&kind=working'));
+		expect(res.status).toBe(200);
+		const { vec } = sentQueries();
+		// No negation at string start or after whitespace (the start case and the mid case).
+		expect(vec).not.toMatch(/(^|\s)-[\w"]/);
+	});
+
+	it('balances the lex query when content has an unbalanced double quote (no 500)', async () => {
+		// Odd number of " fails validateLexQuery in QMD without the fix.
+		await app.app.handle(
+			req('/api/working', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ title: 'Quoted', content: 'she said "hello and left' }),
+			}),
+		);
+		app.qmd.setHits([]);
+		const res = await app.app.handle(req('/api/similar?id=quoted&kind=working'));
+		expect(res.status).toBe(200);
+		const { lex } = sentQueries();
+		expect((lex.match(/"/g) ?? []).length % 2).toBe(0);
+	});
+
+	it('preserves a balanced-quote lex query rather than stripping it', async () => {
+		// Even quote count is valid; normalization must leave the quotes intact.
+		await app.app.handle(
+			req('/api/working', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ title: 'Balanced', content: 'she said "hello there" and left' }),
+			}),
+		);
+		app.qmd.setHits([]);
+		const res = await app.app.handle(req('/api/similar?id=balanced&kind=working'));
+		expect(res.status).toBe(200);
+		const { lex } = sentQueries();
+		expect(lex).toContain('"hello there"');
+	});
+
+	it('reports degraded:true through /api/similar when the endpoint is down', async () => {
+		const { id } = seedCapture(app, 'alpha');
+		app.qmd.setSearchError(new Error('Remote embedding circuit breaker is open'));
+		app.qmd.setLexHits([]);
+		const res = await app.app.handle(req(`/api/similar?id=${id}&kind=capture`));
+		expect(res.status).toBe(200);
+		expect((await json(res)).degraded).toBe(true);
+	});
+
 	it('caps results at 10', async () => {
 		const { id } = seedCapture(app, 'src');
 		const hits = Array.from({ length: 20 }, (_, i) => ({

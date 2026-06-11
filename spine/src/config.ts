@@ -2,10 +2,27 @@ import { parse } from 'smol-toml';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
+// Intentional structural subset of QMD's internal ModelsConfig (remote-api fields only).
+// ModelsConfig is not in @tobilu/qmd's public exports, so we maintain a local copy.
+interface QmdModelsConfig {
+	embed_api_url?: string;
+	embed_api_model?: string;
+	embed_api_key?: string;
+	rerank_api_url?: string;
+	rerank_api_model?: string;
+	rerank_api_key?: string;
+	expand_api_url?: string;
+	expand_api_model?: string;
+	expand_api_key?: string;
+	ocr_model?: string;
+	vlm_model?: string;
+}
+
 interface LatticeConfig {
 	spine?: {
 		agent_token?: string;
 		database_path?: string;
+		qmd?: QmdModelsConfig;
 	};
 }
 
@@ -32,4 +49,29 @@ export function getDatabasePath(): string {
 	return (
 		process.env.DATABASE_PATH ?? readLatticeConfig().spine?.database_path ?? './lattice.dev.db'
 	);
+}
+
+export function getQmdModelsConfig(): QmdModelsConfig | undefined {
+	// QMD reads QMD_EMBED_API_URL / QMD_EMBED_API_MODEL etc. via remoteConfigFromEnv(),
+	// giving env vars precedence over these config.toml values. QMD also throws at startup
+	// if embed_api_url and embed_api_model are only partially configured (either both or neither).
+	return readLatticeConfig().spine?.qmd;
+}
+
+// OCR and VLM inference calls share this endpoint (embed_api_url). All three functions
+// are expected to be served by the same local inference server (e.g. LMStudio, Ollama).
+export function getQmdBaseUrl(): string | undefined {
+	return readLatticeConfig().spine?.qmd?.embed_api_url;
+}
+
+export function getQmdApiKey(): string | undefined {
+	return process.env.QMD_EMBED_API_KEY ?? readLatticeConfig().spine?.qmd?.embed_api_key;
+}
+
+export function getOcrModel(): string | undefined {
+	return readLatticeConfig().spine?.qmd?.ocr_model;
+}
+
+export function getVlmModel(): string | undefined {
+	return readLatticeConfig().spine?.qmd?.vlm_model;
 }

@@ -1,4 +1,5 @@
-import { createStore } from '@tobilu/qmd';
+import { createStore, extractSnippet } from '@tobilu/qmd';
+import { getQmdModelsConfig } from './config';
 import type { QMDStore } from '@tobilu/qmd';
 import type { Database } from 'bun:sqlite';
 import { join, dirname, basename, resolve } from 'path';
@@ -115,26 +116,19 @@ export function captureToMarkdown({ id, text, source, captured_at }: CaptureData
 	return `---\nid: ${id}\nsource: ${sanitize(source)}\ncaptured_at: ${sanitize(captured_at)}\n---\n\n${text}\n`;
 }
 
-export function attachmentToMarkdown({
-	id,
-	capture_id,
-	filename,
-	content_type,
-	size_bytes,
-	created_at,
-}: AttachmentData): string {
-	return `---\nid: ${id}\ncapture_id: ${capture_id}\nfilename: ${sanitize(filename)}\ncontent_type: ${sanitize(content_type)}\nsize_bytes: ${size_bytes}\ncreated_at: ${sanitize(created_at)}\n---\n\n${sanitize(filename)}\n`;
+export function attachmentToMarkdown(data: AttachmentData, extractedText = ''): string {
+	const { id, capture_id, filename, content_type, size_bytes, created_at } = data;
+	const body = extractedText ? `${sanitize(filename)}\n\n${extractedText}` : sanitize(filename);
+	return `---\nid: ${id}\ncapture_id: ${capture_id}\nfilename: ${sanitize(filename)}\ncontent_type: ${sanitize(content_type)}\nsize_bytes: ${size_bytes}\ncreated_at: ${sanitize(created_at)}\n---\n\n${body}\n`;
 }
 
-export function workingAttachmentToMarkdown({
-	id,
-	slug,
-	filename,
-	content_type,
-	size_bytes,
-	created_at,
-}: WorkingAttachmentData): string {
-	return `---\nid: ${id}\nslug: ${sanitize(slug)}\nfilename: ${sanitize(filename)}\ncontent_type: ${sanitize(content_type)}\nsize_bytes: ${size_bytes}\ncreated_at: ${sanitize(created_at)}\n---\n\n${sanitize(filename)}\n`;
+export function workingAttachmentToMarkdown(
+	data: WorkingAttachmentData,
+	extractedText = '',
+): string {
+	const { id, slug, filename, content_type, size_bytes, created_at } = data;
+	const body = extractedText ? `${sanitize(filename)}\n\n${extractedText}` : sanitize(filename);
+	return `---\nid: ${id}\nslug: ${sanitize(slug)}\nfilename: ${sanitize(filename)}\ncontent_type: ${sanitize(content_type)}\nsize_bytes: ${size_bytes}\ncreated_at: ${sanitize(created_at)}\n---\n\n${body}\n`;
 }
 
 export function localFileToMarkdown(machineId: string, path: string, text: string): string {
@@ -168,22 +162,112 @@ export function annotationToMarkdown({
 let _db: Database | null = null;
 let _store: QMDStore | null = null;
 let _initFailed = false;
+// Consecutive index-refresh (update) failures; reset to 0 on the next success.
+// A nonzero value means new documents may not be findable even by keyword, so it
+// is surfaced on /api/status rather than silently swallowed.
 let _indexFailures = 0;
 // Serial lock: ensures update() and embed() calls never overlap.
 let _indexLock: Promise<void> = Promise.resolve();
+// Degraded mode: the remote inference endpoint is unreachable, so search serves
+// BM25 keyword-only results. QMD's circuit-breaker state is private, so we infer
+// it from the inference calls themselves.
+//
+// Invariant: _degraded is set true by ANY failed inference call (search,
+// searchRelated, embed) and set false by ANY successful one. A code path that
+// makes no inference call (e.g. a backfill tick that finds nothing pending) must
+// leave it unchanged — it cannot confirm recovery, so it must not clear the flag.
+// This biases the indicator toward stale-true (safe) over false-healthy.
+let _degraded = false;
+// Embedding backfill: when the endpoint is down, docs are indexed lexically now
+// and embedded later. QMD persists `needsEmbedding` in its own DB, so this resumes
+// across restarts; the loop retries embed() with backoff until the corpus is covered.
+let _backfillTimer: ReturnType<typeof setTimeout> | null = null;
+let _backfillRunning = false;
+const BACKFILL_MIN_MS = 30_000;
+const BACKFILL_MAX_MS = 10 * 60_000;
+let _backfillDelayMs = BACKFILL_MIN_MS;
+// Short-lived memo for the embedding-backlog count. /api/status may be polled
+// frequently and getIndexHealth() runs a COUNT join, so cache it briefly. A null
+// `value` means the count is currently unknown (store not ready / read failed).
+const NEEDS_EMBEDDING_TTL_MS = 5_000;
+let _needsEmbeddingCache: { value: number | null; at: number } | null = null;
+
+/** Whether the latest inference attempt found the remote endpoint unavailable. */
+export function isSearchDegraded(): boolean {
+	return _degraded;
+}
+
+export function getQmdStore(): QMDStore | null {
+	return _store;
+}
+
+/** Consecutive index-refresh failures (lexical update); 0 when the index is current. */
+export function indexFailureCount(): number {
+	return _indexFailures;
+}
+
+/**
+ * Documents indexed but still awaiting embedding. Returns `null` when the count is
+ * unknown — the store is not initialized yet, or `getIndexHealth()` threw — so callers
+ * can distinguish "unknown" from a genuine zero backlog. Memoized for a few seconds so
+ * frequent /api/status polls do not each run the underlying COUNT.
+ */
+export async function needsEmbeddingCount(): Promise<number | null> {
+	const now = Date.now();
+	if (_needsEmbeddingCache && now - _needsEmbeddingCache.at < NEEDS_EMBEDDING_TTL_MS) {
+		return _needsEmbeddingCache.value;
+	}
+	let value: number | null = null;
+	if (_store) {
+		try {
+			value = (await _store.getIndexHealth()).needsEmbedding;
+		} catch (e) {
+			console.warn('[qmd] needsEmbeddingCount: getIndexHealth failed — reporting unknown:', e);
+			value = null;
+		}
+	}
+	_needsEmbeddingCache = { value, at: now };
+	return value;
+}
 
 /** @internal test-only — do not use from production code. */
 export function __resetSearchForTests(): void {
+	stopEmbeddingBackfill();
 	_db = null;
 	_store = null;
 	_initFailed = false;
 	_indexFailures = 0;
 	_indexLock = Promise.resolve();
+	_degraded = false;
+	_backfillRunning = false;
+	_backfillDelayMs = BACKFILL_MIN_MS;
+	_needsEmbeddingCache = null;
+}
+
+/** @internal test-only — current backfill backoff delay in ms. */
+export function __getBackfillDelayForTests(): number {
+	return _backfillDelayMs;
+}
+
+/** @internal test-only — inject a fake store to exercise search/backfill paths. */
+export function __setStoreForTests(store: QMDStore | null): void {
+	_store = store;
+	_initFailed = false;
 }
 
 /** @internal test-only — do not use from production code. */
 export function __getIndexFailuresForTests(): number {
 	return _indexFailures;
+}
+
+/** @internal test-only — run one embedding-backfill pass synchronously (no timer). */
+export async function __runBackfillForTests(): Promise<void> {
+	await runBackfill();
+}
+
+/** @internal test-only — await the in-flight refreshIndex() lock chain. */
+export async function __awaitIndexLockForTests(): Promise<void> {
+	await _indexLock;
 }
 
 export async function initSearch(db: Database): Promise<void> {
@@ -219,27 +303,51 @@ export async function initSearch(db: Database): Promise<void> {
 
 	const attachmentRows = db
 		.query(
-			'SELECT id, capture_id, filename, content_type, size_bytes, created_at FROM capture_attachments',
+			`SELECT ca.id, ca.capture_id, ca.filename, ca.content_type, ca.size_bytes, ca.created_at,
+			        ca.extraction_status, ca.extracted_text,
+			        ad.final_text as description_text
+			 FROM capture_attachments ca
+			 LEFT JOIN attachment_descriptions ad ON (
+			   ad.attachment_kind = 'capture' AND ad.attachment_id = ca.id AND ad.supersedes IS NULL
+			 )`,
 		)
-		.all() as AttachmentData[];
+		.all() as (AttachmentData & {
+		extraction_status: string;
+		extracted_text: string;
+		description_text: string | null;
+	})[];
 
 	for (const row of attachmentRows) {
 		const filePath = join(attachmentsMd, `${row.id}.md`);
 		if (!existsSync(filePath)) {
-			writeFileSync(filePath, attachmentToMarkdown(row));
+			const text =
+				row.extraction_status === 'dark' ? (row.description_text ?? '') : row.extracted_text;
+			writeFileSync(filePath, attachmentToMarkdown(row, text));
 		}
 	}
 
 	const workingAttachmentRows = db
 		.query(
-			'SELECT id, slug, filename, content_type, size_bytes, created_at FROM working_attachments',
+			`SELECT wa.id, wa.slug, wa.filename, wa.content_type, wa.size_bytes, wa.created_at,
+			        wa.extraction_status, wa.extracted_text,
+			        ad.final_text as description_text
+			 FROM working_attachments wa
+			 LEFT JOIN attachment_descriptions ad ON (
+			   ad.attachment_kind = 'working' AND ad.attachment_id = wa.id AND ad.supersedes IS NULL
+			 )`,
 		)
-		.all() as WorkingAttachmentData[];
+		.all() as (WorkingAttachmentData & {
+		extraction_status: string;
+		extracted_text: string;
+		description_text: string | null;
+	})[];
 
 	for (const row of workingAttachmentRows) {
 		const filePath = join(workingAttachmentsMd, `${row.id}.md`);
 		if (!existsSync(filePath)) {
-			writeFileSync(filePath, workingAttachmentToMarkdown(row));
+			const text =
+				row.extraction_status === 'dark' ? (row.description_text ?? '') : row.extracted_text;
+			writeFileSync(filePath, workingAttachmentToMarkdown(row, text));
 		}
 	}
 
@@ -283,6 +391,7 @@ export async function initSearch(db: Database): Promise<void> {
 					archives: { path: archivesMd, pattern: '**/*.md' },
 					annotations: { path: annotationsMd, pattern: '**/*.md' },
 				},
+				models: getQmdModelsConfig(),
 			},
 		});
 	} catch (e) {
@@ -292,6 +401,8 @@ export async function initSearch(db: Database): Promise<void> {
 	}
 
 	refreshIndex();
+	// Backfill any docs left unembedded from a prior outage (QMD persists this state).
+	startEmbeddingBackfill();
 }
 
 export function writeCaptureFile(
@@ -304,6 +415,11 @@ export function writeCaptureFile(
 		join(capturesDir(), `${id}.md`),
 		captureToMarkdown({ id, text, source, captured_at }),
 	);
+}
+
+export function deleteCaptureFile(id: number): void {
+	const mdPath = join(capturesDir(), `${id}.md`);
+	if (existsSync(mdPath)) unlinkSync(mdPath);
 }
 
 export function writeArchiveIndex(row: ArchiveData): void {
@@ -328,10 +444,14 @@ export function writeWorkingAttachmentIndex(
 	content_type: string,
 	size_bytes: number,
 	created_at: string,
+	extractedText = '',
 ): void {
 	writeFileSync(
 		join(workingAttachmentsMdDir(), `${id}.md`),
-		workingAttachmentToMarkdown({ id, slug, filename, content_type, size_bytes, created_at }),
+		workingAttachmentToMarkdown(
+			{ id, slug, filename, content_type, size_bytes, created_at },
+			extractedText,
+		),
 	);
 }
 
@@ -347,10 +467,14 @@ export function writeAttachmentIndex(
 	content_type: string,
 	size_bytes: number,
 	created_at: string,
+	extractedText = '',
 ): void {
 	writeFileSync(
 		join(attachmentsMdDir(), `${id}.md`),
-		attachmentToMarkdown({ id, capture_id, filename, content_type, size_bytes, created_at }),
+		attachmentToMarkdown(
+			{ id, capture_id, filename, content_type, size_bytes, created_at },
+			extractedText,
+		),
 	);
 }
 
@@ -375,17 +499,104 @@ export function refreshIndex(): void {
 	const store = _store;
 	_indexLock = _indexLock
 		.then(async () => {
+			// update() indexes lexically (FTS) and persists which docs still need
+			// embedding. This must succeed for captures to be keyword-findable now.
 			const result = await store.update();
+			// update() succeeded: the lexical index is current. Clear the failure streak
+			// so indexFailureCount() reflects consecutive failures, not lifetime total.
+			_indexFailures = 0;
 			if (result.needsEmbedding > 0) {
-				await store.embed();
+				// Embedding goes through the remote endpoint. If it is down this throws;
+				// the doc stays keyword-findable and the backfill loop retries later.
+				await tryEmbed(store);
 			}
 		})
 		.catch((e) => {
+			// A failure here means update() itself failed (not embedding): the collection
+			// could not be re-indexed (filesystem scan or lexical write). New documents may
+			// not be findable even by keyword. Embedding failures are swallowed by tryEmbed
+			// and never reach here. The streak is surfaced via indexFailureCount() on
+			// /api/status so a stuck lexical index does not read as "healthy".
 			_indexFailures++;
-			if (_indexFailures === 1 || _indexFailures % 10 === 0) {
-				console.warn(`[qmd] index refresh failed (${_indexFailures}x):`, e);
+			if (_indexFailures === 1) {
+				console.warn('[qmd] index refresh failed:', e);
+			} else if (_indexFailures % 10 === 0) {
+				console.error(`[qmd] index refresh still failing (${_indexFailures}x consecutive):`, e);
 			}
 		});
+}
+
+/**
+ * Attempt to embed pending documents through the remote endpoint. Embedding failure
+ * (endpoint down / breaker open) is non-fatal: it flips degraded mode on and ensures
+ * the backfill loop is scheduled, but never rejects the index lock chain.
+ */
+async function tryEmbed(store: QMDStore): Promise<void> {
+	try {
+		await store.embed();
+		_degraded = false;
+	} catch (e) {
+		_degraded = true;
+		console.warn('[qmd] embedding deferred — endpoint unavailable, will backfill:', e);
+		scheduleBackfill();
+	}
+}
+
+/** Start the embedding backfill loop (idempotent). Called from initSearch. */
+export function startEmbeddingBackfill(): void {
+	if (_backfillTimer || _backfillRunning) return;
+	scheduleBackfill();
+}
+
+/** Stop the embedding backfill loop and clear any pending timer. */
+export function stopEmbeddingBackfill(): void {
+	if (_backfillTimer) {
+		clearTimeout(_backfillTimer);
+		_backfillTimer = null;
+	}
+}
+
+function scheduleBackfill(): void {
+	if (_backfillTimer) return;
+	_backfillTimer = setTimeout(() => {
+		_backfillTimer = null;
+		void runBackfill();
+	}, _backfillDelayMs);
+	// Do not keep the process alive solely for backfill.
+	_backfillTimer.unref();
+}
+
+async function runBackfill(): Promise<void> {
+	if (_backfillRunning || !_store) return;
+	const store = _store;
+	_backfillRunning = true;
+	let moreWork = false;
+	try {
+		const pending = (await store.getIndexHealth()).needsEmbedding;
+		if (pending <= 0) {
+			// Nothing to embed. This pass makes no inference call, so it cannot confirm the
+			// endpoint recovered — leave _degraded unchanged (see its invariant above). The
+			// next successful live search clears it.
+			_backfillDelayMs = BACKFILL_MIN_MS;
+			return;
+		}
+		await store.embed();
+		// Success: the endpoint is reachable. Reset backoff and re-check for more work.
+		_degraded = false;
+		_backfillDelayMs = BACKFILL_MIN_MS;
+		moreWork = (await store.getIndexHealth()).needsEmbedding > 0;
+	} catch (e) {
+		// Still down — back off (capped) and retry.
+		_degraded = true;
+		_backfillDelayMs = Math.min(_backfillDelayMs * 2, BACKFILL_MAX_MS);
+		console.warn(`[qmd] embedding backfill retry in ${_backfillDelayMs}ms:`, e);
+		moreWork = true;
+	} finally {
+		_backfillRunning = false;
+		// Reschedule from one place so a run skipped by the _backfillRunning guard (a timer
+		// that fired mid-pass) never loses the next tick.
+		if (moreWork) scheduleBackfill();
+	}
 }
 
 // QMD returns `file` as a virtual path: qmd://<collection>/<relative-path>.
@@ -436,8 +647,12 @@ function mapResults(
 			let modified_at = '';
 			try {
 				modified_at = statSync(join(workingDir(), `${slug}.md`)).mtime.toISOString();
-			} catch {
-				// file missing between index and search
+			} catch (e) {
+				// ENOENT is expected — the file can vanish between index and search; modified_at
+				// stays ''. Anything else (permissions, I/O) is unexpected, so surface it.
+				if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+					console.warn(`[qmd] statSync failed for working/${slug}.md:`, e);
+				}
 			}
 			return [
 				{
@@ -561,34 +776,100 @@ function mapResults(
 	});
 }
 
-export async function search(q: string): Promise<SearchResult[]> {
+export interface SearchResponse {
+	results: SearchResult[];
+	/** True when results came from the BM25 keyword-only fallback (endpoint unavailable). */
+	degraded: boolean;
+}
+
+/**
+ * Single adaptive search path. Runs the full-quality pipeline (LLM query expansion +
+ * multi-signal retrieval + LLM rerank) through the remote endpoint. If the endpoint is
+ * unavailable (circuit breaker open / request failure), it falls back to BM25 keyword-only
+ * search so results stay available — never running rerank/expansion locally — and reports
+ * `degraded: true`.
+ */
+export async function search(q: string): Promise<SearchResponse> {
 	if (!_store) {
 		if (_initFailed)
 			console.warn('[qmd] search called but initSearch failed — returning empty results');
-		return [];
+		else console.info('[qmd] search called before init completed — returning empty results');
+		return { results: [], degraded: _degraded };
 	}
-	const results = await _store.search({
-		queries: [
-			{ type: 'lex', query: q },
-			{ type: 'vec', query: q },
-		],
-		rerank: false,
-		limit: 20,
-	});
-	return mapResults(results);
+	const store = _store;
+	let hits: Parameters<typeof mapResults>[0];
+	try {
+		// single-query form — QMD auto-expands, retrieves, and reranks via the remote endpoint.
+		// Only the retrieval call is guarded: mapping/DB errors below are real bugs and must
+		// surface, not masquerade as a degraded endpoint.
+		hits = await store.search({ query: q, limit: 20 });
+	} catch (e) {
+		// Remote inference unavailable: serve BM25 keyword-only results. This keeps search up
+		// during an outage; newly-captured (lexically-indexed) docs are findable immediately.
+		_degraded = true;
+		scheduleBackfill();
+		console.warn('[qmd] full-quality search unavailable — serving keyword-only (BM25):', e);
+		return { results: await bm25Fallback(store, q), degraded: true };
+	}
+	_degraded = false;
+	return { results: mapResults(hits), degraded: false };
 }
 
-export async function searchDeep(q: string): Promise<SearchResult[]> {
+/** Run a BM25 keyword-only search and adapt its rows into mapped SearchResults. */
+async function bm25Fallback(store: QMDStore, q: string): Promise<SearchResult[]> {
+	const lex = await store.searchLex(q, { limit: 20 });
+	const hits = lex.map((r) => {
+		const body = r.body ?? '';
+		return {
+			file: r.filepath,
+			score: r.score,
+			bestChunk: extractSnippet(body, q).snippet || body.slice(0, 200),
+			body,
+			displayPath: r.displayPath,
+		};
+	});
+	return mapResults(hits);
+}
+
+/**
+ * Related-items retrieval for the lateral panel. Unlike the search box, this is fed a
+ * document body (not a short query), so it deliberately skips LLM query-expansion and
+ * rerank — running expansion on a document blob is wasteful and the expansion model is
+ * tuned for short queries. It uses a lightweight lex+vec retrieval (rerank disabled) and,
+ * when the endpoint is down, degrades to BM25 keyword-only.
+ */
+export async function searchRelated(q: string): Promise<SearchResponse> {
 	if (!_store) {
 		if (_initFailed)
-			console.warn('[qmd] searchDeep called but initSearch failed — returning empty results');
-		return [];
+			console.warn('[qmd] searchRelated called but initSearch failed — returning empty results');
+		else console.info('[qmd] searchRelated called before init completed — returning empty results');
+		return { results: [], degraded: _degraded };
 	}
+	const store = _store;
+	// Document content is passed as pre-expanded queries to structuredSearch, which rejects
+	// newlines, unbalanced quotes, and negation dashes — normalize before sending.
+	const singleLine = q.replace(/[\r\n]+/g, ' ').trim();
+	const quoteCount = (singleLine.match(/"/g) ?? []).length;
+	const lexQuery = quoteCount % 2 === 0 ? singleLine : singleLine.replace(/"/g, '');
+	const vecQuery = singleLine.replace(/(^|\s)-(?=[\w"])/g, '$1');
+	let hits: Parameters<typeof mapResults>[0];
 	try {
-		const results = await _store.search({ query: q, limit: 20 });
-		return mapResults(results);
+		// Only the retrieval call is guarded so mapping/DB errors still surface as real errors.
+		hits = await store.search({
+			queries: [
+				{ type: 'lex', query: lexQuery },
+				{ type: 'vec', query: vecQuery },
+			],
+			rerank: false,
+			limit: 20,
+		});
 	} catch (e) {
-		console.error('[qmd] searchDeep error:', e);
-		throw e;
+		// The vec query needs remote embedding; on outage fall back to BM25 keyword-only.
+		_degraded = true;
+		scheduleBackfill();
+		console.warn('[qmd] related-items search unavailable — serving keyword-only (BM25):', e);
+		return { results: await bm25Fallback(store, lexQuery), degraded: true };
 	}
+	_degraded = false;
+	return { results: mapResults(hits), degraded: false };
 }

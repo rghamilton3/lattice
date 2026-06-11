@@ -7,6 +7,7 @@
 	import EditorPane from '$components/editor/EditorPane.svelte';
 	import TasksView from '$components/tasks/TasksView.svelte';
 	import TrackingView from '$components/tracking/TrackingView.svelte';
+	import ClusterView from '$components/cluster/ClusterView.svelte';
 
 	const { paneIndex, content }: { paneIndex: 0 | 1; content: PaneContent } = $props();
 </script>
@@ -27,4 +28,6 @@
 	<ReadingPane {paneIndex} ref={content.ref} revealAnnotationId={content.revealAnnotationId} />
 {:else if content.kind === 'editor'}
 	<EditorPane {paneIndex} slug={content.slug} />
+{:else if content.kind === 'cluster'}
+	<ClusterView {paneIndex} clusterId={content.clusterId} />
 {/if}

@@ -24,6 +24,26 @@
 	const wb = getWorkbenchContext();
 	const pwa = getPwaContext();
 
+	// Narrow-viewport navigation menu (replaces the inline nav below the phone
+	// breakpoint, where the full toolbar no longer fits on one row).
+	let menuOpen = $state(false);
+	let menuTrigger = $state<HTMLButtonElement | null>(null);
+	let menuPanel = $state<HTMLElement | null>(null);
+
+	function closeMenu() {
+		menuOpen = false;
+		menuTrigger?.focus();
+	}
+	function navFromMenu(view: View) {
+		onnav(view);
+		menuOpen = false;
+	}
+
+	$effect(() => {
+		// Move focus into the menu when it opens so it is keyboard-operable.
+		if (menuOpen) menuPanel?.querySelector('button')?.focus();
+	});
+
 	const statusQuery = createQuery(() => ({
 		queryKey: statusKeys.all(),
 		queryFn: fetchStatus,
@@ -46,6 +66,14 @@
 			: agentCount !== null
 				? String(agentCount)
 				: 'unknown'
+	);
+	// Keyword-only pill: driven by the inference breaker state reported by spine.
+	const searchDegraded = $derived(statusQuery.data?.search_degraded ?? false);
+	const needsEmbedding = $derived(statusQuery.data?.needs_embedding ?? null);
+	const keywordOnlyTitle = $derived(
+		needsEmbedding !== null && needsEmbedding > 0
+			? `Inference endpoint unavailable — search is keyword-only. ${needsEmbedding} document${needsEmbedding === 1 ? '' : 's'} awaiting embedding.`
+			: 'Inference endpoint unavailable — search is keyword-only until it recovers.'
 	);
 	const latestScan = $derived(
 		(statusQuery.data?.agents ?? [])
@@ -143,6 +171,18 @@
 	<!-- TOP TOOLBAR -->
 	<header class="toolbar">
 		<div class="row" style="gap:14px">
+			<button
+				class="nav-btn toolbar-menu-btn"
+				bind:this={menuTrigger}
+				aria-label="Menu"
+				aria-haspopup="menu"
+				aria-expanded={menuOpen}
+				title="Menu"
+				onclick={() => (menuOpen = !menuOpen)}
+			>
+				<Icon name="menu" size={16} />
+			</button>
+
 			<button class="brand" title="Home" onclick={() => onnav('home')}>
 				<svg
 					class="brand-icon"
@@ -217,7 +257,7 @@
 				<span class="brand-name">lattice</span>
 			</button>
 
-			<nav class="row" style="gap:2px">
+			<nav class="row toolbar-nav" style="gap:2px">
 				<NavBtn
 					label="Home"
 					icon="home"
@@ -279,27 +319,73 @@
 				<span class="kbd" style="margin-left:6px">c</span>
 			</button>
 
-			<div class="vbar"></div>
+			<div class="row toolbar-aux" style="gap:6px">
+				<div class="vbar"></div>
 
-			<button
-				class="btn btn-ghost"
-				aria-pressed={wb.focusMode}
-				aria-label="Focus mode"
-				title="Focus mode (hide chrome)"
-				onclick={() => (wb.focusMode = !wb.focusMode)}
-			>
-				<Icon name="focus" size={15} />
-			</button>
-			<button
-				class="btn btn-ghost"
-				aria-pressed={wb.activeOverlay === 'settings'}
-				aria-label="Settings"
-				title="Settings"
-				onclick={() => (wb.activeOverlay = wb.activeOverlay === 'settings' ? 'none' : 'settings')}
-			>
-				<Icon name="cog" size={15} />
-			</button>
+				<button
+					class="btn btn-ghost"
+					aria-pressed={wb.focusMode}
+					aria-label="Focus mode"
+					title="Focus mode (hide chrome)"
+					onclick={() => (wb.focusMode = !wb.focusMode)}
+				>
+					<Icon name="focus" size={15} />
+				</button>
+				<button
+					class="btn btn-ghost"
+					aria-pressed={wb.activeOverlay === 'settings'}
+					aria-label="Settings"
+					title="Settings"
+					onclick={() => (wb.activeOverlay = wb.activeOverlay === 'settings' ? 'none' : 'settings')}
+				>
+					<Icon name="cog" size={15} />
+				</button>
+			</div>
 		</div>
+
+		{#if menuOpen}
+			<div class="toolbar-menu-backdrop" role="presentation" onclick={closeMenu}></div>
+			<div
+				class="toolbar-menu-pop"
+				role="menu"
+				tabindex="-1"
+				aria-label="Navigation menu"
+				bind:this={menuPanel}
+				onkeydown={(e) => {
+					if (e.key === 'Escape') closeMenu();
+				}}
+			>
+				<button role="menuitem" onclick={() => navFromMenu('home')}>
+					<Icon name="home" size={15} /> Home
+				</button>
+				<button role="menuitem" onclick={() => navFromMenu('library')}>
+					<Icon name="library" size={15} /> Library
+				</button>
+				<button role="menuitem" onclick={() => navFromMenu('tasks')}>
+					<Icon name="task" size={15} /> Tasks
+				</button>
+				<div class="toolbar-menu-sep" role="none"></div>
+				<button
+					role="menuitemcheckbox"
+					aria-checked={wb.focusMode}
+					onclick={() => {
+						wb.focusMode = !wb.focusMode;
+						closeMenu();
+					}}
+				>
+					<Icon name="focus" size={15} /> Focus mode
+				</button>
+				<button
+					role="menuitem"
+					onclick={() => {
+						wb.activeOverlay = 'settings';
+						menuOpen = false;
+					}}
+				>
+					<Icon name="cog" size={15} /> Settings
+				</button>
+			</div>
+		{/if}
 	</header>
 
 	<!-- MAIN -->
@@ -323,6 +409,11 @@
 			<span class="faint" style="font-size:12px">
 				sync&nbsp;·&nbsp;{latestScan ? relTime(latestScan, now) : 'never'}
 			</span>
+			{#if searchDegraded}
+				<span class="chip chip-keyword-only" role="status" title={keywordOnlyTitle}>
+					Keyword-only
+				</span>
+			{/if}
 		</div>
 		<span class="faint statusbar-tagline">
 			Lattice&nbsp;·&nbsp;ADHD-aware substrate&nbsp;·&nbsp;captured loosely, retrieved intelligently

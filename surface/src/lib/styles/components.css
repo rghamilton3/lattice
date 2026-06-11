@@ -103,6 +103,12 @@
 	background: color-mix(in srgb, var(--color-accent) 24%, var(--bg-high));
 	color: var(--color-accent);
 }
+.chip-keyword-only {
+	background: color-mix(in oklch, var(--c-alarm) 10%, transparent);
+	color: var(--c-alarm);
+	border: 1px solid color-mix(in oklch, var(--c-alarm) 40%, transparent);
+	font-weight: 600;
+}
 
 .card {
 	background: var(--bg-raised);
@@ -332,30 +338,39 @@
 	background: var(--c-alarm);
 }
 
-@media (max-width: 760px) {
+/* Narrow toolbar menu trigger: hidden by default (desktop + tablet keep inline
+   nav); revealed at the phone breakpoint where the toolbar no longer fits. */
+.toolbar-menu-btn {
+	display: none;
+}
+
+/* tablet breakpoint - mirrors --breakpoint-tablet (64rem) in layout.css
+   The toolbar stays a single row here: nav goes icon-only and secondary labels
+   are dropped rather than wrapping the palette onto a second bar. The status bar
+   is ambient and is hidden on narrow viewports (connection trouble still
+   surfaces via the recovery-mode notice in the main pane). */
+@media (width < 64rem) {
 	.shell {
-		grid-template-rows: auto 1fr auto;
+		grid-template-rows: 48px 1fr;
 	}
-	.toolbar,
 	.statusbar {
-		flex-wrap: wrap;
-		height: auto;
-		min-height: 48px;
-		padding-block: 8px;
+		display: none;
 	}
-	.toolbar-center {
-		order: 3;
-		flex-basis: 100%;
+	/* The status bar is hidden in this band, so the drawer's default
+	   bottom: 28px (which reserves room for it) would leave a stale gap. */
+	.settings-drawer {
+		bottom: 0;
 	}
 	.brand-name,
 	.palette-button-label,
-	.palette-kbd,
-	.statusbar-tagline {
+	.palette-kbd {
 		display: none;
 	}
-	.statusbar {
-		gap: 8px;
-		justify-content: flex-start;
+	.toolbar-nav .nav-btn span {
+		display: none;
+	}
+	.capture-button .kbd {
+		display: none;
 	}
 	.pwa-notice {
 		position: static;
@@ -368,6 +383,72 @@
 	.pwa-notice-actions {
 		flex-wrap: wrap;
 	}
+}
+
+/* phone breakpoint - mirrors --breakpoint-phone (30rem) in layout.css
+   Below phone width the inline nav, brand, and auxiliary controls collapse into
+   the toolbar menu so the row reduces to [menu] [palette] [Capture]. */
+@media (width < 30rem) {
+	.toolbar-menu-btn {
+		display: inline-flex;
+	}
+	.brand,
+	.toolbar-nav,
+	.toolbar-aux {
+		display: none;
+	}
+}
+/* The menu only exists below phone width; never leave it on after a resize up. */
+@media (width >= 30rem) {
+	.toolbar-menu-backdrop,
+	.toolbar-menu-pop {
+		display: none;
+	}
+}
+
+/* Toolbar navigation menu (phone) */
+.toolbar-menu-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 39;
+}
+.toolbar-menu-pop {
+	position: absolute;
+	top: calc(100% + 4px);
+	left: 8px;
+	z-index: 40;
+	min-width: 208px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 6px;
+	background: var(--bg-raised);
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	box-shadow: var(--shadow-pop);
+}
+.toolbar-menu-pop button {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	min-height: 44px;
+	padding: 10px 12px;
+	border-radius: var(--radius-sm);
+	font-size: var(--fs-small);
+	color: var(--text-soft);
+	text-align: left;
+	background: transparent;
+}
+.toolbar-menu-pop button:hover,
+.toolbar-menu-pop button[aria-checked='true'] {
+	background: var(--bg-high);
+	color: var(--text);
+}
+.toolbar-menu-sep {
+	height: 1px;
+	margin: 4px 0;
+	background: var(--line);
 }
 
 /* ── Doc view ────────────────────────────────────────────────────────────── */
@@ -402,6 +483,25 @@
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
+}
+
+/* Reading pane: below the tablet breakpoint stack the document body above the
+   attachment rail instead of side by side, and let the expanded rail span the
+   full width (overriding its desktop resizable inline width).
+   tablet breakpoint - mirrors --breakpoint-tablet (64rem) in layout.css */
+@media (width < 64rem) {
+	.doc-content {
+		flex-direction: column;
+	}
+	.doc-content .att-rail:not(.att-rail--min) {
+		width: 100% !important;
+		max-height: 40%;
+		border-left: 0;
+		border-top: 1px solid var(--line);
+	}
+	.doc-content .att-rail .att-resize-handle {
+		display: none;
+	}
 }
 
 /* Related rail — inline at bottom of reading */
@@ -446,6 +546,10 @@
 .related-snippet {
 	font-size: 13px;
 	line-height: 1.5;
+	overflow: hidden;
+	display: -webkit-box;
+	-webkit-line-clamp: 3;
+	-webkit-box-orient: vertical;
 }
 
 /* Editor */
@@ -634,7 +738,8 @@
 	flex-direction: column;
 	animation: drawer-slide-in var(--t-base) var(--ease);
 }
-@media (max-width: 520px) {
+/* phone breakpoint - mirrors --breakpoint-phone (30rem) in layout.css */
+@media (width < 30rem) {
 	.settings-drawer {
 		left: 0;
 		width: auto;
@@ -733,4 +838,22 @@
 	opacity: 0.55;
 	pointer-events: none;
 	z-index: 1;
+}
+
+/* ── Touch targets ───────────────────────────────────────────────────────────
+   On coarse pointers (touch), raise interactive controls to a minimum 44px tap
+   target. Gated by pointer: coarse so fine-pointer (mouse) desktop sizing is
+   unchanged. */
+@media (pointer: coarse) {
+	.btn,
+	.btn-mini,
+	.nav-btn,
+	.capture-button,
+	.palette-button,
+	.seg button {
+		min-height: 44px;
+	}
+	.btn-mini {
+		padding-block: 6px;
+	}
 }

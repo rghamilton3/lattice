@@ -332,18 +332,7 @@
 			</section>
 
 			{#if wb.featureFlags.resurfacing && wb.postureView.showResurfaced}
-				<section class="card home-section">
-					<div class="home-section-head">
-						<h2 class="section-title">
-							<Icon name="sparkle" size={16} />
-							<span>From your past</span>
-						</h2>
-						<span class="faint" style="font-size:12px; white-space:nowrap; margin-left:12px">
-							quiet · dismissible
-						</span>
-					</div>
-					<Resurfaced onOpen={openDocRef} />
-				</section>
+				<Resurfaced onOpen={openDocRef} />
 			{/if}
 		</div>
 

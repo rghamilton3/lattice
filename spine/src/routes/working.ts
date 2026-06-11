@@ -13,7 +13,13 @@ import {
 	deleteWorking,
 } from '../working';
 import { refreshIndex, writeWorkingAttachmentIndex, deleteWorkingAttachmentIndex } from '../search';
-import type { CaptureRow, FileIndexRow, WorkingAttachmentRow } from '../db/rows';
+import type {
+	CaptureRow,
+	FileIndexRow,
+	WorkingAttachmentRow,
+	AttachmentDescriptionRow,
+} from '../db/rows';
+import { queueAttachment } from '../extraction-queue';
 
 type SeedCaptureRow = Pick<CaptureRow, 'text' | 'captured_at'>;
 type SeedFileRow = Pick<FileIndexRow, 'text' | 'path'>;
@@ -161,7 +167,7 @@ export const workingRoutes = (db: Database, { attachmentsDir }: WorkingRoutesOpt
 				}
 				return db
 					.query(
-						'SELECT id, slug, filename, content_type, size_bytes, stored_path, created_at FROM working_attachments WHERE slug = ? ORDER BY created_at ASC',
+						'SELECT id, slug, filename, content_type, size_bytes, stored_path, created_at, extraction_status FROM working_attachments WHERE slug = ? ORDER BY created_at ASC',
 					)
 					.all(params.slug) as WorkingAttachmentRow[];
 			},
@@ -204,8 +210,8 @@ export const workingRoutes = (db: Database, { attachmentsDir }: WorkingRoutesOpt
 					const inserted = db
 						.prepare(
 							`INSERT INTO working_attachments
-               (slug, content_type, filename, size_bytes, stored_path, created_at)
-             VALUES (?, ?, ?, ?, '', ?) RETURNING id`,
+               (slug, content_type, filename, size_bytes, stored_path, created_at, extraction_status, extracted_text)
+             VALUES (?, ?, ?, ?, '', ?, 'pending', '') RETURNING id`,
 						)
 						.get(slug, contentType, filename, bytes.length, now) as { id: number };
 
@@ -224,6 +230,7 @@ export const workingRoutes = (db: Database, { attachmentsDir }: WorkingRoutesOpt
 
 				writeWorkingAttachmentIndex(row.id, slug, filename, contentType, bytes.length, now);
 				refreshIndex();
+				queueAttachment(row.id, 'working', join(attachmentsDir, row.stored_path), contentType, db);
 
 				return {
 					id: row.id,
@@ -233,6 +240,7 @@ export const workingRoutes = (db: Database, { attachmentsDir }: WorkingRoutesOpt
 					size_bytes: bytes.length,
 					stored_path: row.stored_path,
 					created_at: now,
+					extraction_status: 'pending',
 				};
 			},
 			{ params: t.Object({ slug: t.String({ pattern: '^[a-z0-9-]+$' }) }) },
@@ -330,5 +338,134 @@ export const workingRoutes = (db: Database, { attachmentsDir }: WorkingRoutesOpt
 				return {};
 			},
 			{ params: t.Object({ slug: t.String({ pattern: '^[a-z0-9-]+$' }), attId: t.String() }) },
+		)
+		.get(
+			'/api/working/:slug/attachments/:attId/description',
+			({ params, set }) => {
+				const attId = parseInt(params.attId, 10);
+				if (isNaN(attId)) {
+					set.status = 400;
+					return { error: 'Invalid id' };
+				}
+
+				const att = db
+					.query('SELECT extraction_status FROM working_attachments WHERE id = ? AND slug = ?')
+					.get(attId, params.slug) as { extraction_status: string } | null;
+				if (!att) {
+					set.status = 404;
+					return { error: 'Not found' };
+				}
+				if (att.extraction_status !== 'dark') {
+					set.status = 409;
+					return { error: 'Attachment is not dark' };
+				}
+
+				const desc = db
+					.query(
+						`SELECT * FROM attachment_descriptions
+					 WHERE attachment_kind = 'working' AND attachment_id = ? AND supersedes IS NULL`,
+					)
+					.get(attId) as AttachmentDescriptionRow | null;
+				if (!desc) {
+					set.status = 404;
+					return { error: 'No description yet' };
+				}
+				return { ...desc, confirmed: desc.confirmed === 1 };
+			},
+			{ params: t.Object({ slug: t.String({ pattern: '^[a-z0-9-]+$' }), attId: t.String() }) },
+		)
+		.patch(
+			'/api/working/:slug/attachments/:attId/description',
+			({ params, body, set }) => {
+				const attId = parseInt(params.attId, 10);
+				if (isNaN(attId)) {
+					set.status = 400;
+					return { error: 'Invalid id' };
+				}
+
+				const { final_text, confirmed } = body;
+				if (final_text === undefined && confirmed === undefined) {
+					set.status = 400;
+					return { error: 'Nothing to update' };
+				}
+				if (final_text !== undefined && final_text.trim() === '') {
+					set.status = 400;
+					return { error: 'final_text cannot be empty' };
+				}
+
+				const att = db
+					.query('SELECT extraction_status FROM working_attachments WHERE id = ? AND slug = ?')
+					.get(attId, params.slug) as { extraction_status: string } | null;
+				if (!att) {
+					set.status = 404;
+					return { error: 'Not found' };
+				}
+				if (att.extraction_status !== 'dark') {
+					set.status = 409;
+					return { error: 'Attachment is not dark' };
+				}
+
+				const desc = db
+					.query(
+						`SELECT * FROM attachment_descriptions
+					 WHERE attachment_kind = 'working' AND attachment_id = ? AND supersedes IS NULL`,
+					)
+					.get(attId) as AttachmentDescriptionRow | null;
+				if (!desc) {
+					set.status = 404;
+					return { error: 'No description' };
+				}
+
+				const updates: string[] = [];
+				const vals: unknown[] = [];
+				if (final_text !== undefined) {
+					updates.push('final_text = ?');
+					vals.push(final_text);
+				}
+				if (confirmed !== undefined) {
+					updates.push('confirmed = ?');
+					vals.push(confirmed ? 1 : 0);
+				}
+				vals.push(desc.id);
+				db.prepare(`UPDATE attachment_descriptions SET ${updates.join(', ')} WHERE id = ?`).run(
+					...(vals as (string | number | boolean | null)[]),
+				);
+
+				if (final_text !== undefined) {
+					const row = db
+						.query(
+							'SELECT id, slug, filename, content_type, size_bytes, created_at FROM working_attachments WHERE id = ?',
+						)
+						.get(attId) as {
+						id: number;
+						slug: string;
+						filename: string;
+						content_type: string;
+						size_bytes: number;
+						created_at: string;
+					} | null;
+					if (row) {
+						writeWorkingAttachmentIndex(
+							row.id,
+							row.slug,
+							row.filename,
+							row.content_type,
+							row.size_bytes,
+							row.created_at,
+							final_text,
+						);
+						refreshIndex();
+					}
+				}
+
+				const updated = db
+					.query('SELECT * FROM attachment_descriptions WHERE id = ?')
+					.get(desc.id) as AttachmentDescriptionRow;
+				return { ...updated, confirmed: updated.confirmed === 1 };
+			},
+			{
+				params: t.Object({ slug: t.String({ pattern: '^[a-z0-9-]+$' }), attId: t.String() }),
+				body: t.Object({ final_text: t.Optional(t.String()), confirmed: t.Optional(t.Boolean()) }),
+			},
 		);
 };

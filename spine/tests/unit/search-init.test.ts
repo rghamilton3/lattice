@@ -117,11 +117,11 @@ describe('initSearch', () => {
 });
 
 describe('search() before initSearch', () => {
-	it('returns [] when the store has not been initialized', async () => {
+	it('returns empty results when the store has not been initialized', async () => {
 		const { search, __resetSearchForTests } = await import('../../src/search');
 		__resetSearchForTests();
-		const results = await search('any query');
-		expect(results).toEqual([]);
+		const res = await search('any query');
+		expect(res).toEqual({ results: [], degraded: false });
 	});
 });
 
@@ -150,7 +150,7 @@ describe('refreshIndex serialization', () => {
 		db.close();
 	});
 
-	it('swallows update() errors and increments the failure counter', async () => {
+	it('counts consecutive update() failures and resets the streak on the next success', async () => {
 		const { initDb } = await import('../../src/db');
 		const { initSearch, refreshIndex, __resetSearchForTests, __getIndexFailuresForTests } =
 			await import('../../src/search');
@@ -158,17 +158,19 @@ describe('refreshIndex serialization', () => {
 		const db = initDb();
 		await initSearch(db);
 
-		const before = __getIndexFailuresForTests();
 		qmd.setUpdateError(new Error('transient'));
 		refreshIndex();
 		await new Promise((r) => setTimeout(r, 20));
-		expect(__getIndexFailuresForTests()).toBe(before + 1);
+		expect(__getIndexFailuresForTests()).toBe(1);
+		refreshIndex();
+		await new Promise((r) => setTimeout(r, 20));
+		expect(__getIndexFailuresForTests()).toBe(2);
 
 		qmd.setUpdateError(null);
 		refreshIndex();
 		await new Promise((r) => setTimeout(r, 20));
-		// Success path must NOT increment the counter.
-		expect(__getIndexFailuresForTests()).toBe(before + 1);
+		// A successful refresh clears the consecutive-failure streak.
+		expect(__getIndexFailuresForTests()).toBe(0);
 		db.close();
 	});
 });

@@ -37,7 +37,8 @@
 	flex: 1;
 	min-height: 0;
 }
-@media (max-width: 860px) {
+/* tablet breakpoint - mirrors --breakpoint-tablet (64rem) in layout.css */
+@media (width < 64rem) {
 	.search-body {
 		grid-template-columns: 1fr;
 	}

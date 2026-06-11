@@ -1,0 +1,25 @@
+{
+  "generated_agents": [
+    {
+      "name": "ss-db-migration-implementer",
+      "file": ".claude/agents/ss-db-migration-implementer.md",
+      "trigger": "database migration",
+      "task_type": "Database migration",
+      "generated_at": "2026-06-07T17:29:57-05:00"
+    },
+    {
+      "name": "ss-test-implementer",
+      "file": ".claude/agents/ss-test-implementer.md",
+      "trigger": "test",
+      "task_type": "Test suite",
+      "generated_at": "2026-06-07T17:29:57-05:00"
+    },
+    {
+      "name": "ss-typescript-module-implementer",
+      "file": ".claude/agents/ss-typescript-module-implementer.md",
+      "trigger": "typescript module",
+      "task_type": "TypeScript module",
+      "generated_at": "2026-06-07T17:29:57-05:00"
+    }
+  ]
+}

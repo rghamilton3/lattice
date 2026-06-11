@@ -102,7 +102,9 @@ Spine must fail closed on non-HTTPS requests (Caddy handles TLS, but defense in 
 - `GET /api/tasks/done` - completed tasks
 - `PATCH /api/tasks/:id/triage` - triage a capture into a task
 - `PATCH /api/tasks/:id/complete` - mark task complete
-- `GET /api/search?q=` - vector search via QMD
+- `GET /api/search?q=` - full-quality search via QMD (remote expand + retrieve + rerank); returns
+  `{ results, degraded }`, where `degraded: true` means the inference endpoint was down and results
+  are BM25 keyword-only
 - `GET /api/lateral/:id` - related items for a capture or file
 - `GET /api/working` - list working docs
 - `POST /api/working` - create working doc

@@ -30,11 +30,13 @@ agent.db
 # Per-tool agent caches at root (component-specific ignores live in their dirs)
 **/.serena/
 .claude/local-settings.json
+.claude/worktrees/
 
 # Speckit extension cache / generated artifacts
 .specify/extensions/.cache/
 .specify/extensions/.registry
 .specify/extensions/review/
+.specswarm/audit.jsonl
 
 **/node_modules/
 dist/

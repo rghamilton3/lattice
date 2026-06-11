@@ -22,6 +22,7 @@
 	import AttachmentRail from './AttachmentRail.svelte';
 	import { uploadAttachment, uploadWorkingAttachment, attachmentKeys } from '$lib/api/attachments';
 	import { logError } from '$lib/utils/logError';
+	import { clusterKeys, fetchDocCluster } from '$lib/api/clusters';
 
 	const {
 		paneIndex,
@@ -245,11 +246,36 @@
 	);
 	const annotations = $derived(annotationsQuery.data?.annotations ?? []);
 
+	// Cluster membership lookup — only for capture and working (local-file target_id resolution deferred)
+	const clusterDocKind = $derived<string | null>(
+		ref.kind === 'capture' ? 'capture' : ref.kind === 'working' ? 'working' : null
+	);
+	const clusterDocId = $derived<string | null>(
+		ref.kind === 'capture' ? String(ref.id) : ref.kind === 'working' ? ref.slug : null
+	);
+	const clusterQuery = createQuery(() => ({
+		queryKey:
+			clusterDocKind && clusterDocId
+				? clusterKeys.docCluster(clusterDocKind, clusterDocId)
+				: (['cluster-doc-noop'] as const),
+		queryFn: () =>
+			clusterDocKind && clusterDocId
+				? fetchDocCluster(clusterDocKind, clusterDocId)
+				: Promise.resolve({ clusterId: null }),
+		enabled: browser && wb.featureFlags.clusters && clusterDocKind !== null
+	}));
+
 	function openMoreLikeThis() {
 		wb.openInOther(paneIndex, {
 			kind: 'results',
 			source: { kind: 'similar', id: lateralRef.id, docKind: lateralRef.docKind }
 		});
+	}
+
+	function openCluster() {
+		const clusterId = clusterQuery.data?.clusterId;
+		if (clusterId == null) return;
+		wb.openInOther(paneIndex, { kind: 'cluster', clusterId });
 	}
 
 	function openMentions() {
@@ -375,6 +401,15 @@
 			>
 				<Icon name="sim" size={14} /> Similar
 			</button>
+			{#if wb.featureFlags.clusters && clusterDocKind !== null && clusterQuery.data?.clusterId != null}
+				<button
+					class="btn btn-ghost"
+					title="Browse this document's cluster — opens in the other pane"
+					onclick={openCluster}
+				>
+					<Icon name="sparkle" size={14} /> Cluster
+				</button>
+			{/if}
 			<button
 				class="btn btn-ghost"
 				title="Search for selected text across all corpora"

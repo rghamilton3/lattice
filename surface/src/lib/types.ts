@@ -253,12 +253,33 @@ export interface TrackFollowUp {
 	affirmative_label: string;
 }
 
+// States of the spine extraction pipeline (017); all but `pending` are terminal.
+// `dark` means the file yielded no text, so a machine description was (or will
+// be) generated for it.
+export type ExtractionStatus = 'pending' | 'done' | 'failed' | 'dark';
+
 export interface BaseAttachment {
 	id: number;
 	filename: string;
 	content_type: string;
 	size_bytes: number;
 	stored_path: string;
+	created_at: string;
+	extraction_status: ExtractionStatus;
+}
+
+// Head row of an attachment's description chain. `final_text` is what gets
+// indexed; once `confirmed`, automated re-runs never overwrite it. `supersedes`
+// means "superseded by" and is always null on API-returned head rows.
+export interface AttachmentDescription {
+	id: number;
+	attachment_kind: 'capture' | 'working';
+	attachment_id: number;
+	produced_text: string;
+	final_text: string;
+	confirmed: boolean;
+	model_id: string;
+	supersedes: number | null;
 	created_at: string;
 }
 
@@ -352,7 +373,32 @@ export type PaneContent =
 	| { kind: 'editor'; slug: string }
 	| { kind: 'tasks' }
 	| { kind: 'tracking' }
-	| { kind: 'tracking-detail'; trackId: number };
+	| { kind: 'tracking-detail'; trackId: number }
+	| { kind: 'cluster'; clusterId: number };
+
+// ── Resurfacing & Clustering ──────────────────────────────────────────────────
+
+export interface ResurfacedItem {
+	id: number;
+	target_kind: 'capture' | 'working' | 'local-file';
+	target_id: string;
+	reason: string | null;
+	snippet: string;
+	title: string;
+}
+
+export interface ClusterMember {
+	target_kind: 'capture' | 'working' | 'local-file';
+	target_id: string;
+	title: string;
+	snippet: string;
+}
+
+export interface ClusterDetail {
+	id: number;
+	run_at: string;
+	members: ClusterMember[];
+}
 
 // ── Workbench ─────────────────────────────────────────────────────────────────
 

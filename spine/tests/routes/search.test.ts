@@ -213,7 +213,7 @@ describe('GET /api/search', () => {
 		__resetSearchForTests();
 		const res = await app.app.handle(req('/api/search?q=hello'));
 		expect(res.status).toBe(200);
-		expect(await json(res)).toEqual({ results: [] });
+		expect(await json(res)).toEqual({ results: [], degraded: false });
 	});
 
 	it("drops hits that don't live in a known collection root", async () => {
@@ -244,22 +244,64 @@ describe('GET /api/search', () => {
 		expect((await json(res)).results).toEqual([]);
 	});
 
-	it('fast search passes lex+vec queries and rerank:false to the store', async () => {
-		await app.app.handle(req('/api/search?q=hello'));
+	it('runs the full-quality single-query path (expand + rerank) through the store', async () => {
+		const res = await app.app.handle(req('/api/search?q=hello'));
+		const body = await json(res);
+		expect(body.degraded).toBe(false);
 		const args = app.qmd.getLastSearchArgs() as any;
-		expect(args).toMatchObject({ queries: expect.any(Array), rerank: false });
+		// One adaptive path: a single query string QMD auto-expands and reranks remotely,
+		// not the old pre-split lex/vec structuredSearch with rerank disabled.
+		expect(args).toHaveProperty('query', 'hello');
+		expect(args).not.toHaveProperty('queries');
+		expect(args).not.toMatchObject({ rerank: false });
 	});
 
-	it('deep search passes a single query string to the store', async () => {
+	it('ignores a legacy deep param (single path only)', async () => {
 		await app.app.handle(req('/api/search?q=hello&deep=true'));
 		const args = app.qmd.getLastSearchArgs() as any;
 		expect(args).toHaveProperty('query', 'hello');
 		expect(args).not.toHaveProperty('queries');
 	});
 
-	it("?deep=false routes to fast search — only 'true' enables deep", async () => {
-		await app.app.handle(req('/api/search?q=hello&deep=false'));
-		const args = app.qmd.getLastSearchArgs() as any;
-		expect(args).toMatchObject({ rerank: false });
+	it('degrades to BM25 keyword-only with degraded=true when the endpoint is down', async () => {
+		app.qmd.setSearchError(new Error('Remote embedding circuit breaker is open'));
+		app.qmd.setLexHits([
+			{
+				filepath: 'qmd://working/my-note.md',
+				displayPath: 'working/my-note.md',
+				body: 'keyword body',
+				score: 0.42,
+			},
+		]);
+		const workingPath = join(dirname(app.env.dbPath), 'working', 'my-note.md');
+		writeFileSync(workingPath, '# My Note\n');
+
+		const res = await app.app.handle(req('/api/search?q=hello'));
+		expect(res.status).toBe(200);
+		const body = await json(res);
+		expect(body.degraded).toBe(true);
+		expect(body.results[0]).toMatchObject({ kind: 'working', slug: 'my-note', score: 0.42 });
+	});
+
+	it('surfaces a mapping/DB error instead of masking it as a degraded endpoint', async () => {
+		// Full-quality retrieval succeeds, but mapping the hit hits the DB. Only the
+		// retrieval call is guarded, so a DB fault must propagate as a real error and must
+		// NOT flip degraded (which would mislabel a bug as an inference outage).
+		app.qmd.setHits([
+			{
+				file: 'qmd://captures/42.md',
+				score: 0.9,
+				bestChunk: 'x',
+				body: 'x',
+				displayPath: 'captures/42.md',
+			},
+		]);
+		app.db.close(); // any prepared-statement use in mapResults() now throws
+
+		const res = await app.app.handle(req('/api/search?q=hello'));
+		expect(res.status).toBeGreaterThanOrEqual(500);
+
+		const { isSearchDegraded } = await import('../../src/search');
+		expect(isSearchDegraded()).toBe(false);
 	});
 });

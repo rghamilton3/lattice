@@ -120,7 +120,8 @@
 	grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
 	gap: 18px;
 }
-@media (max-width: 980px) {
+/* tablet breakpoint - mirrors --breakpoint-tablet (64rem) in layout.css */
+@media (width < 64rem) {
 	.home-grid {
 		grid-template-columns: 1fr;
 	}
@@ -274,6 +275,21 @@
 }
 .triage-label {
 	font-size: 12px;
+}
+
+/* Touch: inbox actions are revealed on :hover, which coarse pointers do not
+   fire, so keep them visible and give the buttons a 44px tap target. */
+@media (pointer: coarse) {
+	.inbox-actions {
+		opacity: 1;
+		max-height: none;
+		margin-top: 4px;
+		flex-wrap: wrap;
+	}
+	.triage-btn {
+		min-height: 44px;
+		padding-block: 8px;
+	}
 }
 .triage-kbd {
 	background: var(--bg);

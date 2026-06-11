@@ -3,6 +3,8 @@ import { initDb } from './db';
 import { initSearch } from './search';
 import { getAgentToken, getDatabasePath } from './config';
 import { buildApp } from './app';
+import { sweepPending } from './extraction-queue';
+import { startResurfaceTimer } from './resurface';
 
 const DB_PATH = resolve(getDatabasePath());
 const ATTACHMENTS_DIR = join(dirname(DB_PATH), 'attachments');
@@ -11,6 +13,8 @@ const SURFACE_BUILD = process.env.SURFACE_BUILD ?? join(import.meta.dir, '../../
 
 const db = initDb();
 await initSearch(db);
+await sweepPending(db, ATTACHMENTS_DIR);
+startResurfaceTimer(db);
 
 const agentToken = getAgentToken();
 if (!agentToken) {

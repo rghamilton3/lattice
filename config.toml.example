@@ -6,6 +6,29 @@ url           = "https://lattice.rghsoftware.com"
 agent_token   = "REPLACE_WITH_YOUR_BEARER_TOKEN"
 database_path = "/var/lib/lattice/lattice.db"
 
+# Optional: route QMD embedding/reranking/expansion to a remote OpenAI-compatible API.
+# Both embed_api_url and embed_api_model must be set together, or neither.
+# Rerank and expand settings are independent and optional (omit to keep local).
+# Env vars QMD_EMBED_API_URL / QMD_EMBED_API_MODEL etc. take precedence if set.
+#
+# The values below match `just inference` (scripts/inference-server.sh), which runs a
+# local llama.cpp stand-in for the endpoint. Swap the URLs for a real GPU host in prod.
+# [spine.qmd]
+# embed_api_url    = "http://127.0.0.1:8081/v1"
+# embed_api_model  = "bge-m3"
+# embed_api_key    = ""          # bearer token, if required
+# rerank_api_url   = "http://127.0.0.1:8082/v1"
+# rerank_api_model = "bge-reranker-v2-m3"
+# rerank_api_key   = ""
+# expand_api_url   = "http://127.0.0.1:8083/v1"
+# expand_api_model = "qwen2.5-3b-instruct"
+# expand_api_key   = ""
+#
+# When the inference endpoint is unreachable, spine stays up and degrades gracefully:
+# search serves BM25 keyword-only results (the surface shows a "Keyword-only" badge),
+# and new captures are indexed lexically immediately, then embedded automatically once
+# the endpoint recovers. See /api/status `search_degraded` and `needs_embedding`.
+
 [agent]
 # Optional: defaults to the system hostname.
 # machine_id = "personal-laptop"

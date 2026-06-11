@@ -483,7 +483,11 @@ async function openPreviewWorkingEditor(
 	await routePreviewDoc(page, content, options);
 
 	await page.goto('/?ref=working:preview-doc');
+	// The install-unsupported notice renders shortly after mount in this
+	// environment; a bare isVisible() check can race it and leave the notice
+	// intercepting toolbar clicks. Wait for it, then dismiss.
 	const dismissInstall = page.getByRole('button', { name: 'Dismiss' });
+	await dismissInstall.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {});
 	if (await dismissInstall.isVisible()) await dismissInstall.click();
 	await page.getByRole('button', { name: /Edit/i }).click();
 	await expect(page.getByLabel('Markdown editor for preview-doc.md')).toBeVisible();
@@ -491,6 +495,8 @@ async function openPreviewWorkingEditor(
 }
 
 async function openPreviewSplit(page: Page) {
+	const dismiss = page.getByRole('button', { name: 'Dismiss' });
+	if (await dismiss.isVisible()) await dismiss.click();
 	const splitButton = page.getByRole('button', { name: 'Open preview in split pane' });
 	await splitButton.click();
 	await expect(page.getByRole('region', { name: 'Pane 2' })).toBeVisible();
@@ -516,6 +522,14 @@ test.beforeEach(async ({ page }) => {
 		}
 		return route.fulfill({ status: 200, body: '[]' });
 	});
+	// Object-shaped endpoints (resurfacing/clusters are on by default) — a bare
+	// `[]` would be the wrong shape for these.
+	await page.route('**/api/resurfaced**', (route) =>
+		route.fulfill({ status: 200, body: JSON.stringify({ items: [] }) })
+	);
+	await page.route('**/api/cluster/**', (route) =>
+		route.fulfill({ status: 200, body: JSON.stringify({ clusterId: null }) })
+	);
 });
 
 test('home view renders the canonical landing greeting', async ({ page }) => {
@@ -739,6 +753,18 @@ test('global shortcut keys stay suppressed while focus is in CodeMirror', async 
 	await page.keyboard.press('c');
 
 	await expect(page.getByRole('dialog', { name: 'Quick capture' })).toBeHidden();
+});
+
+test('Tab key inserts indent in CodeMirror instead of tabbing out', async ({ page }) => {
+	await openWorkingEditor(page);
+
+	const editor = page.locator('.cm-content');
+	await editor.click();
+	await page.keyboard.press('Tab');
+
+	await expect(editor).toBeFocused();
+	const lineText = await page.locator('.cm-line').first().textContent();
+	expect(lineText!.length).toBeGreaterThan(lineText!.trimStart().length);
 });
 
 test('back from a home-opened document returns to Home', async ({ page }) => {
@@ -1116,9 +1142,13 @@ test('working doc editor keyboard navigation reaches controls and preview withou
 			const element = document.activeElement as HTMLElement | null;
 			return {
 				aria: element?.getAttribute('aria-label') ?? '',
-				text: element?.textContent ?? ''
+				text: element?.textContent ?? '',
+				inEditor: element?.closest('.cm-content') !== null
 			};
 		});
+		if (active.inEditor) {
+			await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+		}
 		reached.back ||= active.aria === 'Back to previous view';
 		reached.split ||= active.aria === 'Open preview in split pane';
 		reached.diagram ||= active.aria === 'Insert diagram';

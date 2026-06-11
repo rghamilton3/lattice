@@ -26,6 +26,8 @@
 				return 'tracking';
 			case 'tracking-detail':
 				return `tracking #${c.trackId}`;
+			case 'cluster':
+				return `cluster #${c.clusterId}`;
 		}
 	}
 </script>

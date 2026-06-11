@@ -7,6 +7,7 @@
 	import { workingKeys, fetchWorkingList } from '$lib/api/working';
 	import { fileKeys, fetchFileList } from '$lib/api/files';
 	import { searchKeys, fetchSearch } from '$lib/api/search';
+	import { statusKeys, fetchStatus } from '$lib/api/status';
 	import type { SearchResult } from '$lib/types';
 	import Icon from '$components/icons/Icon.svelte';
 	import Facets, { type Kind, type Sort } from '$components/search/Facets.svelte';
@@ -162,9 +163,22 @@
 		enabled: browser && debouncedQ.length > 0
 	}));
 
-	const deepState = $derived(wb.deepSearch?.q === debouncedQ ? wb.deepSearch : null);
-	const deepRunning = $derived(deepState?.status === 'running');
-	const deepDone = $derived(deepState?.status === 'done');
+	// Mirrors AppShell's 30s status poll (same query key, so TanStack dedupes the
+	// request) to read the inference breaker state.
+	const statusQuery = createQuery(() => ({
+		queryKey: statusKeys.all(),
+		queryFn: fetchStatus,
+		enabled: browser,
+		refetchInterval: 30_000,
+		retry: false
+	}));
+
+	// Keyword-only mode: driven by the breaker state from /api/status so the banner
+	// shows on arrival during an outage, OR by the last search response actually
+	// having been served from the BM25 fallback.
+	const degraded = $derived(
+		(searchQuery.data?.degraded ?? false) || (statusQuery.data?.search_degraded ?? false)
+	);
 
 	const defaultKinds: Kind[] = ['capture', 'local-file', 'working'];
 	const kindFilter = new SvelteSet<Kind>(defaultKinds);
@@ -197,10 +211,7 @@
 		for (const k of defaultKinds) kindFilter.add(k);
 	}
 
-	const deepResults = $derived(deepState?.status === 'done' ? deepState.results : []);
-	const rawResults = $derived<SearchResult[]>(
-		deepDone ? deepResults : (searchQuery.data?.results ?? [])
-	);
+	const rawResults = $derived<SearchResult[]>(searchQuery.data?.results ?? []);
 
 	const filtered = $derived<SearchResult[]>(
 		rawResults.filter((r) => kindFilter.has(r.kind as Kind))
@@ -265,6 +276,15 @@
 			<!-- Library default state: all items, filtered by kind -->
 			<div class="lib-scroll">
 				<div class="lib-container">
+					{#if degraded}
+						<div class="keyword-only-banner" role="status">
+							<span class="keyword-only-badge">Keyword-only</span>
+							<span class="faint"
+								>Inference endpoint is unavailable, so searches will be keyword matches only (no
+								semantic ranking) until it recovers.</span
+							>
+						</div>
+					{/if}
 					{#if libraryIsLoading}
 						<div class="lib-empty soft" role="status">Loading library items...</div>
 					{:else if libraryIsError}
@@ -318,6 +338,15 @@
 		{:else}
 			<!-- Search narrowing state -->
 			<section class="results">
+				{#if degraded}
+					<div class="keyword-only-banner" role="status">
+						<span class="keyword-only-badge">Keyword-only</span>
+						<span class="faint"
+							>Inference endpoint is unavailable, so results are keyword matches only (no semantic
+							ranking). They will improve once it recovers.</span
+						>
+					</div>
+				{/if}
 				{#if searchQuery.isLoading}
 					<div class="results-empty soft" role="status">Searching indexed knowledge...</div>
 				{:else if searchQuery.isError}
@@ -325,22 +354,7 @@
 						Couldn't load search results: {searchQuery.error?.message}
 					</div>
 				{:else if rawResults.length === 0}
-					<div class="results-empty soft">
-						No results for "{debouncedQ}".
-						{#if !deepState}
-							<button
-								class="btn btn-ghost"
-								style="margin-left:8px"
-								onclick={() => wb.runDeepSearch(debouncedQ)}
-							>
-								Try deep search?
-							</button>
-						{:else if deepRunning}
-							<span class="faint" style="margin-left:8px; font-size:12px">
-								Thinking… (safe to navigate away)
-							</span>
-						{/if}
-					</div>
+					<div class="results-empty soft">No results for "{debouncedQ}".</div>
 				{:else if displayed.length === 0}
 					<div class="results-empty soft">
 						No matches in the kinds you have selected.
@@ -353,21 +367,8 @@
 						<ResultRow {paneIndex} {result} />
 					{/each}
 					<div class="results-foot faint" style="font-size:12px">
-						{deepDone
-							? 'Deep search — LLM expanded and reranked.'
-							: 'Most recent first. "similar / mentions / nearby" live inside each opened result.'}
+						Most recent first. "similar / mentions / nearby" live inside each opened result.
 					</div>
-					{#if !deepState}
-						<div style="padding: 12px 0 4px">
-							<button class="btn btn-ghost" onclick={() => wb.runDeepSearch(debouncedQ)}>
-								Deep search (LLM expand + rerank — slow)
-							</button>
-						</div>
-					{:else if deepRunning}
-						<div class="faint" style="font-size:12px; padding: 12px 0 4px">
-							Thinking… (safe to navigate away)
-						</div>
-					{/if}
 				{/if}
 			</section>
 		{/if}
@@ -459,5 +460,27 @@
 		border-radius: 3px;
 		padding: 1px 5px;
 		font-size: 11px;
+	}
+
+	.keyword-only-banner {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 8px 10px;
+		margin-bottom: 10px;
+		border: 1px solid color-mix(in oklch, var(--c-alarm) 40%, transparent);
+		border-radius: 6px;
+		background: color-mix(in oklch, var(--c-alarm) 10%, transparent);
+		font-size: 12px;
+	}
+
+	.keyword-only-badge {
+		flex: none;
+		background: var(--c-alarm);
+		color: white;
+		border-radius: 3px;
+		padding: 1px 6px;
+		font-size: 11px;
+		font-weight: 600;
 	}
 </style>

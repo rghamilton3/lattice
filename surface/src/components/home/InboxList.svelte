@@ -23,6 +23,15 @@
 	const { items, now, onOpenCapture, onOpenArchive, onTriage, onArchiveAction }: Props = $props();
 
 	let active = $state(0);
+	const visibleItems = $derived(items.slice(0, 5));
+
+	// Keep active index in bounds when items are removed after a triage.
+	$effect(() => {
+		if (active >= visibleItems.length && visibleItems.length > 0) {
+			active = visibleItems.length - 1;
+		}
+	});
+
 	const triageActions = new Set<InboxAction>(['keep', 'archive', 'promote', 'task', 'skip']);
 	const archiveActions = new Set<InboxAction>([
 		'keep',
@@ -63,7 +72,7 @@
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
-		const item = items.slice(0, 5)[active];
+		const item = visibleItems[active];
 		if (!item) return;
 		const target = event.target as HTMLElement | null;
 		if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
@@ -89,7 +98,7 @@
 	</div>
 {:else}
 	<div class="inbox">
-		{#each items.slice(0, 5) as item, i (item.id)}
+		{#each visibleItems as item, i (item.id)}
 			<div
 				class="inbox-row"
 				aria-label={`Open ${item.item_type}: ${item.title}`}

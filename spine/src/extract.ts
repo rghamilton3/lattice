@@ -34,7 +34,10 @@ const SUBPROCESS_TYPES: Record<string, { cmd: string; args: (path: string) => st
 		cmd: 'pandoc',
 		args: (p) => ['--from=xlsx', '--to=plain', p],
 	},
-	'application/msword': { cmd: 'pandoc', args: (p) => ['--from=doc', '--to=plain', p] },
+	// Legacy .doc (application/msword) is deliberately absent: pandoc has no
+	// doc reader, so such attachments complete with empty text instead of
+	// failing extraction on every attempt. Keep in sync with
+	// agent/src/extract.rs subprocess_spec().
 };
 
 const MAX_TEXT_CHARS = 100_000;

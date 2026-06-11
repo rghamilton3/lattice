@@ -1,38 +1,211 @@
 use anyhow::{Result, bail};
+use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
+use tracing::debug;
+
+/// Generation of the extraction capability set.
+/// IMPORTANT: bump this whenever the set of extractable types grows (a new
+/// MIME type in `subprocess_spec`, or a broader fallback in scan.rs), so
+/// files cached as skipped under an older generation get retried instead of
+/// staying skipped forever.
+pub const EXTRACTOR_GENERATION: i64 = 1;
+
+/// Ceiling on extracted text, mirroring spine/src/extract.ts MAX_TEXT_CHARS.
+const MAX_TEXT_CHARS: usize = 100_000;
 
 /// Extract text from a file. Returns `None` if the type is unsupported.
-/// Returns `Err` only on I/O or extraction failure for supported types.
-pub fn extract_text(path: &Path, mime: &str) -> Result<Option<String>> {
-    match mime {
-        m if m.starts_with("text/") => {
-            let text = std::fs::read_to_string(path)?;
-            Ok(Some(text))
-        }
-        "application/pdf" => {
-            let text = extract_pdf(path)?;
-            Ok(Some(text))
-        }
-        _ => Ok(None),
+/// Returns `Err` only on decode, I/O, or extraction failure for supported
+/// types. `content` is the file's bytes, already read by the caller for
+/// hashing: text types decode from it directly instead of re-reading the
+/// file from disk.
+pub fn extract_text(path: &Path, mime: &str, content: &[u8]) -> Result<Option<String>> {
+    if mime.starts_with("text/") {
+        let text = std::str::from_utf8(content)?.to_owned();
+        return Ok(Some(truncate_text(text)));
+    }
+    match subprocess_spec(mime, path) {
+        Some((cmd, args)) => Ok(Some(truncate_text(run_subprocess(cmd, args)?))),
+        None => Ok(None),
     }
 }
 
-fn extract_pdf(path: &Path) -> Result<String> {
-    let out = Command::new("pdftotext")
-        .arg(path)
-        .arg("-") // write to stdout
-        .output();
+/// Truncate to MAX_TEXT_CHARS characters, cutting at the last space before
+/// the limit. Approximate port of spine/src/extract.ts truncate(): this
+/// counts Unicode scalar values where spine counts UTF-16 code units, so
+/// cut points can differ slightly on non-BMP content.
+pub fn truncate_text(text: String) -> String {
+    let limit_byte = match text.char_indices().nth(MAX_TEXT_CHARS) {
+        Some((idx, _)) => idx,
+        None => return text,
+    };
+    let cut = match text[..limit_byte].rfind(' ') {
+        Some(i) if i > 0 => i,
+        _ => limit_byte,
+    };
+    debug!(
+        dropped_bytes = text.len() - cut,
+        "extracted text exceeds {MAX_TEXT_CHARS} chars — truncating"
+    );
+    text[..cut].to_string()
+}
+
+/// Tool + args for MIME types extracted via subprocess. Mirrors
+/// SUBPROCESS_TYPES in spine/src/extract.ts so agent and spine produce
+/// equivalent text for the same file. Legacy .doc (application/msword) is
+/// deliberately absent: pandoc has no doc reader, so such files take the
+/// UTF-8 fallback path and binary ones are skipped visibly instead of
+/// failing on every pass.
+fn subprocess_spec(mime: &str, path: &Path) -> Option<(&'static str, Vec<OsString>)> {
+    let p = path.as_os_str().to_os_string();
+    match mime {
+        "application/pdf" => Some(("pdftotext", vec![p, "-".into()])),
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => {
+            Some(("pandoc", vec!["--from=docx".into(), "--to=plain".into(), p]))
+        }
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation" => {
+            Some(("pandoc", vec!["--from=pptx".into(), "--to=plain".into(), p]))
+        }
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => {
+            Some(("pandoc", vec!["--from=xlsx".into(), "--to=plain".into(), p]))
+        }
+        _ => None,
+    }
+}
+
+fn install_hint(cmd: &str) -> &'static str {
+    match cmd {
+        "pdftotext" => "install poppler-utils",
+        "pandoc" => "install pandoc",
+        _ => "install it",
+    }
+}
+
+fn run_subprocess(cmd: &'static str, args: Vec<OsString>) -> Result<String> {
+    let out = Command::new(cmd).args(&args).output();
 
     match out {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            bail!("pdftotext not found — install poppler-utils");
+            bail!("{cmd} not found — {}", install_hint(cmd));
         }
-        Err(e) => bail!("pdftotext failed: {e}"),
+        Err(e) => bail!("{cmd} failed: {e}"),
         Ok(output) if !output.status.success() => {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!("pdftotext exited non-zero: {stderr}");
+            bail!("{cmd} exited non-zero: {stderr}");
         }
         Ok(output) => Ok(String::from_utf8_lossy(&output.stdout).into_owned()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DOCX: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    const PPTX: &str = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    const XLSX: &str = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+    fn spec_for(mime: &str) -> (&'static str, Vec<String>) {
+        let (cmd, args) = subprocess_spec(mime, Path::new("/tmp/f")).expect("handler expected");
+        (
+            cmd,
+            args.into_iter()
+                .map(|a| a.to_string_lossy().into_owned())
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn pdf_dispatches_to_pdftotext_stdout() {
+        let (cmd, args) = spec_for("application/pdf");
+        assert_eq!(cmd, "pdftotext");
+        assert_eq!(args, vec!["/tmp/f", "-"]);
+    }
+
+    #[test]
+    fn office_types_dispatch_to_pandoc_with_matching_from() {
+        for (mime, from) in [
+            (DOCX, "--from=docx"),
+            (PPTX, "--from=pptx"),
+            (XLSX, "--from=xlsx"),
+        ] {
+            let (cmd, args) = spec_for(mime);
+            assert_eq!(cmd, "pandoc", "{mime}");
+            assert_eq!(args, vec![from, "--to=plain", "/tmp/f"], "{mime}");
+        }
+    }
+
+    #[test]
+    fn unsupported_mime_has_no_subprocess_handler() {
+        // application/msword is intentionally unsupported: pandoc cannot
+        // read legacy .doc files.
+        for mime in [
+            "application/msword",
+            "application/vnd.lotus-organizer",
+            "application/octet-stream",
+            "application/zip",
+        ] {
+            assert!(
+                subprocess_spec(mime, Path::new("/tmp/f")).is_none(),
+                "{mime}"
+            );
+        }
+    }
+
+    #[test]
+    fn extract_text_returns_none_for_unsupported_mime() {
+        let result = extract_text(Path::new("/nonexistent"), "application/zip", b"").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn extract_text_decodes_text_mime_from_passed_bytes() {
+        // The path does not exist: text types must decode from `content`
+        // rather than re-reading the file from disk.
+        let result =
+            extract_text(Path::new("/nonexistent"), "text/markdown", b"# heading").unwrap();
+        assert_eq!(result.as_deref(), Some("# heading"));
+    }
+
+    #[test]
+    fn extract_text_errors_on_non_utf8_text_mime() {
+        let result = extract_text(Path::new("/nonexistent"), "text/plain", &[0xff, 0xfe]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn truncate_passes_through_under_limit() {
+        let text = "short text".to_string();
+        assert_eq!(truncate_text(text.clone()), text);
+    }
+
+    #[test]
+    fn truncate_passes_through_at_exact_limit() {
+        let text = "a".repeat(MAX_TEXT_CHARS);
+        assert_eq!(truncate_text(text.clone()).len(), MAX_TEXT_CHARS);
+    }
+
+    #[test]
+    fn truncate_cuts_at_last_space_before_limit() {
+        let mut text = "word ".repeat(MAX_TEXT_CHARS / 5);
+        text.push_str(&"x".repeat(10));
+        let out = truncate_text(text);
+        assert!(out.chars().count() <= MAX_TEXT_CHARS);
+        assert!(!out.ends_with(' '));
+        assert!(out.ends_with("word"));
+    }
+
+    #[test]
+    fn truncate_hard_cuts_when_no_space_exists() {
+        let text = "x".repeat(MAX_TEXT_CHARS + 50);
+        let out = truncate_text(text);
+        assert_eq!(out.chars().count(), MAX_TEXT_CHARS);
+    }
+
+    #[test]
+    fn truncate_respects_char_boundaries() {
+        let text = "é".repeat(MAX_TEXT_CHARS + 10);
+        let out = truncate_text(text);
+        assert_eq!(out.chars().count(), MAX_TEXT_CHARS);
     }
 }

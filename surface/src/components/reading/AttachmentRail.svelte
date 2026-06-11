@@ -9,9 +9,15 @@
 		attachmentRawUrl,
 		fetchWorkingAttachments,
 		deleteWorkingAttachment,
-		workingAttachmentRawUrl
+		workingAttachmentRawUrl,
+		fetchAttachmentDescription,
+		updateAttachmentDescription,
+		fetchWorkingAttachmentDescription,
+		updateWorkingAttachmentDescription,
+		type DescriptionPatch
 	} from '$lib/api/attachments';
-	import type { BaseAttachment } from '$lib/types';
+	import { ApiError } from '$lib/api/client';
+	import type { AttachmentDescription, BaseAttachment } from '$lib/types';
 	import { logError } from '$lib/utils/logError';
 	import Icon from '$components/icons/Icon.svelte';
 
@@ -83,6 +89,94 @@
 		return props.kind === 'capture'
 			? attachmentRawUrl(props.captureId, id)
 			: workingAttachmentRawUrl(props.slug, id);
+	}
+
+	// ── Machine descriptions (dark attachments) ─────────────────────────────────
+
+	let descOpenId = $state<number | null>(null);
+	let draft = $state('');
+	let draftFor = $state<number | null>(null);
+	let saving = $state(false);
+	let saveError = $state('');
+
+	function descKey(attachmentId: number) {
+		return props.kind === 'capture'
+			? attachmentKeys.captureDescription(props.captureId, attachmentId)
+			: attachmentKeys.workingDescription(props.slug, attachmentId);
+	}
+
+	const descQuery = createQuery<AttachmentDescription>(() => ({
+		queryKey: descKey(descOpenId ?? -1),
+		queryFn: () =>
+			props.kind === 'capture'
+				? fetchAttachmentDescription(props.captureId, descOpenId!)
+				: fetchWorkingAttachmentDescription(props.slug, descOpenId!),
+		enabled: browser && descOpenId !== null,
+		retry: false
+	}));
+
+	// A 404 typically means extraction marked the attachment dark but the
+	// description has not been generated yet (it can also mean the attachment
+	// was deleted concurrently) — expected state, not an error.
+	const descMissing = $derived(
+		descQuery.isError && descQuery.error instanceof ApiError && descQuery.error.status === 404
+	);
+
+	$effect(() => {
+		// Seed the editor once per opened attachment; don't clobber in-progress edits.
+		const data = descQuery.data;
+		if (data && descOpenId !== null && draftFor !== descOpenId) {
+			draft = data.final_text;
+			draftFor = descOpenId;
+		}
+	});
+
+	function toggleDescription(attachmentId: number) {
+		if (descOpenId === attachmentId) {
+			descOpenId = null;
+		} else {
+			descOpenId = attachmentId;
+		}
+		draftFor = null;
+		saveError = '';
+	}
+
+	async function saveDescription(att: BaseAttachment) {
+		const current = descQuery.data;
+		if (!current || descOpenId === null) return;
+		const patch: DescriptionPatch = {};
+		if (draft !== current.final_text) patch.final_text = draft;
+		// A user edit (or explicit save) confirms the description so automated
+		// re-description passes never overwrite it (017 semantics).
+		if (!current.confirmed) patch.confirmed = true;
+		if (Object.keys(patch).length === 0) return;
+		saving = true;
+		saveError = '';
+		try {
+			const updated =
+				props.kind === 'capture'
+					? await updateAttachmentDescription(props.captureId, att.id, patch)
+					: await updateWorkingAttachmentDescription(props.slug, att.id, patch);
+			qc.setQueryData(descKey(att.id), updated);
+			status = `Saved description for ${att.filename}`;
+		} catch (err) {
+			logError('saveAttachmentDescription', err);
+			// Spine's 409/400 bodies are actionable ("Attachment is not dark" after a
+			// re-extraction race) — surface them instead of a generic failure.
+			saveError = serverErrorMessage(err) ?? 'Failed to save description.';
+		} finally {
+			saving = false;
+		}
+	}
+
+	function serverErrorMessage(err: unknown): string | null {
+		if (!(err instanceof ApiError) || (err.status !== 400 && err.status !== 409)) return null;
+		try {
+			const parsed = JSON.parse(err.body) as { error?: unknown };
+			return typeof parsed.error === 'string' ? parsed.error : null;
+		} catch {
+			return null;
+		}
 	}
 
 	async function remove(id: number, filename: string) {
@@ -169,25 +263,95 @@
 			{:else}
 				<div class="att-list" aria-label="Attachment files">
 					{#each query.data ?? [] as att (att.id)}
-						<div class="att-item">
-							<a
-								href={rawUrl(att.id)}
-								target="_blank"
-								rel="external noopener noreferrer"
-								class="att-name mono"
-								title={att.filename}
-							>
-								{att.filename}
-							</a>
-							<span class="att-size faint">{formatBytes(att.size_bytes)}</span>
-							<button
-								class="btn btn-ghost att-del"
-								onclick={() => remove(att.id, att.filename)}
-								disabled={deletingId !== null}
-								aria-label="Delete {att.filename}"
-							>
-								{deletingId === att.id ? '…' : '×'}
-							</button>
+						<div class="att-item-wrap">
+							<div class="att-item">
+								<a
+									href={rawUrl(att.id)}
+									target="_blank"
+									rel="external noopener noreferrer"
+									class="att-name mono"
+									title={att.filename}
+								>
+									{att.filename}
+								</a>
+								{#if att.extraction_status === 'pending'}
+									<span class="att-extract att-extract--pending" title="Text extraction in progress"
+										>extracting…</span
+									>
+								{:else if att.extraction_status === 'failed'}
+									<span class="att-extract att-extract--failed" title="Text extraction failed"
+										>failed</span
+									>
+								{/if}
+								<span class="att-size faint">{formatBytes(att.size_bytes)}</span>
+								{#if att.extraction_status === 'dark'}
+									<button
+										class="btn btn-ghost att-desc-toggle"
+										class:att-desc-toggle--open={descOpenId === att.id}
+										onclick={() => toggleDescription(att.id)}
+										aria-expanded={descOpenId === att.id}
+										aria-label="Toggle description for {att.filename}"
+										title="Machine description"
+									>
+										<Icon name="sparkle" size={12} />
+									</button>
+								{/if}
+								<button
+									class="btn btn-ghost att-del"
+									onclick={() => remove(att.id, att.filename)}
+									disabled={deletingId !== null}
+									aria-label="Delete {att.filename}"
+								>
+									{deletingId === att.id ? '…' : '×'}
+								</button>
+							</div>
+							{#if descOpenId === att.id}
+								<div class="att-desc">
+									{#if descQuery.isLoading}
+										<p class="att-message" role="status">Loading description…</p>
+									{:else if descMissing}
+										<p class="att-message" role="status">
+											No description yet — it will appear once generated.
+										</p>
+									{:else if descQuery.isError}
+										<p class="att-message att-message--error" role="alert">
+											Failed to load description.
+										</p>
+									{:else if descQuery.data}
+										<textarea
+											class="att-desc-text mono"
+											rows="5"
+											bind:value={draft}
+											aria-label="Description for {att.filename}"
+										></textarea>
+										<div class="att-desc-actions">
+											{#if descQuery.data.confirmed}
+												<span class="att-confirmed" title="Confirmed — re-runs will not overwrite">
+													<Icon name="check" size={11} />confirmed
+												</span>
+											{/if}
+											<button
+												class="btn btn-ghost btn-mini"
+												onclick={() => saveDescription(att)}
+												disabled={saving ||
+													draft.trim().length === 0 ||
+													(draft === descQuery.data.final_text && descQuery.data.confirmed)}
+											>
+												{saving
+													? 'Saving…'
+													: descQuery.data.confirmed
+														? 'Save'
+														: draft === descQuery.data.final_text
+															? 'Confirm'
+															: 'Save & confirm'}
+											</button>
+										</div>
+										{#if saveError}
+											<p class="att-message att-message--error" role="alert">{saveError}</p>
+										{/if}
+									{/if}
+								</div>
+							{/if}
 						</div>
 					{/each}
 				</div>
@@ -262,11 +426,77 @@
 	.att-message--error {
 		color: var(--c-alarm);
 	}
+	.att-item-wrap {
+		display: flex;
+		flex-direction: column;
+	}
 	.att-item {
 		display: flex;
 		align-items: center;
 		gap: 4px;
 		font-size: 12px;
+	}
+	.att-extract {
+		font-size: 10px;
+		white-space: nowrap;
+		border-radius: 3px;
+		padding: 0 4px;
+		flex-shrink: 0;
+	}
+	.att-extract--pending {
+		color: var(--text-mute);
+		background: var(--bg-high);
+	}
+	.att-extract--failed {
+		color: var(--c-alarm);
+		background: color-mix(in oklch, var(--c-alarm) 12%, transparent);
+	}
+	.att-desc-toggle {
+		padding: 1px 3px;
+		opacity: 0.5;
+		flex-shrink: 0;
+	}
+	.att-desc-toggle:hover,
+	.att-desc-toggle--open {
+		opacity: 1;
+	}
+	.att-desc {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		margin: 2px 0 6px;
+		padding: 6px;
+		border: 1px solid var(--line);
+		border-radius: 4px;
+		background: var(--bg);
+	}
+	.att-desc .att-message {
+		padding: 0;
+	}
+	.att-desc-text {
+		width: 100%;
+		resize: vertical;
+		font-size: 11px;
+		line-height: 1.4;
+		color: var(--text);
+		background: var(--bg-raised);
+		border: 1px solid var(--line);
+		border-radius: 3px;
+		padding: 4px 6px;
+	}
+	.att-desc-actions {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 6px;
+	}
+	.att-confirmed {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		font-size: 10px;
+		color: var(--c-ok);
+		margin-right: auto;
 	}
 	.att-name {
 		flex: 1;

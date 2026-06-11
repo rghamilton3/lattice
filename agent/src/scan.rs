@@ -1,4 +1,4 @@
-use crate::cache::{Cache, FileState, OUTCOME_SKIPPED};
+use crate::cache::{Cache, FileState, Outcome};
 use crate::config::{Config, WatchEntry};
 use crate::extract;
 use crate::status::{ScanState, SharedStatus};
@@ -254,23 +254,7 @@ async fn process_file(
         && cached.hash == hash
         && !should_retry_skip(&cached)
     {
-        if cached.outcome == OUTCOME_SKIPPED {
-            cache.upsert_skipped(
-                &path_str,
-                mtime_secs,
-                size_bytes as i64,
-                &hash,
-                cached.extractor_gen,
-            );
-        } else {
-            cache.upsert(
-                &path_str,
-                mtime_secs,
-                size_bytes as i64,
-                &hash,
-                cached.extractor_gen,
-            );
-        }
+        cache.refresh(&path_str, mtime_secs, size_bytes as i64, &cached);
         return Ok(ProcessResult::Skipped);
     }
 
@@ -303,6 +287,17 @@ async fn process_file(
             }
         },
     };
+
+    // Extraction can succeed with no text (e.g. an image-only PDF). Index it
+    // anyway so the file is at least findable by name, but say so: the file
+    // would otherwise be invisible to content search with no explanation.
+    if text.trim().is_empty() {
+        warn!(
+            path = %path.display(),
+            mime = %mime,
+            "extraction produced no text — indexing with empty content"
+        );
+    }
 
     let modified_at = chrono_iso(mtime_secs);
 
@@ -357,7 +352,7 @@ async fn process_file(
 /// A cached skip from an older extractor generation must be reprocessed:
 /// the supported extraction set has grown since the file was skipped.
 fn should_retry_skip(cached: &FileState) -> bool {
-    cached.outcome == OUTCOME_SKIPPED && cached.extractor_gen < extract::EXTRACTOR_GENERATION
+    cached.outcome == Outcome::Skipped && cached.extractor_gen < extract::EXTRACTOR_GENERATION
 }
 
 /// Reconciliation fallback for pattern-matched files with no extractor:
@@ -377,23 +372,22 @@ fn is_hidden(entry: &walkdir::DirEntry) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cache::OUTCOME_INDEXED;
 
-    fn state(outcome: &str, extractor_gen: i64) -> FileState {
+    fn state(outcome: Outcome, extractor_gen: i64) -> FileState {
         FileState {
             mtime_secs: 1,
             size_bytes: 2,
             hash: "h".to_string(),
-            outcome: outcome.to_string(),
+            outcome,
             extractor_gen,
         }
     }
 
     #[test]
     fn indexed_rows_never_retry() {
-        assert!(!should_retry_skip(&state(OUTCOME_INDEXED, 0)));
+        assert!(!should_retry_skip(&state(Outcome::Indexed, 0)));
         assert!(!should_retry_skip(&state(
-            OUTCOME_INDEXED,
+            Outcome::Indexed,
             extract::EXTRACTOR_GENERATION
         )));
     }
@@ -401,7 +395,7 @@ mod tests {
     #[test]
     fn skipped_rows_from_older_generation_retry() {
         assert!(should_retry_skip(&state(
-            OUTCOME_SKIPPED,
+            Outcome::Skipped,
             extract::EXTRACTOR_GENERATION - 1
         )));
     }
@@ -409,7 +403,7 @@ mod tests {
     #[test]
     fn skipped_rows_from_current_generation_do_not_retry() {
         assert!(!should_retry_skip(&state(
-            OUTCOME_SKIPPED,
+            Outcome::Skipped,
             extract::EXTRACTOR_GENERATION
         )));
     }

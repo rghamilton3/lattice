@@ -3,13 +3,41 @@ use rusqlite::{Connection, params};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use tracing::warn;
 
-/// Cache row outcome: the file's text was extracted and sent to the spine.
-pub const OUTCOME_INDEXED: &str = "indexed";
-/// Cache row outcome: the file matched a watch pattern but could not be
-/// extracted (no handler and not UTF-8 text); remembered to avoid re-reading
-/// and re-warning every pass.
-pub const OUTCOME_SKIPPED: &str = "skipped";
+/// Outcome of the last processing attempt for a cached file.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Outcome {
+    /// The file's text was extracted and sent to the spine.
+    Indexed,
+    /// The file matched a watch pattern but could not be extracted (no
+    /// handler and not UTF-8 text); remembered to avoid re-reading and
+    /// re-warning every pass.
+    Skipped,
+}
+
+impl Outcome {
+    fn as_str(self) -> &'static str {
+        match self {
+            Outcome::Indexed => "indexed",
+            Outcome::Skipped => "skipped",
+        }
+    }
+
+    /// Rows only ever contain values written by `as_str`, but a corrupt or
+    /// hand-edited row must not wedge the scanner: anything unrecognized is
+    /// treated as indexed, which at worst re-processes the file on change.
+    fn parse(s: &str) -> Outcome {
+        match s {
+            "indexed" => Outcome::Indexed,
+            "skipped" => Outcome::Skipped,
+            other => {
+                warn!(outcome = %other, "unknown cache outcome value — treating as indexed");
+                Outcome::Indexed
+            }
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct Cache(Arc<Mutex<Connection>>);
@@ -18,14 +46,14 @@ pub struct FileState {
     pub mtime_secs: i64,
     pub size_bytes: i64,
     pub hash: String,
-    pub outcome: String,
+    pub outcome: Outcome,
     pub extractor_gen: i64,
 }
 
 impl Cache {
     pub fn get(&self, path: &str) -> Option<FileState> {
         let conn = self.0.lock().unwrap();
-        conn.query_row(
+        let row = conn.query_row(
             "SELECT mtime_secs, size_bytes, hash, outcome, extractor_gen
              FROM file_cache WHERE path = ?1",
             params![path],
@@ -34,12 +62,19 @@ impl Cache {
                     mtime_secs: row.get(0)?,
                     size_bytes: row.get(1)?,
                     hash: row.get(2)?,
-                    outcome: row.get(3)?,
+                    outcome: Outcome::parse(&row.get::<_, String>(3)?),
                     extractor_gen: row.get(4)?,
                 })
             },
-        )
-        .ok()
+        );
+        match row {
+            Ok(state) => Some(state),
+            Err(rusqlite::Error::QueryReturnedNoRows) => None,
+            Err(e) => {
+                warn!(path, error = %e, "cache read failed — treating file as uncached");
+                None
+            }
+        }
     }
 
     pub fn upsert(
@@ -55,7 +90,7 @@ impl Cache {
             mtime_secs,
             size_bytes,
             hash,
-            OUTCOME_INDEXED,
+            Outcome::Indexed,
             extractor_gen,
         );
     }
@@ -73,8 +108,21 @@ impl Cache {
             mtime_secs,
             size_bytes,
             hash,
-            OUTCOME_SKIPPED,
+            Outcome::Skipped,
             extractor_gen,
+        );
+    }
+
+    /// Refresh a row's metadata (mtime/size/last_sent_at) for a file whose
+    /// content is unchanged, preserving its outcome and extractor generation.
+    pub fn refresh(&self, path: &str, mtime_secs: i64, size_bytes: i64, cached: &FileState) {
+        self.write(
+            path,
+            mtime_secs,
+            size_bytes,
+            &cached.hash,
+            cached.outcome,
+            cached.extractor_gen,
         );
     }
 
@@ -84,11 +132,11 @@ impl Cache {
         mtime_secs: i64,
         size_bytes: i64,
         hash: &str,
-        outcome: &str,
+        outcome: Outcome,
         extractor_gen: i64,
     ) {
         let conn = self.0.lock().unwrap();
-        conn.execute(
+        let result = conn.execute(
             "INSERT INTO file_cache (path, mtime_secs, size_bytes, hash, last_sent_at, outcome, extractor_gen)
              VALUES (?1, ?2, ?3, ?4, datetime('now'), ?5, ?6)
              ON CONFLICT(path) DO UPDATE SET
@@ -98,9 +146,11 @@ impl Cache {
                last_sent_at  = excluded.last_sent_at,
                outcome       = excluded.outcome,
                extractor_gen = excluded.extractor_gen",
-            params![path, mtime_secs, size_bytes, hash, outcome, extractor_gen],
-        )
-        .ok();
+            params![path, mtime_secs, size_bytes, hash, outcome.as_str(), extractor_gen],
+        );
+        if let Err(e) = result {
+            warn!(path, error = %e, "cache write failed — file will be re-processed next pass");
+        }
     }
 
     pub fn is_known_path(&self, path: &str) -> bool {
@@ -115,16 +165,20 @@ impl Cache {
 
     pub fn record_path(&self, path: &str) {
         let conn = self.0.lock().unwrap();
-        conn.execute(
+        let result = conn.execute(
             "INSERT OR IGNORE INTO watch_paths (path, first_seen_at) VALUES (?1, datetime('now'))",
             params![path],
-        )
-        .ok();
+        );
+        if let Err(e) = result {
+            warn!(path, error = %e, "failed to record watch path — full index will repeat next pass");
+        }
     }
 
     pub fn clear_known_paths(&self) {
         let conn = self.0.lock().unwrap();
-        conn.execute("DELETE FROM watch_paths", []).ok();
+        if let Err(e) = conn.execute("DELETE FROM watch_paths", []) {
+            warn!(error = %e, "failed to clear known watch paths");
+        }
     }
 }
 
@@ -160,16 +214,29 @@ fn init(conn: Connection) -> Result<Cache> {
     .context("cache schema init failed")?;
 
     // Additive migrations for databases created before outcome tracking.
-    // "duplicate column name" on up-to-date databases is expected; the
-    // defaults are correct for pre-existing rows (all were indexed).
-    let _ = conn.execute_batch(
+    // The defaults are correct for pre-existing rows (all were indexed).
+    add_column(
+        &conn,
         "ALTER TABLE file_cache ADD COLUMN outcome TEXT NOT NULL DEFAULT 'indexed';",
-    );
-    let _ = conn.execute_batch(
+    )?;
+    add_column(
+        &conn,
         "ALTER TABLE file_cache ADD COLUMN extractor_gen INTEGER NOT NULL DEFAULT 0;",
-    );
+    )?;
 
     Ok(Cache(Arc::new(Mutex::new(conn))))
+}
+
+/// Apply an additive ALTER TABLE, tolerating only "duplicate column name"
+/// (the column already exists on an up-to-date database). Any other failure
+/// propagates: a half-migrated schema would otherwise make every cache read
+/// fail and silently re-process every watched file on every pass.
+fn add_column(conn: &Connection, sql: &str) -> Result<()> {
+    match conn.execute_batch(sql) {
+        Ok(()) => Ok(()),
+        Err(e) if e.to_string().contains("duplicate column name") => Ok(()),
+        Err(e) => Err(e).context("cache schema migration failed"),
+    }
 }
 
 fn cache_db_path() -> PathBuf {
@@ -205,7 +272,7 @@ mod tests {
     fn migration_backfills_legacy_rows_as_indexed_gen_zero() {
         let cache = open_with_legacy_schema();
         let state = cache.get("/old/file.md").expect("legacy row survives");
-        assert_eq!(state.outcome, OUTCOME_INDEXED);
+        assert_eq!(state.outcome, Outcome::Indexed);
         assert_eq!(state.extractor_gen, 0);
         assert_eq!(state.hash, "abc");
     }
@@ -224,7 +291,7 @@ mod tests {
         let cache = open_in_memory();
         cache.upsert_skipped("/bin/blob.zip", 10, 20, "h2", 1);
         let state = cache.get("/bin/blob.zip").unwrap();
-        assert_eq!(state.outcome, OUTCOME_SKIPPED);
+        assert_eq!(state.outcome, Outcome::Skipped);
         assert_eq!(state.extractor_gen, 1);
         assert_eq!(state.mtime_secs, 10);
         assert_eq!(state.size_bytes, 20);
@@ -236,8 +303,39 @@ mod tests {
         cache.upsert_skipped("/f", 1, 2, "h", 1);
         cache.upsert("/f", 3, 4, "h2", 2);
         let state = cache.get("/f").unwrap();
-        assert_eq!(state.outcome, OUTCOME_INDEXED);
+        assert_eq!(state.outcome, Outcome::Indexed);
         assert_eq!(state.extractor_gen, 2);
         assert_eq!(state.hash, "h2");
+    }
+
+    #[test]
+    fn refresh_preserves_outcome_and_generation() {
+        let cache = open_in_memory();
+        cache.upsert_skipped("/f", 1, 2, "h", 1);
+        let cached = cache.get("/f").unwrap();
+        cache.refresh("/f", 99, 100, &cached);
+        let state = cache.get("/f").unwrap();
+        assert_eq!(state.outcome, Outcome::Skipped);
+        assert_eq!(state.extractor_gen, 1);
+        assert_eq!(state.hash, "h");
+        assert_eq!(state.mtime_secs, 99);
+        assert_eq!(state.size_bytes, 100);
+    }
+
+    #[test]
+    fn unknown_outcome_value_reads_as_indexed() {
+        let cache = open_in_memory();
+        cache
+            .0
+            .lock()
+            .unwrap()
+            .execute(
+                "INSERT INTO file_cache (path, mtime_secs, size_bytes, hash, last_sent_at, outcome, extractor_gen)
+                 VALUES ('/weird', 1, 2, 'h', datetime('now'), 'corrupted', 1)",
+                [],
+            )
+            .unwrap();
+        let state = cache.get("/weird").unwrap();
+        assert_eq!(state.outcome, Outcome::Indexed);
     }
 }

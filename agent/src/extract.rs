@@ -2,9 +2,10 @@ use anyhow::{Result, bail};
 use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
+use tracing::debug;
 
 /// Generation of the extraction capability set. Bump whenever the set of
-/// extractable types changes so previously skipped files get retried.
+/// extractable types grows so previously skipped files get retried.
 pub const EXTRACTOR_GENERATION: i64 = 1;
 
 /// Ceiling on extracted text, mirroring spine/src/extract.ts MAX_TEXT_CHARS.
@@ -24,7 +25,9 @@ pub fn extract_text(path: &Path, mime: &str) -> Result<Option<String>> {
 }
 
 /// Truncate to MAX_TEXT_CHARS characters, cutting at the last space before
-/// the limit (port of spine/src/extract.ts truncate()).
+/// the limit. Approximate port of spine/src/extract.ts truncate(): this
+/// counts Unicode scalar values where spine counts UTF-16 code units, so
+/// cut points can differ slightly on non-BMP content.
 pub fn truncate_text(text: String) -> String {
     let limit_byte = match text.char_indices().nth(MAX_TEXT_CHARS) {
         Some((idx, _)) => idx,
@@ -34,12 +37,19 @@ pub fn truncate_text(text: String) -> String {
         Some(i) if i > 0 => i,
         _ => limit_byte,
     };
+    debug!(
+        dropped_bytes = text.len() - cut,
+        "extracted text exceeds {MAX_TEXT_CHARS} chars — truncating"
+    );
     text[..cut].to_string()
 }
 
 /// Tool + args for MIME types extracted via subprocess. Mirrors
 /// SUBPROCESS_TYPES in spine/src/extract.ts so agent and spine produce
-/// equivalent text for the same file.
+/// equivalent text for the same file. Legacy .doc (application/msword) is
+/// deliberately absent: pandoc has no doc reader, so such files take the
+/// UTF-8 fallback path and binary ones are skipped visibly instead of
+/// failing on every pass.
 fn subprocess_spec(mime: &str, path: &Path) -> Option<(&'static str, Vec<OsString>)> {
     let p = path.as_os_str().to_os_string();
     match mime {
@@ -53,7 +63,6 @@ fn subprocess_spec(mime: &str, path: &Path) -> Option<(&'static str, Vec<OsStrin
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => {
             Some(("pandoc", vec!["--from=xlsx".into(), "--to=plain".into(), p]))
         }
-        "application/msword" => Some(("pandoc", vec!["--from=doc".into(), "--to=plain".into(), p])),
         _ => None,
     }
 }
@@ -113,7 +122,6 @@ mod tests {
             (DOCX, "--from=docx"),
             (PPTX, "--from=pptx"),
             (XLSX, "--from=xlsx"),
-            ("application/msword", "--from=doc"),
         ] {
             let (cmd, args) = spec_for(mime);
             assert_eq!(cmd, "pandoc", "{mime}");
@@ -122,8 +130,11 @@ mod tests {
     }
 
     #[test]
-    fn unknown_mime_has_no_subprocess_handler() {
+    fn unsupported_mime_has_no_subprocess_handler() {
+        // application/msword is intentionally unsupported: pandoc cannot
+        // read legacy .doc files.
         for mime in [
+            "application/msword",
             "application/vnd.lotus-organizer",
             "application/octet-stream",
             "application/zip",

@@ -1,5 +1,11 @@
 <script lang="ts">
-	import type { ArchiveAction, InboxAction, InboxItem, TriageAction } from '$lib/types';
+	import type {
+		ArchiveAction,
+		InboxAction,
+		InboxActionDescriptor,
+		InboxItem,
+		TriageAction
+	} from '$lib/types';
 	import { attachmentRawUrl } from '$lib/api/attachments';
 	import { archiveRawUrl } from '$lib/api/archives';
 	import Icon from '$components/icons/Icon.svelte';
@@ -55,7 +61,23 @@
 		}
 		if (isArchiveAction(action)) onArchiveAction(item.archive_id, action);
 	}
+
+	function handleKeydown(event: KeyboardEvent) {
+		const item = items.slice(0, 5)[active];
+		if (!item) return;
+		const target = event.target as HTMLElement | null;
+		if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+		const match = item.actions.find((a: InboxActionDescriptor) => {
+			if (a.shortcut === 'Space') return event.key === ' ';
+			return event.key.toLowerCase() === a.shortcut.toLowerCase();
+		});
+		if (!match) return;
+		event.preventDefault();
+		onItemAction(item, match.action);
+	}
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 {#if items.length === 0}
 	<div class="inbox-empty soft">
@@ -111,11 +133,7 @@
 							>
 						{/if}
 					</div>
-					<ActionRow
-						actions={item.actions}
-						active={i === active}
-						onAction={(action) => onItemAction(item, action)}
-					/>
+					<ActionRow actions={item.actions} onAction={(action) => onItemAction(item, action)} />
 				</div>
 				{#if item.item_type === 'capture' && item.capture.first_image_id != null}
 					<img

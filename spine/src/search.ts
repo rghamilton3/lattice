@@ -417,6 +417,11 @@ export function writeCaptureFile(
 	);
 }
 
+export function deleteCaptureFile(id: number): void {
+	const mdPath = join(capturesDir(), `${id}.md`);
+	if (existsSync(mdPath)) unlinkSync(mdPath);
+}
+
 export function writeArchiveIndex(row: ArchiveData): void {
 	mkdirSync(archivesMdDir(), { recursive: true });
 	writeFileSync(join(archivesMdDir(), `${row.id}.md`), archiveToMarkdown(row));

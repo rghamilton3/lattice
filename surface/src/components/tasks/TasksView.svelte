@@ -7,7 +7,8 @@
 		fetchTasks,
 		fetchCompletedTasks,
 		updateTaskMeta,
-		uncompleteTask
+		uncompleteTask,
+		deleteTask
 	} from '$lib/api/tasks';
 	import { useCompleteTask } from '$lib/state/useCompleteTask.svelte';
 	import type { Task, TaskPriority } from '$lib/types';
@@ -46,10 +47,12 @@
 	let showCompleted = $state(false);
 
 	// Per-task edit state (only one expanded at a time)
+	let editText = $state('');
 	let editDueDate = $state('');
 	let editPriority = $state<TaskPriority | ''>('');
 	let editNotes = $state('');
 	let saving = $state(false);
+	let deleting = $state(false);
 	let status = $state('');
 
 	function expand(task: Task) {
@@ -58,6 +61,7 @@
 			return;
 		}
 		expandedId = task.id;
+		editText = task.text;
 		editDueDate = task.task_due_date ?? '';
 		editPriority = task.task_priority ?? '';
 		editNotes = task.task_notes ?? '';
@@ -67,11 +71,15 @@
 		saving = true;
 		status = 'Saving task…';
 		try {
-			await updateTaskMeta(task.id, {
+			const params: Parameters<typeof updateTaskMeta>[1] = {
 				due_date: editDueDate || null,
 				priority: (editPriority as TaskPriority) || null,
 				notes: editNotes || null
-			});
+			};
+			if (editText !== task.text) {
+				params.text = editText;
+			}
+			await updateTaskMeta(task.id, params);
 			queryClient.invalidateQueries({ queryKey: taskKeys.list() });
 			expandedId = null;
 			status = 'Task updated';
@@ -82,6 +90,32 @@
 			wb.showToast('Save failed');
 		} finally {
 			saving = false;
+		}
+	}
+
+	async function destroyTask(task: Task) {
+		if (!window.confirm(`Delete "${task.text}"? This cannot be undone.`)) return;
+		deleting = true;
+		queryClient.setQueryData(taskKeys.list(), (old: Task[] | undefined) =>
+			old ? old.filter((t) => t.id !== task.id) : []
+		);
+		queryClient.setQueryData(taskKeys.done(), (old: Task[] | undefined) =>
+			old ? old.filter((t) => t.id !== task.id) : []
+		);
+		try {
+			await deleteTask(task.id);
+			queryClient.invalidateQueries({ queryKey: taskKeys.list() });
+			queryClient.invalidateQueries({ queryKey: taskKeys.done() });
+			expandedId = null;
+			wb.showToast('Task deleted');
+		} catch (err) {
+			logError('deleteTask', err);
+			queryClient.invalidateQueries({ queryKey: taskKeys.list() });
+			queryClient.invalidateQueries({ queryKey: taskKeys.done() });
+			expandedId = null;
+			wb.showToast('Delete failed');
+		} finally {
+			deleting = false;
 		}
 	}
 
@@ -186,6 +220,20 @@
 
 						{#if expandedId === task.id}
 							<div class="task-edit">
+								<div class="task-edit-row task-edit-notes">
+									<label class="task-edit-label faint" for="tedit-text-{task.id}">Text</label>
+									<textarea
+										id="tedit-text-{task.id}"
+										class="task-edit-input task-edit-textarea"
+										bind:value={editText}
+										placeholder="task text…"
+										rows="2"
+										onkeydown={(e) => {
+											if (e.key === 'Escape') expandedId = null;
+											if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) saveEdit(task);
+										}}
+									></textarea>
+								</div>
 								<div class="task-edit-row">
 									<label class="task-edit-label faint" for="tedit-due-{task.id}">Due</label>
 									<input
@@ -226,14 +274,22 @@
 									></textarea>
 								</div>
 								<div class="task-edit-actions">
+									<button
+										class="btn btn-ghost btn-mini task-delete-btn"
+										disabled={deleting || saving}
+										aria-label="Delete task: {task.text}"
+										onclick={() => destroyTask(task)}
+									>
+										delete
+									</button>
 									<button class="btn btn-ghost btn-mini" onclick={() => (expandedId = null)}>
 										cancel
 									</button>
 									<button
 										class="btn btn-primary btn-mini"
-										disabled={saving}
+										disabled={saving || deleting}
 										onclick={() => saveEdit(task)}
-										aria-label="Save task metadata"
+										aria-label="Save task"
 									>
 										save
 									</button>
@@ -558,5 +614,10 @@
 		justify-content: flex-end;
 		gap: 6px;
 		padding-top: 2px;
+	}
+
+	.task-delete-btn {
+		margin-right: auto;
+		color: var(--c-alarm);
 	}
 </style>

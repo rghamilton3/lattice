@@ -1,0 +1,16 @@
+{
+  "019": {
+    "feature": "019-agent-office-extraction",
+    "date": "2026-06-10",
+    "unit_tests": {
+      "total": 56,
+      "passed": 56,
+      "failed": 0
+    },
+    "coverage": "not instrumented (cargo test; see quality-standards note)",
+    "lint": "clippy -D warnings clean",
+    "fmt": "clean",
+    "quality_score": "hard gates pass (tests 100%, clippy -D warnings, fmt); formula score limited by repo-wide absence of coverage instrumentation per quality-standards.md note",
+    "hard_gates": "pass"
+  }
+}

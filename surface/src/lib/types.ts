@@ -160,6 +160,99 @@ export interface Task {
 	task_completed_at: string | null;
 }
 
+// ── Tracking ─────────────────────────────────────────────────────────────────
+
+export type TrackSource =
+	| 'surface-manual'
+	| 'surface-form'
+	| 'surface-board'
+	| 'surface-drag'
+	| 'surface-followup'
+	| (string & {});
+
+export interface TrackRecord {
+	id: number;
+	text: string;
+	captured_at: string;
+	ingested_at: string;
+	source: TrackSource;
+	displaced: boolean;
+	photo_ref: string | null;
+	supersedes: number | null;
+}
+
+export interface TrackDuplicateHint {
+	track_id: number;
+	text: string;
+	captured_at: string;
+	source: string;
+	displaced: boolean;
+	reason: string;
+}
+
+export interface TrackSearchResponse {
+	query_id: number;
+	primary: TrackRecord | null;
+	history: TrackRecord[];
+	empty_message: string | null;
+	results: TrackRecord[];
+}
+
+export interface TrackDetailResponse {
+	record: TrackRecord;
+	same_item_history: TrackRecord[];
+	related_location_tracks: TrackRecord[];
+}
+
+export interface TrackCreateResponse {
+	id: number;
+	possible_duplicates: TrackDuplicateHint[];
+}
+
+export interface TrackPhotoResponse {
+	ref: string;
+	filename: string;
+	content_type: string;
+	size_bytes: number;
+	url: string;
+}
+
+export interface TrackBin {
+	id: number;
+	name: string;
+	normalized_name: string;
+	created_at: string;
+	updated_at: string;
+	archived_at: string | null;
+}
+
+export interface TrackBoardCard {
+	item_key: string;
+	item_phrase: string;
+	current_track: TrackRecord;
+	bin_id: number | null;
+	bin_name: string | null;
+	location_label: string | null;
+	displaced: boolean;
+	possible_duplicates: TrackDuplicateHint[];
+}
+
+export interface TrackBoardResponse {
+	bins: TrackBin[];
+	cards: TrackBoardCard[];
+	unbinned: TrackBoardCard[];
+	displaced_count: number;
+}
+
+export interface TrackFollowUp {
+	query_id: number;
+	query: string;
+	queried_at: string;
+	expires_at: string;
+	opened_track: TrackRecord;
+	affirmative_label: string;
+}
+
 // States of the spine extraction pipeline (017); all but `pending` are terminal.
 // `dark` means the file yielded no text, so a machine description was (or will
 // be) generated for it.
@@ -279,6 +372,8 @@ export type PaneContent =
 	| { kind: 'doc'; ref: DocRef; revealAnnotationId?: string }
 	| { kind: 'editor'; slug: string }
 	| { kind: 'tasks' }
+	| { kind: 'tracking' }
+	| { kind: 'tracking-detail'; trackId: number }
 	| { kind: 'cluster'; clusterId: number };
 
 // ── Resurfacing & Clustering ──────────────────────────────────────────────────

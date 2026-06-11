@@ -15,16 +15,27 @@ test('tracks migration creates tables, indexes, and foreign keys', () => {
 
 	const tables = db
 		.query(
-			"SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('tracks', 'track_queries')",
+			"SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('tracks', 'track_queries', 'track_bins', 'track_photos')",
 		)
 		.all() as { name: string }[];
-	expect(tables.map((row) => row.name).sort()).toEqual(['track_queries', 'tracks']);
+	expect(tables.map((row) => row.name).sort()).toEqual([
+		'track_bins',
+		'track_photos',
+		'track_queries',
+		'tracks',
+	]);
 
 	const indexes = db
 		.query("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'track%idx'")
 		.all() as { name: string }[];
 	expect(indexes.map((row) => row.name).sort()).toContain('tracks_captured_at_idx');
 	expect(indexes.map((row) => row.name).sort()).toContain('track_queries_queried_at_idx');
+	const binIndex = db
+		.query(
+			"SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_track_bins_active_normalized'",
+		)
+		.get();
+	expect(binIndex).toBeTruthy();
 
 	db.prepare(
 		`INSERT INTO tracks (text, captured_at, ingested_at, source, displaced)

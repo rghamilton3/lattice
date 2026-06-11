@@ -22,6 +22,10 @@
 				return `edit: ${c.slug}`;
 			case 'tasks':
 				return 'tasks';
+			case 'tracking':
+				return 'tracking';
+			case 'tracking-detail':
+				return `tracking #${c.trackId}`;
 			case 'cluster':
 				return `cluster #${c.clusterId}`;
 		}

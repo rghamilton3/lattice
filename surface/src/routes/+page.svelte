@@ -13,6 +13,7 @@
 		const url = page.url;
 		const refParam = url.searchParams.get('ref');
 		const viewParam = url.searchParams.get('view');
+		const trackParam = url.searchParams.get('track');
 
 		if (refParam) {
 			const ref = parseRef(refParam);
@@ -28,9 +29,25 @@
 		}
 
 		// `?view=doc` without a ref has nothing to open — fall through to home.
+		if (trackParam) {
+			const trackId = Number.parseInt(trackParam, 10);
+			if (Number.isInteger(trackId) && trackId > 0) {
+				wb.openInPane(
+					0,
+					{ kind: 'tracking-detail', trackId },
+					{ recordHistory: false, fallback: { kind: 'tracking' } }
+				);
+				return;
+			}
+			logError('tracking-deeplink', trackParam);
+			wb.showToast('Invalid tracking link');
+		}
+
 		if (viewParam === 'home') wb.openInPane(0, { kind: 'home' });
 		else if (viewParam === 'tasks') {
 			wb.openInPane(0, { kind: 'tasks' }, { recordHistory: false, fallback: { kind: 'home' } });
+		} else if (viewParam === 'tracking') {
+			wb.openInPane(0, { kind: 'tracking' }, { recordHistory: false, fallback: { kind: 'home' } });
 		} else if (viewParam === 'library' || viewParam === 'search') {
 			wb.openInPane(
 				0,

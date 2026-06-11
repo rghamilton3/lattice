@@ -4,18 +4,24 @@ use std::path::Path;
 use std::process::Command;
 use tracing::debug;
 
-/// Generation of the extraction capability set. Bump whenever the set of
-/// extractable types grows so previously skipped files get retried.
+/// Generation of the extraction capability set.
+/// IMPORTANT: bump this whenever the set of extractable types grows (a new
+/// MIME type in `subprocess_spec`, or a broader fallback in scan.rs), so
+/// files cached as skipped under an older generation get retried instead of
+/// staying skipped forever.
 pub const EXTRACTOR_GENERATION: i64 = 1;
 
 /// Ceiling on extracted text, mirroring spine/src/extract.ts MAX_TEXT_CHARS.
 const MAX_TEXT_CHARS: usize = 100_000;
 
 /// Extract text from a file. Returns `None` if the type is unsupported.
-/// Returns `Err` only on I/O or extraction failure for supported types.
-pub fn extract_text(path: &Path, mime: &str) -> Result<Option<String>> {
+/// Returns `Err` only on decode, I/O, or extraction failure for supported
+/// types. `content` is the file's bytes, already read by the caller for
+/// hashing: text types decode from it directly instead of re-reading the
+/// file from disk.
+pub fn extract_text(path: &Path, mime: &str, content: &[u8]) -> Result<Option<String>> {
     if mime.starts_with("text/") {
-        let text = std::fs::read_to_string(path)?;
+        let text = std::str::from_utf8(content)?.to_owned();
         return Ok(Some(truncate_text(text)));
     }
     match subprocess_spec(mime, path) {
@@ -148,8 +154,23 @@ mod tests {
 
     #[test]
     fn extract_text_returns_none_for_unsupported_mime() {
-        let result = extract_text(Path::new("/nonexistent"), "application/zip").unwrap();
+        let result = extract_text(Path::new("/nonexistent"), "application/zip", b"").unwrap();
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn extract_text_decodes_text_mime_from_passed_bytes() {
+        // The path does not exist: text types must decode from `content`
+        // rather than re-reading the file from disk.
+        let result =
+            extract_text(Path::new("/nonexistent"), "text/markdown", b"# heading").unwrap();
+        assert_eq!(result.as_deref(), Some("# heading"));
+    }
+
+    #[test]
+    fn extract_text_errors_on_non_utf8_text_mime() {
+        let result = extract_text(Path::new("/nonexistent"), "text/plain", &[0xff, 0xfe]);
+        assert!(result.is_err());
     }
 
     #[test]

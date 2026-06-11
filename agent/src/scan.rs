@@ -233,14 +233,17 @@ async fn process_file(
 
     let path_str = path.to_string_lossy();
 
+    // One cache read serves both skip checks below: the scanner is
+    // single-threaded, so the row cannot change between them.
+    let cached = if force { None } else { cache.get(&path_str) };
+
     // Fast path: if mtime and size match the cache, skip hashing entirely —
     // unless the row is a stale skip from an older extractor generation, in
     // which case the agent may have learned to extract it since.
-    if !force
-        && let Some(cached) = cache.get(&path_str)
+    if let Some(cached) = &cached
         && cached.mtime_secs == mtime_secs
         && cached.size_bytes == size_bytes as i64
-        && !should_retry_skip(&cached)
+        && !should_retry_skip(cached)
     {
         return Ok(ProcessResult::Skipped);
     }
@@ -249,12 +252,11 @@ async fn process_file(
     let hash = blake3::hash(&content).to_hex().to_string();
 
     // If the hash is unchanged (mtime drift, etc.), update cache metadata and skip.
-    if !force
-        && let Some(cached) = cache.get(&path_str)
+    if let Some(cached) = &cached
         && cached.hash == hash
-        && !should_retry_skip(&cached)
+        && !should_retry_skip(cached)
     {
-        cache.refresh(&path_str, mtime_secs, size_bytes as i64, &cached);
+        cache.refresh(&path_str, mtime_secs, size_bytes as i64, cached);
         return Ok(ProcessResult::Skipped);
     }
 
@@ -266,7 +268,7 @@ async fn process_file(
     // silently: with no dedicated extractor, fall back to indexing it as
     // plain text when its bytes are valid UTF-8 (e.g. .org files guessed as
     // Lotus Organizer). Only binary content is skipped — visibly, once.
-    let (text, mime) = match extract::extract_text(path, &mime)? {
+    let (text, mime) = match extract::extract_text(path, &mime, &content)? {
         Some(t) => (t, mime),
         None => match fallback_text(content) {
             Some(t) => (t, "text/plain".to_string()),

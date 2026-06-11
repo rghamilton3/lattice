@@ -234,6 +234,11 @@ fn init(conn: Connection) -> Result<Cache> {
 fn add_column(conn: &Connection, sql: &str) -> Result<()> {
     match conn.execute_batch(sql) {
         Ok(()) => Ok(()),
+        // Matching the message text is the only practical discriminator:
+        // SQLite reports a duplicate column as the generic SQLITE_ERROR code
+        // it uses for all SQL errors, so rusqlite exposes nothing more
+        // specific. The "duplicate column name" string has been stable
+        // across SQLite versions.
         Err(e) if e.to_string().contains("duplicate column name") => Ok(()),
         Err(e) => Err(e).context("cache schema migration failed"),
     }

@@ -203,7 +203,8 @@ test('GET /api/tracks/:id returns stable detail history, related location, and 4
 
 test('POST /api/tracks validates browser-created surface records and makes them searchable', async () => {
 	const { app } = setup();
-	await createTrack(app, 'drill in older shelf', '2026-01-01T00:00:00.000Z');
+	const recentDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+	await createTrack(app, 'drill in older shelf', recentDate);
 
 	const blank = await app.handle(
 		browserJson('/api/tracks/', {
@@ -509,7 +510,7 @@ test('follow-up endpoints close still-accurate, moved, and skipped outcomes', as
 		browserJson(`/api/tracks/followups/${moved.query_id}/moved`, {
 			text: 'wrench moved to tool bag',
 			captured_at: '2026-01-03T00:00:00.000Z',
-			source: 'manual-followup',
+			source: 'surface-followup',
 			displaced: false,
 		}),
 	);
@@ -530,4 +531,45 @@ test('follow-up endpoints close still-accurate, moved, and skipped outcomes', as
 		.query('SELECT supersedes FROM tracks WHERE text = ?')
 		.get('wrench moved to tool bag') as { supersedes: number };
 	expect(superseding.supersedes).toBe(movedTrack.id);
+});
+
+test('/followups/:query_id/moved rejects invalid source and unknown photo_ref', async () => {
+	const { app, db } = setup();
+	const track = await createTrack(app, 'hammer on workbench', '2026-01-02T00:00:00.000Z');
+	const search = (await (
+		await app.handle(browserGet('/api/tracks/search?q=hammer'))
+	).json()) as TrackSearchResponse;
+	await app.handle(
+		browserJson(`/api/tracks/queries/${search.query_id}/open`, { track_id: track.id }),
+	);
+	ageQuery(db, search.query_id, eligibleQueriedAt());
+
+	const base = {
+		text: 'hammer moved to tool bag',
+		captured_at: '2026-01-03T00:00:00.000Z',
+		displaced: false,
+	};
+
+	expect(
+		(
+			await app.handle(
+				browserJson(`/api/tracks/followups/${search.query_id}/moved`, {
+					...base,
+					source: 'manual-followup',
+				}),
+			)
+		).status,
+	).toBe(400);
+
+	expect(
+		(
+			await app.handle(
+				browserJson(`/api/tracks/followups/${search.query_id}/moved`, {
+					...base,
+					source: 'surface-followup',
+					photo_ref: 'nonexistent-ref.jpg',
+				}),
+			)
+		).status,
+	).toBe(400);
 });

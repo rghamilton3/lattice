@@ -18,6 +18,7 @@
 		skipTrackFollowup,
 		uploadTrackPhoto
 	} from '$lib/api/tracks';
+	import { relTime } from '$lib/utils/relTime';
 	import type {
 		TrackBin,
 		TrackBoardCard,
@@ -43,11 +44,12 @@
 	let photo = $state<File | null>(null);
 	let binName = $state('');
 	let displacedOnly = $state(false);
+	let now = $state(Date.now());
 	let draggingCardKey = $state('');
 	let dropBinId = $state<number | null>(null);
 	let movingCardKey = $state('');
 	let moveBinId = $state('');
-	let checkoutContext = $state('');
+	let checkoutContexts = $state<Record<string, string>>({});
 	let followupText = $state<Record<number, string>>({});
 
 	type BinGroup = { bin: TrackBin; cards: TrackBoardCard[] };
@@ -298,9 +300,9 @@
 			await checkoutTrackCard({
 				item_phrase: card.item_phrase,
 				from_track_id: card.current_track.id,
-				context: checkoutContext || card.location_label || 'with me'
+				context: checkoutContexts[card.item_key] || 'with me'
 			});
-			checkoutContext = '';
+			delete checkoutContexts[card.item_key];
 			await loadBoard();
 		} catch (err) {
 			error = `Checkout did not finish: ${String(err)}`;
@@ -350,6 +352,13 @@
 				>Move</button
 			>
 			<button class="btn btn-ghost btn-mini" onclick={() => checkout(card)}>Check out</button>
+		</div>
+		<div class="checkout-row">
+			<input
+				bind:value={checkoutContexts[card.item_key]}
+				placeholder="checkout context (optional)"
+				aria-label="Checkout context for {card.item_phrase}"
+			/>
 		</div>
 
 		{#if card.location_label && !binExists(card.location_label)}
@@ -496,17 +505,6 @@
 							<button class="btn btn-primary" type="submit">Create bin</button>
 						</div>
 					</form>
-
-					{#if visibleCardsCount > 0}
-						<div class="form-stack checkout-field">
-							<label for="checkout-context">Checkout context</label>
-							<input
-								id="checkout-context"
-								bind:value={checkoutContext}
-								placeholder="with me / in use"
-							/>
-						</div>
-					{/if}
 				</div>
 
 				{#if board === null}
@@ -625,7 +623,7 @@
 											<span class="chip chip-accent">Best match</span>
 											<span>{primary.source}</span>
 											<span>·</span>
-											<span>{primary.captured_at}</span>
+											<span>{relTime(primary.captured_at, now)}</span>
 										</div>
 										<h3>{primary.text}</h3>
 										<div class="track-meta">
@@ -664,7 +662,9 @@
 										<span class="tracking-row-body">
 											<span class="tracking-row-title">{record.text}</span>
 											<span class="tracking-row-meta"
-												>{record.captured_at}{record.photo_ref ? ' · photo attached' : ''}</span
+												>{relTime(record.captured_at, now)}{record.photo_ref
+													? ' · photo attached'
+													: ''}</span
 											>
 										</span>
 									</button>
@@ -683,7 +683,9 @@
 						<Icon name="doc" size={16} />
 						<span>{detail.record.text}</span>
 					</h2>
-					<span class="faint">{detail.record.source} · {detail.record.captured_at}</span>
+					<span class="faint"
+						>{detail.record.source} · {relTime(detail.record.captured_at, now)}</span
+					>
 				</div>
 
 				<div class="tracking-card-body">

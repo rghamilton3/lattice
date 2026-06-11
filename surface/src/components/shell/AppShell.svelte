@@ -278,7 +278,7 @@
 				/>
 				<NavBtn
 					label="Tracking"
-					icon="library"
+					icon="focus"
 					active={wb.view === 'tracking'}
 					onclick={() => onnav('tracking')}
 				/>

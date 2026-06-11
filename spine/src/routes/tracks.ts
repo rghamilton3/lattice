@@ -247,19 +247,23 @@ function insertSurfaceTrack(
 function duplicateHints(db: Database, text: string): TrackCreateResponse['possible_duplicates'] {
 	const tokens = tokenizeTrackText(text);
 	if (tokens.length === 0) return [];
-	return rankedRows(db, text, 5).map((row) => ({
-		track_id: row.id,
-		text: row.text,
-		captured_at: row.captured_at,
-		source: row.source,
-		displaced: row.displaced === 1,
-		reason: 'similar wording',
-	}));
+	const horizon = Date.now() - DUPLICATE_HORIZON_MS;
+	return rankedRows(db, text, 5)
+		.filter((row) => Date.parse(row.captured_at) >= horizon)
+		.map((row) => ({
+			track_id: row.id,
+			text: row.text,
+			captured_at: row.captured_at,
+			source: row.source,
+			displaced: row.displaced === 1,
+			reason: 'similar wording',
+		}));
 }
 
 function detailResponse(db: Database, row: TrackRow): TrackDetailResponse {
 	const key = itemKeyFor(row.text);
 	const location = locationPhrase(row.text);
+	// TODO: full table scan; add SQL prefilter as track volume grows (see rankedRows TODO)
 	const all = db
 		.prepare(`SELECT ${TRACK_COLUMNS} FROM tracks WHERE id != ?`)
 		.all(row.id) as TrackRow[];
@@ -284,6 +288,7 @@ function currentBoardCards(db: Database, displacedFilter: 'all' | 'only'): Track
 		)
 		.all() as TrackBinRow[];
 	const binsByName = new Map(bins.map((bin) => [bin.normalized_name, bin]));
+	// TODO: full table scan with O(n²) JS dedup; add SQL prefilter as track volume grows (see rankedRows TODO)
 	const rows = (
 		db
 			.prepare(`SELECT ${TRACK_COLUMNS} FROM tracks ORDER BY datetime(captured_at) DESC, id DESC`)
@@ -776,6 +781,10 @@ export const tracksRoutes = (db: Database, { attachmentsDir }: TracksRoutesOptio
 					set.status = 400;
 					return { error: 'source is required' };
 				}
+				if (!SURFACE_SOURCES.has(source)) {
+					set.status = 400;
+					return { error: 'source is not valid' };
+				}
 				if (!capturedAt || Number.isNaN(Date.parse(capturedAt))) {
 					set.status = 400;
 					return { error: 'captured_at is required' };
@@ -790,6 +799,10 @@ export const tracksRoutes = (db: Database, { attachmentsDir }: TracksRoutesOptio
 					typeof payload.photo_ref === 'string' && payload.photo_ref.trim()
 						? payload.photo_ref.trim()
 						: null;
+				if (photoRef && !db.prepare('SELECT ref FROM track_photos WHERE ref = ?').get(photoRef)) {
+					set.status = 400;
+					return { error: 'photo_ref not found' };
+				}
 				const inserted = db.transaction(() => {
 					const row = db
 						.prepare(

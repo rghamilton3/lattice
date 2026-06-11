@@ -168,7 +168,7 @@ export type TrackSource =
 	| 'surface-board'
 	| 'surface-drag'
 	| 'surface-followup'
-	| string;
+	| (string & {});
 
 export interface TrackRecord {
 	id: number;

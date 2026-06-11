@@ -1,0 +1,27 @@
+{
+  "active": false,
+  "feature_description": "Add to the agent: add docx/pptx/xlsx extraction to match the spine; reconcile the mime check against the watch patterns so a configured filetype can't be silently skipped (the .org case).",
+  "feature_num": "019",
+  "parent_branch": "worktree-feat+agent-updates",
+  "branch_name": "019-agent-office-extraction",
+  "session_id": "build-20260610-190719-019",
+  "started_at": "2026-06-10T19:07:19-05:00",
+  "current_phase": "complete",
+  "phases_complete": [
+    "specify",
+    "clarify",
+    "plan",
+    "tasks",
+    "implement",
+    "quality"
+  ],
+  "quality_threshold": 80,
+  "run_validate": false,
+  "background_mode": false,
+  "notify_on_complete": false,
+  "orchestrate_flag": "",
+  "run_analyze": false,
+  "run_checklist": false,
+  "quick_mode": false,
+  "use_orchestration": false
+}

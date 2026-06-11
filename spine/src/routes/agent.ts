@@ -60,16 +60,37 @@ function possibleDuplicateHints(
 
 export const agentRoutes = (db: Database, { attachmentsDir, archiveDir }: AgentRoutesOptions) =>
 	new Elysia()
-		.get('/tasks', () => {
-			return db
-				.query(
-					`SELECT id, text, task_priority, task_due_date
-					 FROM captures
-					 WHERE triage_action = 'task' AND task_completed_at IS NULL
-					 ORDER BY captured_at DESC`,
-				)
-				.all();
-		})
+		.get(
+			'/tasks',
+			() => {
+				return db
+					.query<
+						{
+							id: number;
+							text: string;
+							task_priority: string | null;
+							task_due_date: string | null;
+						},
+						[]
+					>(
+						`SELECT id, text, task_priority, task_due_date
+						 FROM captures
+						 WHERE triage_action = 'task' AND task_completed_at IS NULL
+						 ORDER BY captured_at DESC`,
+					)
+					.all();
+			},
+			{
+				response: t.Array(
+					t.Object({
+						id: t.Number(),
+						text: t.String(),
+						task_priority: t.Nullable(t.String()),
+						task_due_date: t.Nullable(t.String()),
+					}),
+				),
+			},
+		)
 		.post(
 			'/track',
 			({ body, set }): TrackCreateResponse | { error: string } => {

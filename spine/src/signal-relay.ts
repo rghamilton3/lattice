@@ -286,6 +286,7 @@ export async function fetchTasks(options: PostMessageOptions = {}): Promise<Task
 
 export function formatTaskList(tasks: TaskItem[]): string {
 	if (tasks.length === 0) return 'No active tasks.';
+	// TODO: paginate if tasks.length > N to avoid Signal message size limits
 	const lines = tasks.map((t, i) => {
 		let line = `${i + 1}. ${t.text}`;
 		if (t.task_due_date) line += ` (due ${t.task_due_date})`;

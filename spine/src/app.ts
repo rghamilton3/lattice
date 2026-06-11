@@ -44,7 +44,7 @@ export function buildApp(deps: AppDeps) {
 		.guard({ beforeHandle: authentikBeforeHandle({ allowHttp, devUser }) }, (app) =>
 			app
 				.use(capturesRoutes(db))
-				.use(tasksRoutes(db))
+				.use(tasksRoutes(db, { attachmentsDir }))
 				.use(searchRoutes())
 				.use(filesRoutes(db))
 				.use(workingRoutes(db, { attachmentsDir }))

@@ -61,7 +61,7 @@ describe('WorkbenchStore', () => {
 		const wb = new WorkbenchStore();
 		expect(wb.theme).toBe('light');
 		expect(wb.density).toBe('comfortable');
-		expect(wb.posture).toBe('quiet');
+		expect(wb.posture).toBe('standard');
 		expect(wb.focusMode).toBe(false);
 	});
 
@@ -81,7 +81,7 @@ describe('WorkbenchStore', () => {
 		expect(wb.theme).toBe('light');
 		expect(wb.density).toBe('comfortable');
 		expect(wb.font).toBe('Inter');
-		expect(wb.posture).toBe('quiet');
+		expect(wb.posture).toBe('standard');
 		expect(wb.focusMode).toBe(true);
 		expect(wb.vimMode).toBe(false);
 	});

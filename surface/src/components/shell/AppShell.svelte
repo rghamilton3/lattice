@@ -67,6 +67,14 @@
 				? String(agentCount)
 				: 'unknown'
 	);
+	// Keyword-only pill: driven by the inference breaker state reported by spine.
+	const searchDegraded = $derived(statusQuery.data?.search_degraded ?? false);
+	const needsEmbedding = $derived(statusQuery.data?.needs_embedding ?? null);
+	const keywordOnlyTitle = $derived(
+		needsEmbedding !== null && needsEmbedding > 0
+			? `Inference endpoint unavailable — search is keyword-only. ${needsEmbedding} document${needsEmbedding === 1 ? '' : 's'} awaiting embedding.`
+			: 'Inference endpoint unavailable — search is keyword-only until it recovers.'
+	);
 	const latestScan = $derived(
 		(statusQuery.data?.agents ?? [])
 			.map((a) => a.last_scan_at)
@@ -395,6 +403,11 @@
 			<span class="faint" style="font-size:12px">
 				sync&nbsp;·&nbsp;{latestScan ? relTime(latestScan, now) : 'never'}
 			</span>
+			{#if searchDegraded}
+				<span class="chip chip-keyword-only" role="status" title={keywordOnlyTitle}>
+					Keyword-only
+				</span>
+			{/if}
 		</div>
 		<span class="faint statusbar-tagline">
 			Lattice&nbsp;·&nbsp;ADHD-aware substrate&nbsp;·&nbsp;captured loosely, retrieved intelligently

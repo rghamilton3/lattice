@@ -39,11 +39,14 @@ database_path = "/var/lib/lattice/lattice.db"
 # Optional: files larger than this are skipped. Default: 10 MB.
 # max_file_bytes = 10485760
 
+# Office formats (docx/pptx/xlsx/doc) require pandoc on this machine;
+# PDFs require pdftotext (poppler-utils). Filetypes without a dedicated
+# extractor (e.g. .org) are indexed as plain text when they are UTF-8.
 [[agent.watch]]
 path     = "/home/user/Documents/notes"
-patterns = ["**/*.md", "**/*.txt", "**/*.pdf"]
+patterns = ["**/*.md", "**/*.txt", "**/*.pdf", "**/*.org"]
 
 # Add more [[agent.watch]] blocks for additional directories:
 # [[agent.watch]]
 # path     = "/home/user/Books"
-# patterns = ["**/*.pdf"]
+# patterns = ["**/*.pdf", "**/*.docx", "**/*.pptx", "**/*.xlsx"]

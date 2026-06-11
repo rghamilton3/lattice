@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
 	buildAttachmentUploadBody,
+	fetchTasks,
+	formatTaskList,
 	loadRelayConfig,
 	postAttachment,
 	resolveAttachmentPath,
@@ -22,6 +24,62 @@ function tempDir(): string {
 afterEach(() => {
 	for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
 	tempDirs = [];
+});
+
+describe('fetchTasks', () => {
+	it('fetches active tasks from the agent tasks endpoint', async () => {
+		const tasks = [
+			{ id: 1, text: 'Buy groceries', task_priority: 'high', task_due_date: null },
+			{ id: 2, text: 'Review PR', task_priority: null, task_due_date: '2026-06-15' },
+		];
+		const requests: Array<{ url: string; headers: Record<string, string> }> = [];
+		const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
+			requests.push({ url: String(url), headers: (init?.headers as Record<string, string>) ?? {} });
+			return new Response(JSON.stringify(tasks), { status: 200 });
+		};
+
+		const result = await fetchTasks({
+			spineBase: 'http://spine.local',
+			agentToken: 'token',
+			fetchImpl,
+		});
+
+		expect(requests).toHaveLength(1);
+		expect(requests[0].url).toBe('http://spine.local/api/agent/tasks');
+		expect(requests[0].headers).toMatchObject({
+			authorization: 'Bearer token',
+			'x-forwarded-proto': 'https',
+		});
+		expect(result).toEqual(tasks);
+	});
+
+	it('throws on non-2xx response', async () => {
+		const fetchImpl = async () => new Response('Unauthorized', { status: 401 });
+		await expect(
+			fetchTasks({ spineBase: 'http://spine.local', agentToken: 'bad', fetchImpl }),
+		).rejects.toThrow('GET /api/agent/tasks returned 401');
+	});
+});
+
+describe('formatTaskList', () => {
+	it('returns a fallback message when there are no tasks', () => {
+		expect(formatTaskList([])).toBe('No active tasks.');
+	});
+
+	it('numbers and lists tasks', () => {
+		const tasks = [
+			{ id: 1, text: 'Buy groceries', task_priority: null, task_due_date: null },
+			{ id: 2, text: 'Review PR', task_priority: null, task_due_date: null },
+		];
+		expect(formatTaskList(tasks)).toBe('Tasks (2):\n1. Buy groceries\n2. Review PR');
+	});
+
+	it('appends due date when present', () => {
+		const tasks = [
+			{ id: 1, text: 'Call dentist', task_priority: null, task_due_date: '2026-06-20' },
+		];
+		expect(formatTaskList(tasks)).toBe('Tasks (1):\n1. Call dentist (due 2026-06-20)');
+	});
 });
 
 describe('relay config helpers', () => {

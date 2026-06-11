@@ -70,3 +70,31 @@ test('photo captions keep tracking text and attachment ids', () => {
 	expect(parsed).toMatchObject({ action: 'track', trackText: 'breaker panel label' });
 	expect(parsed?.attachments[0]?.id).toBe('photo-1');
 });
+
+test('/task parses as list-tasks action', () => {
+	const parsed = parseSignalMessage(frame('/task'), selfNumber);
+	expect(parsed).toMatchObject({ action: 'list-tasks', trackText: null });
+	expect(parsed?.captureText).toBe('/task');
+});
+
+test('/todo parses as list-tasks action', () => {
+	const parsed = parseSignalMessage(frame('/todo'), selfNumber);
+	expect(parsed).toMatchObject({ action: 'list-tasks', trackText: null });
+	expect(parsed?.captureText).toBe('/todo');
+});
+
+test('/task is case-insensitive', () => {
+	const parsed = parseSignalMessage(frame('/TASK'), selfNumber);
+	expect(parsed?.action).toBe('list-tasks');
+	expect(parsed?.captureText).toBe('/TASK');
+});
+
+test('/taskname does not trigger list-tasks', () => {
+	const parsed = parseSignalMessage(frame('/taskname'), selfNumber);
+	expect(parsed?.action).toBe('capture');
+});
+
+test('/todos does not trigger list-tasks', () => {
+	const parsed = parseSignalMessage(frame('/todos'), selfNumber);
+	expect(parsed?.action).toBe('capture');
+});

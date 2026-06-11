@@ -616,7 +616,7 @@ test('tracking workspace creates records, moves cards by drag/drop and keyboard 
 	await bikeCard.getByRole('button', { name: 'Place' }).click();
 	await expect(bikeCard).toContainText('Office Shelf');
 
-	await page.getByLabel('Checkout context').fill('with neighbor');
+	await bikeCard.getByLabel('Checkout context').fill('with neighbor');
 	await bikeCard.getByRole('button', { name: 'Check out' }).click();
 	await expect(bikeCard).toContainText('away');
 	await page.getByLabel('Show only away items').check();

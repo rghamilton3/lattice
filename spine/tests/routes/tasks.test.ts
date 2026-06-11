@@ -1,4 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
+import { existsSync, writeFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { buildTestApp, json, req, type TestApp } from '../helpers/app';
 
 let app: TestApp;
@@ -240,5 +242,132 @@ describe('complete and restore tasks', () => {
 		const restore = await app.app.handle(req('/api/tasks/nope/uncomplete', { method: 'PATCH' }));
 		expect(complete.status).toBe(400);
 		expect(restore.status).toBe(400);
+	});
+});
+
+describe('DELETE /api/tasks/:id', () => {
+	it('hard-deletes a task row and its capture file', async () => {
+		const id = seedTask('delete me');
+
+		// Pre-create the capture .md file that the route should remove
+		const capturesDir = join(app.env.dir, 'captures');
+		mkdirSync(capturesDir, { recursive: true });
+		const mdPath = join(capturesDir, `${id}.md`);
+		writeFileSync(mdPath, `# ${id}\n\ndelete me\n`);
+
+		const res = await app.app.handle(req(`/api/tasks/${id}`, { method: 'DELETE' }));
+		expect(res.status).toBe(200);
+		expect(await json(res)).toEqual({});
+
+		const row = app.db.query('SELECT id FROM captures WHERE id = ?').get(id);
+		expect(row).toBeNull();
+		expect(existsSync(mdPath)).toBe(false);
+	});
+
+	it('returns 404 for a missing task id', async () => {
+		const res = await app.app.handle(req('/api/tasks/99999', { method: 'DELETE' }));
+		expect(res.status).toBe(404);
+	});
+
+	it('returns 400 for a non-numeric id', async () => {
+		const res = await app.app.handle(req('/api/tasks/nope', { method: 'DELETE' }));
+		expect(res.status).toBe(400);
+	});
+
+	it('returns 404 for a non-task capture id', async () => {
+		const id = seedCapture('not a task');
+		const res = await app.app.handle(req(`/api/tasks/${id}`, { method: 'DELETE' }));
+		expect(res.status).toBe(404);
+		const row = app.db.query('SELECT id FROM captures WHERE id = ?').get(id);
+		expect(row).not.toBeNull();
+	});
+
+	it('hard-deletes a completed task', async () => {
+		const id = seedTask('done task', { completed_at: '2026-01-07T00:00:00Z' });
+		const res = await app.app.handle(req(`/api/tasks/${id}`, { method: 'DELETE' }));
+		expect(res.status).toBe(200);
+		expect(app.db.query('SELECT id FROM captures WHERE id = ?').get(id)).toBeNull();
+	});
+
+	it('deletes a task with attachments without FK error', async () => {
+		const id = seedTask('task with attachment');
+		app.db
+			.prepare(
+				`INSERT INTO capture_attachments
+				 (capture_id, signal_id, content_type, filename, size_bytes, stored_path, upload_source, created_at)
+				 VALUES (?, 'sig1', 'image/png', 'img.png', 100, 'img.png', 'signal', '2026-01-01T00:00:00Z')`,
+			)
+			.run(id);
+
+		const res = await app.app.handle(req(`/api/tasks/${id}`, { method: 'DELETE' }));
+		expect(res.status).toBe(200);
+
+		const capture = app.db.query('SELECT id FROM captures WHERE id = ?').get(id);
+		expect(capture).toBeNull();
+		const atts = app.db.query('SELECT id FROM capture_attachments WHERE capture_id = ?').all(id);
+		expect(atts).toHaveLength(0);
+	});
+});
+
+describe('PATCH /api/captures/:id/task - text field', () => {
+	it('updates task text and rewrites the capture file', async () => {
+		const id = seedTask('original text');
+
+		const capturesDir = join(app.env.dir, 'captures');
+		mkdirSync(capturesDir, { recursive: true });
+		writeFileSync(join(capturesDir, `${id}.md`), 'old content');
+
+		const res = await app.app.handle(
+			req(`/api/captures/${id}/task`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ text: 'updated text' }),
+			}),
+		);
+		expect(res.status).toBe(200);
+		const row = app.db.query('SELECT text FROM captures WHERE id = ?').get(id) as any;
+		expect(row.text).toBe('updated text');
+	});
+
+	it('returns 422 for empty text', async () => {
+		const id = seedTask('non-empty');
+		const res = await app.app.handle(
+			req(`/api/captures/${id}/task`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ text: '   ' }),
+			}),
+		);
+		expect(res.status).toBe(422);
+		expect(await json(res)).toEqual({ error: 'Task text is required' });
+	});
+
+	it('returns 422 for text over 10,000 characters', async () => {
+		const id = seedTask('some task');
+		const res = await app.app.handle(
+			req(`/api/captures/${id}/task`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ text: 'x'.repeat(10_001) }),
+			}),
+		);
+		expect(res.status).toBe(422);
+	});
+
+	it('omitting text leaves task text unchanged (backward compat)', async () => {
+		const id = seedTask('unchanged text');
+		const res = await app.app.handle(
+			req(`/api/captures/${id}/task`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ priority: 'low' }),
+			}),
+		);
+		expect(res.status).toBe(200);
+		const row = app.db
+			.query('SELECT text, task_priority FROM captures WHERE id = ?')
+			.get(id) as any;
+		expect(row.text).toBe('unchanged text');
+		expect(row.task_priority).toBe('low');
 	});
 });

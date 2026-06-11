@@ -26,6 +26,7 @@ export function createTask(params: CreateTaskParams): Promise<{ id: number }> {
 }
 
 export interface UpdateTaskMetaParams {
+	text?: string;
 	due_date?: string | null;
 	priority?: TaskPriority | null;
 	notes?: string | null;
@@ -41,4 +42,8 @@ export function completeTask(id: number): Promise<void> {
 
 export function uncompleteTask(id: number): Promise<void> {
 	return apiFetch(`/api/tasks/${id}/uncomplete`, { method: 'PATCH' });
+}
+
+export function deleteTask(id: number): Promise<void> {
+	return apiFetch(`/api/tasks/${id}`, { method: 'DELETE' });
 }

@@ -44,10 +44,18 @@ export interface TriageDecision {
 	action: TriageAction;
 }
 
+// A toast action with no onclick simply dismisses (positive dismissal verb,
+// never an "X" close button: spec 020 NT-3).
+export interface ToastAction {
+	label: string;
+	onclick?: () => void;
+}
+
 export interface Toast {
 	id: number;
 	msg: string;
 	onclick?: () => void;
+	actions?: ToastAction[];
 }
 
 interface PersistedSession {
@@ -318,17 +326,25 @@ export class WorkbenchStore {
 
 	// `background` toasts are suppressed in quiet posture — see postureView.
 	// User-initiated actions (capture, triage) leave it unset so they always fire.
-	showToast(msg: string, opts: { background?: boolean; onclick?: () => void } = {}) {
+	showToast(
+		msg: string,
+		opts: {
+			background?: boolean;
+			onclick?: () => void;
+			actions?: ToastAction[];
+			durationMs?: number;
+		} = {}
+	) {
 		if (opts.background && !this.postureView.allowBackgroundToasts) return;
 		const id = ++this.toastSeq;
-		this.toast = { id, msg, onclick: opts.onclick };
+		this.toast = { id, msg, onclick: opts.onclick, actions: opts.actions };
 		if (this.toastTimer) clearTimeout(this.toastTimer);
 		// Clickable toasts stay longer so the user has time to act on them.
 		this.toastTimer = setTimeout(
 			() => {
 				if (this.toast?.id === id) this.toast = null;
 			},
-			opts.onclick ? 5000 : 2600
+			opts.durationMs ?? (opts.onclick || opts.actions ? 5000 : 2600)
 		);
 	}
 

@@ -54,8 +54,8 @@ Independent test: terminal-failed attachment shows reason + Retry in surface; co
 
 - [X] T016 [US3] Add `POST /api/captures/:id/attachments/:attId/retry-extraction` per contracts/spine-api.md (404 unknown, 409 not-failed, resets to pending + clears reason + enqueues); include `extraction_status` and `extraction_failure_reason` in capture attachment list payloads where missing; route tests — spine/src/routes/attachments.ts
 - [X] T017 [US3] Bridge transcription events onto the existing capture SSE stream as `attachment_transcribed` / `attachment_extraction_failed` events (subscribe via `onTranscriptionAttention` in the stream handler, same teardown pattern as capture events); test event delivery shape — spine/src/routes/captures.ts
-- [ ] T018 [P] [US3] Surface inbox attachment state: render pending/processing hint, transcript text when done, and failed state with human-readable reason plus a "Retry" action calling the retry endpoint (NT-4: recoverable, no guilt/overdue styling) — surface/src/components/home/InboxList.svelte (+ surface/src/lib/api/attachments.ts)
-- [ ] T019 [P] [US3] Surface ephemeral completion toast from the `attachment_transcribed` SSE event: excerpt + positive dismissal verbs ("Open" / "Skip"), no "X", auto-expires, no persistent badge (NT-3); respects nothing arriving when spine posture is quiet — surface/src/components/home/HomeView.svelte (or shared toast component)
+- [X] T018 [P] [US3] Surface inbox attachment state: render pending/processing hint, transcript text when done, and failed state with human-readable reason plus a "Retry" action calling the retry endpoint (NT-4: recoverable, no guilt/overdue styling) — surface/src/components/home/InboxList.svelte (+ surface/src/lib/api/attachments.ts)
+- [X] T019 [P] [US3] Surface ephemeral completion toast from the `attachment_transcribed` SSE event: excerpt + positive dismissal verbs ("Open" / "Skip"), no "X", auto-expires, no persistent badge (NT-3); respects nothing arriving when spine posture is quiet — surface/src/components/home/HomeView.svelte (or shared toast component)
 
 **Checkpoint**: failures and completions visible, retryable, posture-aware.
 
@@ -66,7 +66,7 @@ Independent test: edit -> confirm -> forced retry leaves text unchanged.
 
 - [X] T020 [US4] Relax the description GET/PATCH gate to also accept audio attachments with a transcript row (keep `dark` behavior for images); PATCH on an audio transcript additionally refreshes the `extracted_text` snapshot and the index file; tests cover gate (audio done OK, image done still 409) and snapshot refresh — spine/src/routes/attachments.ts
 - [X] T021 [US4] Protection test: PATCH `confirmed: true`, then run retry-extraction and a re-queue; assert no new ASR call, no superseding row, text unchanged, status `done`; also assert unconfirmed re-run supersedes the old row preserving history — spine/src/routes/attachments.test.ts (or extraction queue tests)
-- [ ] T022 [P] [US4] Surface transcript editing for audio attachments through the existing description edit affordance (edit final_text, confirm on save) labeled as a transcript — surface/src/components/home/InboxList.svelte (+ surface/src/lib/api/attachments.ts)
+- [X] T022 [P] [US4] Surface transcript editing for audio attachments through the existing description edit affordance (edit final_text, confirm on save) labeled as a transcript — surface/src/components/home/InboxList.svelte (+ surface/src/lib/api/attachments.ts)
 
 ## Phase 7: Polish and cross-cutting
 

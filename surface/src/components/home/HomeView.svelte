@@ -2,7 +2,7 @@
 	import { createQuery, useQueryClient } from '@tanstack/svelte-query';
 	import { browser } from '$app/environment';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
-	import { triageCapture, TRIAGE_ACTION_LABEL } from '$lib/api/captures';
+	import { triageCapture, updateCapture, TRIAGE_ACTION_LABEL } from '$lib/api/captures';
 	import { applyArchiveAction, fetchInbox, inboxKeys, archiveRawUrl } from '$lib/api/archives';
 	import type { TriageAction } from '$lib/api/captures';
 	import { workingKeys, fetchWorkingList } from '$lib/api/working';
@@ -149,6 +149,17 @@
 		}
 	}
 
+	async function onEditCapture(id: number, text: string) {
+		try {
+			await updateCapture(id, text);
+			queryClient.invalidateQueries({ queryKey: inboxKeys.list(20) });
+			wb.showToast('Capture updated');
+		} catch (err) {
+			wb.showToast(`Failed to save capture — try again`);
+			throw err;
+		}
+	}
+
 	async function archiveAll() {
 		const ids = (inboxItems ?? [])
 			.filter((item) => item.item_type === 'capture')
@@ -249,6 +260,7 @@
 						onOpenArchive={openArchive}
 						{onTriage}
 						onArchiveAction={onArchiveInboxAction}
+						{onEditCapture}
 					/>
 				{/if}
 				<div class="home-section-foot">

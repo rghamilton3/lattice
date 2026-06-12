@@ -4,6 +4,7 @@ import {
 	postCapture,
 	postTrack,
 	shouldSendSignalReply,
+	signalNotificationPosture,
 	spineBaseFromCaptureUrl,
 } from './signal-relay';
 
@@ -105,8 +106,6 @@ test('shouldSendSignalReply: active sends all events', () => {
 });
 
 test('postCapture: task reply sent in standard posture', async () => {
-	const replies: string[] = [];
-	const origWrite = (globalThis as Record<string, unknown>).__signalWrite;
 	// postCapture calls sendReply which calls activeSocket.write — we cannot
 	// inject the socket here, so we verify via the returned result and trust
 	// shouldSendSignalReply unit tests for the gating logic.
@@ -117,8 +116,6 @@ test('postCapture: task reply sent in standard posture', async () => {
 		fetchImpl: async () => Response.json({ id: 5, triage_action: 'task', text: 'buy milk' }),
 	});
 	expect(result.triage_action).toBe('task');
-	void replies;
-	void origWrite; // sendReply no-ops when activeSocket is null in tests
 });
 
 test('postCapture: promote reply branch reached', async () => {
@@ -136,7 +133,7 @@ test('postCapture: fallback reply suppressed in standard, enabled in active', as
 	const makeOpts = (posture: 'standard' | 'active') => ({
 		spineUrl: 'http://spine.test/api/agent/capture',
 		agentToken: 'token',
-		notificationPosture: posture as const,
+		notificationPosture: posture,
 		fetchImpl: async () => Response.json({ id: 9, triage_action: null, text: 'plain note' }),
 	});
 	// Both calls succeed — posture gating is exercised via shouldSendSignalReply;
@@ -154,4 +151,37 @@ test('postCapture: throws on non-ok response (failure event path)', async () => 
 			fetchImpl: async () => new Response('internal error', { status: 500 }),
 		}),
 	).rejects.toThrow('POST /api/agent/capture returned 500');
+});
+
+// --- signalNotificationPosture ---
+
+test('signalNotificationPosture: returns standard when env var is unset', () => {
+	const prev = process.env.SIGNAL_NOTIFICATION_POSTURE;
+	delete process.env.SIGNAL_NOTIFICATION_POSTURE;
+	expect(signalNotificationPosture()).toBe('standard');
+	if (prev !== undefined) process.env.SIGNAL_NOTIFICATION_POSTURE = prev;
+});
+
+test('signalNotificationPosture: returns standard and warns on invalid value', () => {
+	const prev = process.env.SIGNAL_NOTIFICATION_POSTURE;
+	const warns: unknown[][] = [];
+	const origWarn = console.warn;
+	console.warn = (...args: unknown[]) => warns.push(args);
+	process.env.SIGNAL_NOTIFICATION_POSTURE = 'loud';
+	expect(signalNotificationPosture()).toBe('standard');
+	expect(warns.length).toBe(1);
+	expect(String(warns[0][0])).toContain('loud');
+	console.warn = origWarn;
+	if (prev !== undefined) process.env.SIGNAL_NOTIFICATION_POSTURE = prev;
+	else delete process.env.SIGNAL_NOTIFICATION_POSTURE;
+});
+
+test('signalNotificationPosture: round-trips each valid value', () => {
+	const prev = process.env.SIGNAL_NOTIFICATION_POSTURE;
+	for (const v of ['quiet', 'standard', 'active'] as const) {
+		process.env.SIGNAL_NOTIFICATION_POSTURE = v;
+		expect(signalNotificationPosture()).toBe(v);
+	}
+	if (prev !== undefined) process.env.SIGNAL_NOTIFICATION_POSTURE = prev;
+	else delete process.env.SIGNAL_NOTIFICATION_POSTURE;
 });

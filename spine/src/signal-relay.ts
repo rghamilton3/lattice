@@ -254,17 +254,20 @@ function handleMessage(msg: unknown): void {
 		return;
 	}
 
+	const posture = signalNotificationPosture();
 	const post =
 		parsed.action === 'track'
-			? postTrack({
-					text: parsed.trackText ?? parsed.captureText,
-					captured_at: parsed.capturedAt,
-					displaced: parsed.displaced,
-					photo_ref: firstImageAttachmentId(parsed.attachments),
-				})
-			: postCapture(parsed.captureText, parsed.capturedAt);
+			? postTrack(
+					{
+						text: parsed.trackText ?? parsed.captureText,
+						captured_at: parsed.capturedAt,
+						displaced: parsed.displaced,
+						photo_ref: firstImageAttachmentId(parsed.attachments),
+					},
+					{ notificationPosture: posture },
+				)
+			: postCapture(parsed.captureText, parsed.capturedAt, { notificationPosture: posture });
 
-	const posture = signalNotificationPosture();
 	post
 		.then((result) => {
 			sendReaction('✅', parsed.sourceNumber, parsed.sourceTimestamp);
@@ -286,8 +289,10 @@ function handleMessage(msg: unknown): void {
 		})
 		.catch((err: Error) => {
 			console.error('[signal-relay] failed to post message:', err.message);
-			if (shouldSendSignalReply(posture, 'failure'))
-				sendReply(`⚠️ Capture failed: ${err.message.slice(0, 120)}`);
+			if (shouldSendSignalReply(posture, 'failure')) {
+				const label = parsed.action === 'track' ? 'Track failed' : 'Capture failed';
+				sendReply(`⚠️ ${label}: ${err.message.slice(0, 120)}`);
+			}
 		});
 }
 

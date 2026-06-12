@@ -1224,7 +1224,8 @@ async function routePreviewDocWithAttachments(
 	attachments: object[],
 	descriptionRoutes: Record<number, object | 404> = {}
 ) {
-	// Catch-all registered first → lowest priority; specific routes below override it
+	// Catch-all registered first → lowest priority; specific routes below override it.
+	// More specific routes must be registered AFTER less specific ones (last-registered-wins).
 	await page.route('**/api/**', (route) => route.fulfill({ status: 200, body: '[]' }));
 	await page.route('**/api/lateral**', (route) =>
 		route.fulfill({ status: 200, body: JSON.stringify({ results: [] }) })
@@ -1232,6 +1233,16 @@ async function routePreviewDocWithAttachments(
 	await page.route('**/api/similar**', (route) =>
 		route.fulfill({ status: 200, body: JSON.stringify({ results: [] }) })
 	);
+	await page.route('**/api/working/preview-doc', (route) =>
+		route.fulfill({
+			status: 200,
+			body: JSON.stringify({ slug: 'preview-doc', title: 'Preview Doc', content: '# Preview' })
+		})
+	);
+	await page.route('**/api/working/preview-doc/attachments**', (route) =>
+		route.fulfill({ status: 200, body: JSON.stringify(attachments) })
+	);
+	// Description routes registered last → override the attachments list route above
 	for (const [id, fixture] of Object.entries(descriptionRoutes)) {
 		const status = fixture === 404 ? 404 : 200;
 		const body =
@@ -1240,15 +1251,6 @@ async function routePreviewDocWithAttachments(
 			route.fulfill({ status, body })
 		);
 	}
-	await page.route('**/api/working/preview-doc/attachments**', (route) =>
-		route.fulfill({ status: 200, body: JSON.stringify(attachments) })
-	);
-	await page.route('**/api/working/preview-doc', (route) =>
-		route.fulfill({
-			status: 200,
-			body: JSON.stringify({ slug: 'preview-doc', title: 'Preview Doc', content: '# Preview' })
-		})
-	);
 }
 
 test('attachment rail shows extraction status badges for pending, failed, and dark attachments', async ({

@@ -249,6 +249,53 @@
 	max-height: 40px;
 	margin-top: 4px;
 }
+.inbox-edit-btn {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	padding: 3px;
+	color: var(--text-faint);
+	border-radius: var(--radius-sm);
+	opacity: 0;
+	transition:
+		opacity var(--t-fast) var(--ease),
+		color var(--t-fast) var(--ease);
+}
+.inbox-row:hover .inbox-edit-btn,
+.inbox-row[data-active='true'] .inbox-edit-btn {
+	opacity: 1;
+}
+.inbox-edit-btn:hover {
+	color: var(--text);
+}
+.inbox-edit-panel {
+	padding-top: 2px;
+}
+.inbox-edit-textarea {
+	width: 100%;
+	background: var(--bg-raised);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-sm);
+	padding: 6px 8px;
+	font-size: 13px;
+	font-family: inherit;
+	line-height: 1.5;
+	color: var(--text);
+	outline: none;
+	resize: vertical;
+}
+.inbox-edit-textarea:focus {
+	border-color: var(--c-accent);
+}
+.inbox-edit-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 6px;
+	margin-top: 6px;
+}
+.inbox-row[data-editing='true'] {
+	cursor: default;
+}
 .inbox-empty {
 	padding: 30px 18px;
 	text-align: center;

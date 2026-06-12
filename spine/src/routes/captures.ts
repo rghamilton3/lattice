@@ -249,6 +249,42 @@ export const capturesRoutes = (db: Database) =>
 				body: t.Object({ action: t.String() }),
 			},
 		)
+		.patch(
+			'/api/captures/:id',
+			({ params, body, set }) => {
+				const id = parseInt(params.id, 10);
+				if (isNaN(id)) {
+					set.status = 400;
+					return { error: 'Invalid id' };
+				}
+				const text = body.text.trim();
+				if (text.length === 0) {
+					set.status = 422;
+					return { error: 'Capture text is required' };
+				}
+				if (text.length > MAX_CAPTURE_TEXT_LENGTH) {
+					set.status = 422;
+					return { error: 'Capture text must be 10,000 characters or fewer' };
+				}
+				const existing = db
+					.query('SELECT source, captured_at FROM captures WHERE id = ?')
+					.get(id) as Pick<CaptureRow, 'source' | 'captured_at'> | null;
+				if (!existing) {
+					set.status = 404;
+					return { error: 'Not found' };
+				}
+				db.transaction(() => {
+					db.prepare('UPDATE captures SET text = ? WHERE id = ?').run(text, id);
+					writeCaptureFile(id, text, existing.source, existing.captured_at);
+				})();
+				refreshIndex();
+				return {};
+			},
+			{
+				params: t.Object({ id: t.String() }),
+				body: t.Object({ text: t.String() }),
+			},
+		)
 		.post(
 			'/api/captures',
 			({ body, set }) => {

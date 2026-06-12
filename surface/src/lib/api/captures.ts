@@ -56,6 +56,15 @@ export const TRIAGE_ACTION_LABEL: Record<TriageAction, string> = {
 	skip: 'Skipped'
 };
 
+export async function updateCapture(id: number, text: string): Promise<void> {
+	try {
+		await apiFetch(`/api/captures/${id}`, { method: 'PATCH', body: JSON.stringify({ text }) });
+	} catch (err) {
+		logError('updateCapture', err);
+		throw err;
+	}
+}
+
 export async function triageCapture(id: number, action: TriageAction): Promise<void> {
 	try {
 		await apiFetch(`/api/captures/${id}/triage`, {

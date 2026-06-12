@@ -192,12 +192,7 @@
 								<Icon name="task" size={16} class="task-check-done" />
 							</button>
 
-							<button
-								class="task-body"
-								onclick={() => expand(task)}
-								aria-expanded={expandedId === task.id}
-								aria-label="Edit task: {task.text}"
-							>
+							<div class="task-body">
 								<span class="task-text">{task.text}</span>
 								<span class="task-chips">
 									{#if task.task_due_date}
@@ -215,6 +210,15 @@
 								{#if task.task_notes}
 									<span class="task-notes-preview faint">{task.task_notes}</span>
 								{/if}
+							</div>
+							<button
+								class="task-edit-btn"
+								onclick={() => expand(task)}
+								title="Edit task"
+								aria-label="Edit task: {task.text}"
+								aria-expanded={expandedId === task.id}
+							>
+								<Icon name="edit" size={13} />
 							</button>
 						</div>
 
@@ -459,12 +463,30 @@
 	.task-body {
 		flex: 1;
 		min-width: 0;
-		text-align: left;
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
-		background: none;
-		cursor: pointer;
+	}
+
+	.task-edit-btn {
+		flex-shrink: 0;
+		padding: 2px;
+		margin-top: 1px;
+		color: var(--text-faint);
+		border-radius: var(--radius-sm);
+		opacity: 0;
+		transition:
+			opacity var(--t-fast) var(--ease),
+			color var(--t-fast) var(--ease);
+	}
+
+	.task-row:hover .task-edit-btn,
+	.task-row--expanded .task-edit-btn {
+		opacity: 1;
+	}
+
+	.task-edit-btn:hover {
+		color: var(--text);
 	}
 
 	.task-text {

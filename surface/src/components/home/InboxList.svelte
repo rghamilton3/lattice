@@ -38,6 +38,10 @@
 	let editText = $state('');
 	let editSaving = $state(false);
 
+	function focusOnMount(node: HTMLElement) {
+		node.focus();
+	}
+
 	function startEdit(item: InboxItem) {
 		if (item.item_type !== 'capture') return;
 		editingId = item.capture_id;
@@ -132,7 +136,9 @@
 				class="inbox-row"
 				aria-label={`Open ${item.item_type}: ${item.title}`}
 				data-active={i === active}
-				data-has-thumb={item.item_type === 'capture' && item.capture.first_image_id != null}
+				data-has-thumb={item.item_type === 'capture' &&
+					item.capture.first_image_id != null &&
+					editingId !== item.capture_id}
 				data-editing={item.item_type === 'capture' && editingId === item.capture_id}
 				role="button"
 				tabindex="0"
@@ -158,6 +164,7 @@
 							class="inbox-edit-textarea"
 							bind:value={editText}
 							rows="3"
+							use:focusOnMount
 							onkeydown={(e) => {
 								if (e.key === 'Escape') editingId = null;
 								if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) saveEdit(item.capture_id);

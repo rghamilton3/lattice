@@ -109,11 +109,23 @@ journalctl --user -u lattice-agent -f
 lattice-capture "remember the invoice"
 echo "captured from pipe" | lattice-capture
 lattice-capture --prompt
+lattice-capture --voice   # prompt with voxtype dictation pre-started (Linux)
 ```
 
 `lattice-capture` queues retryable failures in the local Lattice data directory and drains the
 queue on later runs. If both the spine POST and queue write fail, it prints the capture text to
 stderr so it can be recovered from the terminal or service logs.
+
+With [voxtype](https://voxtype.io) installed, `--voice` (implies `--prompt`)
+starts a dictation as the prompt opens: speak, press your voxtype stop/toggle key to insert the
+transcript, then `Ctrl+Enter` to capture. A recording still pending when the prompt closes is
+cancelled so it never types into another window. If voxtype is unavailable the prompt opens as
+a plain text capture. Example Hyprland bindings:
+
+```ini
+bindd = CTRL ALT, C, Lattice Capture, exec, ~/.local/bin/lattice-capture --prompt
+bindd = CTRL ALT, V, Lattice Voice Capture, exec, ~/.local/bin/lattice-capture --voice
+```
 
 ### Windows
 

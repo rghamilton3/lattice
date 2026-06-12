@@ -8,7 +8,11 @@ const config = {
 	},
 	kit: {
 		adapter: adapter({ fallback: 'index.html' }),
-		alias: { $components: 'src/components' }
+		alias: { $components: 'src/components' },
+		// Registered manually in PwaRuntimeState.initialize(), production only.
+		// Automatic registration also runs in dev, where every dev-server
+		// restart looks like a new app version and triggers update notices.
+		serviceWorker: { register: false }
 	}
 };
 

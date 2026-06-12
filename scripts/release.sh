@@ -99,11 +99,12 @@ bump_version() {
 tag_for() { echo "$1-v$2"; }
 
 manifest_files() {
+    # one path per line — callers read with mapfile
     local artifact="$1"
     case "$artifact" in
-        agent)   echo "agent/Cargo.toml" "agent/Cargo.lock" ;;
-        spine)   echo "spine/package.json" ;;
-        surface) echo "surface/package.json" ;;
+        agent)   printf '%s\n' "agent/Cargo.toml" "agent/Cargo.lock" ;;
+        spine)   printf '%s\n' "spine/package.json" ;;
+        surface) printf '%s\n' "surface/package.json" ;;
     esac
 }
 

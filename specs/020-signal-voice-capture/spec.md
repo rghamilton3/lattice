@@ -1,7 +1,7 @@
 ---
 parent_branch: worktree-feat+signal-voice-capture
 feature_number: "020"
-status: In Progress
+status: Complete
 created_at: 2026-06-11T22:01:19-05:00
 references_consulted:
   - specs/007-signal-relay/spec.md

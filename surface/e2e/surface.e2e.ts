@@ -1322,7 +1322,7 @@ test('dark attachment description panel shows description text and Confirm butto
 	await expect(descButton).toBeVisible();
 	await descButton.click();
 
-	const textarea = rail.getByLabel('Description for photo.jpg');
+	const textarea = rail.getByLabel('Description for photo.jpg', { exact: true });
 	await expect(textarea).toBeVisible();
 	await expect(textarea).toHaveValue('A photo of a garden.');
 	await expect(rail.getByRole('button', { name: 'Confirm' })).toBeVisible();

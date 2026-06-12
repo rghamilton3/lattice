@@ -259,9 +259,22 @@ pub fn prompt_text(title: &str, voice: bool) -> Result<Option<String>> {
         }
     }
 
+    // Drop guard so cleanup runs on every exit path (submit, Esc, window
+    // close, eframe error, panic) and a pending dictation can never type into
+    // an unrelated window.
+    struct VoiceGuard(bool);
+    impl Drop for VoiceGuard {
+        fn drop(&mut self) {
+            if self.0 {
+                voice_cleanup();
+            }
+        }
+    }
+
     let voice_active = voice && voice_start();
+    let _voice_guard = VoiceGuard(voice_active);
     let hint = if voice_active {
-        "Recording: speak, then your voxtype stop key inserts the text. Ctrl+Enter to capture, Esc to cancel"
+        "Dictating: voxtype stop key inserts text. Ctrl+Enter to capture, Esc to cancel"
     } else {
         "Ctrl+Enter to capture, Esc to cancel"
     };
@@ -279,7 +292,7 @@ pub fn prompt_text(title: &str, voice: bool) -> Result<Option<String>> {
 
     let title = title.to_owned();
     let result_clone = result.clone();
-    let run = eframe::run_native(
+    eframe::run_native(
         "Lattice capture",
         options,
         Box::new(move |_cc| {
@@ -291,14 +304,8 @@ pub fn prompt_text(title: &str, voice: bool) -> Result<Option<String>> {
                 focused: false,
             }))
         }),
-    );
-
-    // Guard runs on every exit path (submit, Esc, window close, eframe error)
-    // so a pending dictation can never type into an unrelated window.
-    if voice_active {
-        voice_cleanup();
-    }
-    run.map_err(|e| anyhow::anyhow!("opening capture prompt: {e}"))?;
+    )
+    .map_err(|e| anyhow::anyhow!("opening capture prompt: {e}"))?;
 
     let out = result.lock().unwrap().take();
     Ok(out)

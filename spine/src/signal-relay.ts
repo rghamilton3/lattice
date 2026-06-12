@@ -4,6 +4,7 @@ import {
 	parseSignalMessage,
 	isRpcError,
 } from './signal/messages';
+import { type NotificationPosture } from './archiveEvents';
 import { realpath } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 
@@ -35,6 +36,27 @@ export function validateRelayConfig(config: RelayConfig): string[] {
 // Derive base URL from SPINE_URL for constructing attachment endpoint paths.
 export function spineBaseFromCaptureUrl(spineUrl: string): string {
 	return spineUrl.replace(/\/api\/agent\/(capture|track)$/, '');
+}
+
+export type SignalReplyEvent = 'failure' | 'classifier' | 'fallback';
+
+export function signalNotificationPosture(): NotificationPosture {
+	const v = process.env.SIGNAL_NOTIFICATION_POSTURE;
+	if (v !== undefined && v !== 'quiet' && v !== 'standard' && v !== 'active') {
+		console.warn(
+			`[signal-relay] unknown SIGNAL_NOTIFICATION_POSTURE value "${v}", defaulting to standard`,
+		);
+	}
+	return v === 'quiet' || v === 'standard' || v === 'active' ? v : 'standard';
+}
+
+export function shouldSendSignalReply(
+	posture: NotificationPosture,
+	event: SignalReplyEvent,
+): boolean {
+	if (posture === 'quiet') return false;
+	if (event === 'fallback') return posture === 'active';
+	return true;
 }
 
 let config = loadRelayConfig();
@@ -242,6 +264,7 @@ function handleMessage(msg: unknown): void {
 				})
 			: postCapture(parsed.captureText, parsed.capturedAt);
 
+	const posture = signalNotificationPosture();
 	post
 		.then((result) => {
 			sendReaction('✅', parsed.sourceNumber, parsed.sourceTimestamp);
@@ -252,12 +275,20 @@ function handleMessage(msg: unknown): void {
 			)
 				return;
 			for (const att of parsed.attachments) {
-				postAttachment(result.id, att).catch((err: Error) =>
-					console.error(`[signal-relay] failed to store attachment ${att.id}:`, err.message),
-				);
+				postAttachment(result.id, att).catch((err: Error) => {
+					console.error(`[signal-relay] failed to store attachment ${att.id}:`, err.message);
+					if (shouldSendSignalReply(posture, 'failure'))
+						sendReply(
+							`⚠️ Attachment save failed (capture #${result.id}): ${err.message.slice(0, 80)}`,
+						);
+				});
 			}
 		})
-		.catch((err: Error) => console.error('[signal-relay] failed to post message:', err.message));
+		.catch((err: Error) => {
+			console.error('[signal-relay] failed to post message:', err.message);
+			if (shouldSendSignalReply(posture, 'failure'))
+				sendReply(`⚠️ Capture failed: ${err.message.slice(0, 120)}`);
+		});
 }
 
 export interface TaskItem {
@@ -314,6 +345,7 @@ export interface PostMessageOptions {
 	spineUrl?: string;
 	spineBase?: string;
 	agentToken?: string;
+	notificationPosture?: NotificationPosture;
 	fetchImpl?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 }
 
@@ -341,14 +373,17 @@ export async function postCapture(
 	const result = (await res.json()) as CaptureResult;
 	console.log(`[signal-relay] captured id=${result.id}: ${result.text.slice(0, 80)}`);
 
+	const posture = options.notificationPosture ?? signalNotificationPosture();
 	if (result.triage_action === 'task') {
-		sendReply(`Task queued: ${result.text}`);
+		if (shouldSendSignalReply(posture, 'classifier')) sendReply(`Task queued: ${result.text}`);
 	} else if (result.triage_action === 'keep') {
-		sendReply(`Note saved: ${result.text}`);
+		if (shouldSendSignalReply(posture, 'classifier')) sendReply(`Note saved: ${result.text}`);
+	} else if (result.triage_action === 'promote') {
+		if (shouldSendSignalReply(posture, 'classifier')) sendReply(`Promoted to doc: ${result.text}`);
 	} else if (result.triage_action === 'skip') {
-		// silent — no text reply for discarded captures
+		// intentionally silent
 	} else {
-		sendReply(`✓ #${result.id}`);
+		if (shouldSendSignalReply(posture, 'fallback')) sendReply(`✓ #${result.id}`);
 	}
 
 	return result;
@@ -388,7 +423,8 @@ export async function postTrack(
 
 	const result = (await res.json()) as { id: number };
 	console.log(`[signal-relay] tracked id=${result.id}: ${body.text.slice(0, 80)}`);
-	sendReply(`Tracked: ${body.text}`);
+	const posture = options.notificationPosture ?? signalNotificationPosture();
+	if (shouldSendSignalReply(posture, 'classifier')) sendReply(`Tracked: ${body.text}`);
 	return result;
 }
 

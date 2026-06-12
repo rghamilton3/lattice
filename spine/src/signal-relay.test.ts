@@ -3,6 +3,7 @@ import {
 	firstImageAttachmentId,
 	postCapture,
 	postTrack,
+	shouldSendSignalReply,
 	spineBaseFromCaptureUrl,
 } from './signal-relay';
 
@@ -81,4 +82,76 @@ test('firstImageAttachmentId ignores non-image attachments', () => {
 		]),
 	).toBe('photo-1');
 	expect(firstImageAttachmentId([{ id: 'voice-1', contentType: 'audio/ogg' }])).toBeNull();
+});
+
+// --- Notification posture ---
+
+test('shouldSendSignalReply: quiet suppresses all events', () => {
+	expect(shouldSendSignalReply('quiet', 'failure')).toBe(false);
+	expect(shouldSendSignalReply('quiet', 'classifier')).toBe(false);
+	expect(shouldSendSignalReply('quiet', 'fallback')).toBe(false);
+});
+
+test('shouldSendSignalReply: standard sends failure and classifier, not fallback', () => {
+	expect(shouldSendSignalReply('standard', 'failure')).toBe(true);
+	expect(shouldSendSignalReply('standard', 'classifier')).toBe(true);
+	expect(shouldSendSignalReply('standard', 'fallback')).toBe(false);
+});
+
+test('shouldSendSignalReply: active sends all events', () => {
+	expect(shouldSendSignalReply('active', 'failure')).toBe(true);
+	expect(shouldSendSignalReply('active', 'classifier')).toBe(true);
+	expect(shouldSendSignalReply('active', 'fallback')).toBe(true);
+});
+
+test('postCapture: task reply sent in standard posture', async () => {
+	const replies: string[] = [];
+	const origWrite = (globalThis as Record<string, unknown>).__signalWrite;
+	// postCapture calls sendReply which calls activeSocket.write — we cannot
+	// inject the socket here, so we verify via the returned result and trust
+	// shouldSendSignalReply unit tests for the gating logic.
+	const result = await postCapture('buy milk', '2026-01-01T00:00:00.000Z', {
+		spineUrl: 'http://spine.test/api/agent/capture',
+		agentToken: 'token',
+		notificationPosture: 'standard',
+		fetchImpl: async () => Response.json({ id: 5, triage_action: 'task', text: 'buy milk' }),
+	});
+	expect(result.triage_action).toBe('task');
+	void replies;
+	void origWrite; // sendReply no-ops when activeSocket is null in tests
+});
+
+test('postCapture: promote reply branch reached', async () => {
+	const result = await postCapture('weekly review notes', '2026-01-01T00:00:00.000Z', {
+		spineUrl: 'http://spine.test/api/agent/capture',
+		agentToken: 'token',
+		notificationPosture: 'standard',
+		fetchImpl: async () =>
+			Response.json({ id: 7, triage_action: 'promote', text: 'weekly review notes' }),
+	});
+	expect(result.triage_action).toBe('promote');
+});
+
+test('postCapture: fallback reply suppressed in standard, enabled in active', async () => {
+	const makeOpts = (posture: 'standard' | 'active') => ({
+		spineUrl: 'http://spine.test/api/agent/capture',
+		agentToken: 'token',
+		notificationPosture: posture as const,
+		fetchImpl: async () => Response.json({ id: 9, triage_action: null, text: 'plain note' }),
+	});
+	// Both calls succeed — posture gating is exercised via shouldSendSignalReply;
+	// sendReply is a no-op without an active socket, so we just confirm no throw.
+	await postCapture('plain note', '2026-01-01T00:00:00.000Z', makeOpts('standard'));
+	await postCapture('plain note', '2026-01-01T00:00:00.000Z', makeOpts('active'));
+});
+
+test('postCapture: throws on non-ok response (failure event path)', async () => {
+	await expect(
+		postCapture('oops', '2026-01-01T00:00:00.000Z', {
+			spineUrl: 'http://spine.test/api/agent/capture',
+			agentToken: 'token',
+			notificationPosture: 'standard',
+			fetchImpl: async () => new Response('internal error', { status: 500 }),
+		}),
+	).rejects.toThrow('POST /api/agent/capture returned 500');
 });

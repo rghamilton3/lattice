@@ -215,6 +215,12 @@ export const tasksRoutes = (db: Database, { attachmentsDir }: TasksRoutesOptions
 					const atts = db
 						.query('SELECT id, stored_path FROM capture_attachments WHERE capture_id = ?')
 						.all(id) as { id: number; stored_path: string }[];
+					// Audio transcripts and image descriptions die with the capture (NF-4).
+					for (const att of atts) {
+						db.prepare(
+							`DELETE FROM attachment_descriptions WHERE attachment_kind = 'capture' AND attachment_id = ?`,
+						).run(att.id);
+					}
 					db.prepare('DELETE FROM capture_attachments WHERE capture_id = ?').run(id);
 					const capture = db.prepare(`DELETE FROM captures WHERE id = ? RETURNING id`).get(id);
 					return { capture, atts };

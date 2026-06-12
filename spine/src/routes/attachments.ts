@@ -11,6 +11,10 @@ export interface AttachmentRoutesOptions {
 	attachmentsDir: string;
 }
 
+function isAudioContentType(contentType: string): boolean {
+	return contentType.toLowerCase().startsWith('audio/');
+}
+
 export const attachmentRoutes = (db: Database, { attachmentsDir }: AttachmentRoutesOptions) => {
 	// Resolve the base dir once so symlink-swap checks compare canonical paths.
 	let canonicalBase: string;
@@ -36,7 +40,7 @@ export const attachmentRoutes = (db: Database, { attachmentsDir }: AttachmentRou
 				}
 				return db
 					.query(
-						'SELECT id, capture_id, filename, content_type, size_bytes, stored_path, upload_source, created_at, extraction_status FROM capture_attachments WHERE capture_id = ? ORDER BY created_at ASC',
+						'SELECT id, capture_id, filename, content_type, size_bytes, stored_path, upload_source, created_at, extraction_status, extraction_failure_reason FROM capture_attachments WHERE capture_id = ? ORDER BY created_at ASC',
 					)
 					.all(captureId) as CaptureAttachmentRow[];
 			},
@@ -197,6 +201,9 @@ export const attachmentRoutes = (db: Database, { attachmentsDir }: AttachmentRou
 					return { error: 'Not found' };
 				}
 
+				db.prepare(
+					`DELETE FROM attachment_descriptions WHERE attachment_kind = 'capture' AND attachment_id = ?`,
+				).run(attId);
 				db.prepare('DELETE FROM capture_attachments WHERE id = ?').run(attId);
 
 				// Best-effort cleanup: remove binary and search index files.
@@ -231,14 +238,16 @@ export const attachmentRoutes = (db: Database, { attachmentsDir }: AttachmentRou
 
 				const att = db
 					.query(
-						'SELECT extraction_status FROM capture_attachments WHERE id = ? AND capture_id = ?',
+						'SELECT extraction_status, content_type FROM capture_attachments WHERE id = ? AND capture_id = ?',
 					)
-					.get(attId, captureId) as { extraction_status: string } | null;
+					.get(attId, captureId) as { extraction_status: string; content_type: string } | null;
 				if (!att) {
 					set.status = 404;
 					return { error: 'Not found' };
 				}
-				if (att.extraction_status !== 'dark') {
+				// Descriptions exist for dark images; transcripts for audio attachments
+				// regardless of done/failed status (the row is the transcript).
+				if (att.extraction_status !== 'dark' && !isAudioContentType(att.content_type)) {
 					set.status = 409;
 					return { error: 'Attachment is not dark' };
 				}
@@ -279,14 +288,14 @@ export const attachmentRoutes = (db: Database, { attachmentsDir }: AttachmentRou
 
 				const att = db
 					.query(
-						'SELECT extraction_status FROM capture_attachments WHERE id = ? AND capture_id = ?',
+						'SELECT extraction_status, content_type FROM capture_attachments WHERE id = ? AND capture_id = ?',
 					)
-					.get(attId, captureId) as { extraction_status: string } | null;
+					.get(attId, captureId) as { extraction_status: string; content_type: string } | null;
 				if (!att) {
 					set.status = 404;
 					return { error: 'Not found' };
 				}
-				if (att.extraction_status !== 'dark') {
+				if (att.extraction_status !== 'dark' && !isAudioContentType(att.content_type)) {
 					set.status = 409;
 					return { error: 'Attachment is not dark' };
 				}
@@ -331,6 +340,14 @@ export const attachmentRoutes = (db: Database, { attachmentsDir }: AttachmentRou
 						created_at: string;
 					} | null;
 					if (row) {
+						// For audio the transcript doubles as the attachment's extracted
+						// content; keep the indexed snapshot in sync with the edit.
+						if (isAudioContentType(row.content_type)) {
+							db.prepare('UPDATE capture_attachments SET extracted_text = ? WHERE id = ?').run(
+								final_text,
+								attId,
+							);
+						}
 						writeAttachmentIndex(
 							row.id,
 							row.capture_id,
@@ -353,5 +370,48 @@ export const attachmentRoutes = (db: Database, { attachmentsDir }: AttachmentRou
 				params: t.Object({ id: t.String(), attId: t.String() }),
 				body: t.Object({ final_text: t.Optional(t.String()), confirmed: t.Optional(t.Boolean()) }),
 			},
+		)
+		.post(
+			'/api/captures/:id/attachments/:attId/retry-extraction',
+			({ params, set }) => {
+				const captureId = parseInt(params.id, 10);
+				const attId = parseInt(params.attId, 10);
+				if (isNaN(captureId) || isNaN(attId)) {
+					set.status = 400;
+					return { error: 'Invalid id' };
+				}
+
+				const att = db
+					.query(
+						'SELECT extraction_status, content_type, stored_path FROM capture_attachments WHERE id = ? AND capture_id = ?',
+					)
+					.get(attId, captureId) as {
+					extraction_status: string;
+					content_type: string;
+					stored_path: string;
+				} | null;
+				if (!att) {
+					set.status = 404;
+					return { error: 'Not found' };
+				}
+				if (att.extraction_status !== 'failed') {
+					set.status = 409;
+					return { error: 'Attachment is not failed' };
+				}
+
+				db.prepare(
+					`UPDATE capture_attachments
+				   SET extraction_status = 'pending', extraction_failure_reason = '' WHERE id = ?`,
+				).run(attId);
+				queueAttachment(
+					attId,
+					'capture',
+					join(attachmentsDir, att.stored_path),
+					att.content_type,
+					db,
+				);
+				return { status: 'pending' };
+			},
+			{ params: t.Object({ id: t.String(), attId: t.String() }) },
 		);
 };

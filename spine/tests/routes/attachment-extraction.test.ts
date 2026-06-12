@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import { buildTestApp, json, req, type TestApp } from '../helpers/app';
 import { createWorking } from '../../src/working';
-import { __awaitQueueForTests } from '../../src/extraction-queue';
+import { __awaitQueueForTests, queueAttachment } from '../../src/extraction-queue';
 
 let app: TestApp;
 
@@ -390,5 +390,84 @@ describe('PATCH /api/working/:slug/attachments/:attId/description', () => {
 		);
 		expect(res.status).toBe(200);
 		expect((await json(res)).confirmed).toBe(true);
+	});
+});
+
+// ─── Extraction queue error and unknown-format paths ─────────────────────────
+
+describe('Extraction queue — failed and unknown-format paths', () => {
+	it('sets status to failed when stored file does not exist', async () => {
+		const captureId = insertCapture();
+		const row = app.db
+			.prepare(
+				`INSERT INTO capture_attachments
+             (capture_id, signal_id, content_type, filename, size_bytes, stored_path, upload_source, created_at, extraction_status, extracted_text)
+             VALUES (?, '', 'text/plain', 'ghost.txt', 0, 'nonexistent-uuid', 'browser', '2026-01-01T00:00:00Z', 'pending', '') RETURNING id`,
+			)
+			.get(captureId) as { id: number };
+
+		queueAttachment(
+			row.id,
+			'capture',
+			'/tmp/absolutely-nonexistent-path-x123',
+			'text/plain',
+			app.db,
+		);
+		await __awaitQueueForTests();
+
+		const updated = app.db
+			.query('SELECT extraction_status FROM capture_attachments WHERE id = ?')
+			.get(row.id) as { extraction_status: string };
+		expect(updated.extraction_status).toBe('failed');
+	});
+
+	it('sets status to failed on subprocess error and queue continues processing subsequent items', async () => {
+		const captureId = insertCapture();
+		// A garbage PDF will cause pdftotext (or its absence) to throw
+		const garbageRes = await uploadCapture(
+			captureId,
+			makeFormData('garbage.pdf', 'not a real pdf', 'application/pdf'),
+		);
+		expect(garbageRes.status).toBe(200);
+		const { id: garbageId } = await json(garbageRes);
+
+		// A valid text file enqueued after the failing item — queue must not stall
+		const textRes = await uploadCapture(
+			captureId,
+			makeFormData('after.txt', 'good content', 'text/plain'),
+		);
+		expect(textRes.status).toBe(200);
+		const { id: textId } = await json(textRes);
+
+		await __awaitQueueForTests();
+
+		const garbageRow = app.db
+			.query('SELECT extraction_status FROM capture_attachments WHERE id = ?')
+			.get(garbageId) as { extraction_status: string };
+		expect(garbageRow.extraction_status).toBe('failed');
+
+		const textRow = app.db
+			.query('SELECT extraction_status, extracted_text FROM capture_attachments WHERE id = ?')
+			.get(textId) as { extraction_status: string; extracted_text: string };
+		expect(textRow.extraction_status).toBe('done');
+		expect(textRow.extracted_text).toBe('good content');
+	});
+
+	it('sets status to done with empty extracted_text for unknown format (e.g. application/zip)', async () => {
+		const captureId = insertCapture();
+		const res = await uploadCapture(
+			captureId,
+			makeFormData('archive.zip', '\x50\x4B\x05\x06', 'application/zip'),
+		);
+		expect(res.status).toBe(200);
+		const { id: attId } = await json(res);
+
+		await __awaitQueueForTests();
+
+		const row = app.db
+			.query('SELECT extraction_status, extracted_text FROM capture_attachments WHERE id = ?')
+			.get(attId) as { extraction_status: string; extracted_text: string };
+		expect(row.extraction_status).toBe('done');
+		expect(row.extracted_text).toBe('');
 	});
 });

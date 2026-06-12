@@ -9,6 +9,10 @@
 //!   1. CLI args (joined with spaces)
 //!   2. stdin if not a TTY
 //!   3. interactive prompt window (eframe, cross-platform)
+//!
+//! `--prompt` forces the prompt window. `--voice` (implies `--prompt`) also
+//! starts a voxtype dictation on Linux so one hotkey opens the prompt with
+//! recording already live; the user's voxtype stop key inserts the transcript.
 
 use anyhow::{Context, Result, bail};
 use lattice_agent::config;
@@ -127,13 +131,33 @@ async fn run() -> Result<()> {
 
 // ── Text input ────────────────────────────────────────────────────────────────
 
-fn read_text() -> Result<Option<String>> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.iter().any(|a| a == "--prompt") {
-        return platform::prompt_text("Capture to Lattice");
+/// Split CLI args into the `--prompt` / `--voice` flags and the remaining
+/// positional words. `--voice` implies `--prompt`: dictation is only useful
+/// typed into the prompt window.
+fn parse_args(args: impl Iterator<Item = String>) -> (bool, bool, Vec<String>) {
+    let mut prompt = false;
+    let mut voice = false;
+    let mut words: Vec<String> = Vec::new();
+    for arg in args {
+        match arg.as_str() {
+            "--prompt" => prompt = true,
+            "--voice" => voice = true,
+            _ => words.push(arg),
+        }
     }
-    if !args.is_empty() {
-        return Ok(Some(args.join(" ")));
+    (prompt, voice, words)
+}
+
+fn read_text() -> Result<Option<String>> {
+    let (prompt, voice, words) = parse_args(std::env::args().skip(1));
+    if prompt || voice {
+        if !words.is_empty() {
+            tracing::warn!(?words, "positional args ignored in prompt mode");
+        }
+        return platform::prompt_text("Capture to Lattice", voice);
+    }
+    if !words.is_empty() {
+        return Ok(Some(words.join(" ")));
     }
     let stdin = io::stdin();
     if !stdin.is_terminal() {
@@ -141,7 +165,7 @@ fn read_text() -> Result<Option<String>> {
         stdin.lock().read_to_string(&mut buf)?;
         return Ok(Some(buf.trim_end_matches('\n').to_owned()));
     }
-    platform::prompt_text("Capture to Lattice")
+    platform::prompt_text("Capture to Lattice", false)
 }
 
 // ── Offline queue ─────────────────────────────────────────────────────────────
@@ -322,6 +346,34 @@ fn classify_post_error(err: &anyhow::Error) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn parse(args: &[&str]) -> (bool, bool, Vec<String>) {
+        parse_args(args.iter().map(|s| (*s).to_owned()))
+    }
+
+    #[test]
+    fn parse_args_plain_words_are_positional() {
+        assert_eq!(
+            parse(&["hello", "world"]),
+            (false, false, vec!["hello".to_owned(), "world".to_owned()])
+        );
+    }
+
+    #[test]
+    fn parse_args_recognizes_prompt_and_voice_flags() {
+        assert_eq!(parse(&[]), (false, false, vec![]));
+        assert_eq!(parse(&["--prompt"]), (true, false, vec![]));
+        assert_eq!(parse(&["--voice"]), (false, true, vec![]));
+        assert_eq!(parse(&["--prompt", "--voice"]), (true, true, vec![]));
+    }
+
+    #[test]
+    fn parse_args_keeps_words_separate_from_flags() {
+        assert_eq!(
+            parse(&["--voice", "some", "text"]),
+            (false, true, vec!["some".to_owned(), "text".to_owned()])
+        );
+    }
 
     #[test]
     fn queue_schema_preserves_legacy_columns() {

@@ -86,7 +86,7 @@ async function processOne(
 			db.prepare(
 				`UPDATE ${table} SET extraction_status = 'done', extracted_text = ? WHERE id = ?`,
 			).run(text, id);
-			writeIndexFile(id, kind, contentType, text, db);
+			writeIndexFile(id, kind, text, db);
 			refreshIndex();
 			return;
 		}
@@ -108,13 +108,7 @@ async function processOne(
 	}
 }
 
-function writeIndexFile(
-	id: number,
-	kind: 'capture' | 'working',
-	_contentType: string,
-	text: string,
-	db: Database,
-): void {
+function writeIndexFile(id: number, kind: 'capture' | 'working', text: string, db: Database): void {
 	if (kind === 'capture') {
 		const row = db
 			.query(

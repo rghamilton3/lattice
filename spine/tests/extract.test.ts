@@ -104,6 +104,7 @@ describe('extractText', () => {
 	it('dispatches image/jpeg to Tier 1 (OCR unconfigured → empty text)', async () => {
 		const path = join(tmpDir, 'img.jpg');
 		writeFileSync(path, 'fake image bytes');
+		// Relies on no ocr_model in test env; if one is ever configured this will hit the inference endpoint
 		const result = await extractText(path, 'image/jpeg');
 		expect(result.tier).toBe(1);
 		expect(result.text).toBe('');

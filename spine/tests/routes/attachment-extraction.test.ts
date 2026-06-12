@@ -402,7 +402,7 @@ describe('Extraction queue — failed and unknown-format paths', () => {
 			.prepare(
 				`INSERT INTO capture_attachments
              (capture_id, signal_id, content_type, filename, size_bytes, stored_path, upload_source, created_at, extraction_status, extracted_text)
-             VALUES (?, '', 'text/plain', 'ghost.txt', 0, 'nonexistent-uuid', 'browser', '2026-01-01T00:00:00Z', 'pending', '') RETURNING id`,
+             VALUES (?, '', 'text/plain', 'ghost.txt', 0, '', 'browser', '2026-01-01T00:00:00Z', 'pending', '') RETURNING id`,
 			)
 			.get(captureId) as { id: number };
 

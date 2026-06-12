@@ -1224,7 +1224,8 @@ async function routePreviewDocWithAttachments(
 	attachments: object[],
 	descriptionRoutes: Record<number, object | 404> = {}
 ) {
-	await page.unroute('**/api/**');
+	// Catch-all registered first → lowest priority; specific routes below override it
+	await page.route('**/api/**', (route) => route.fulfill({ status: 200, body: '[]' }));
 	await page.route('**/api/lateral**', (route) =>
 		route.fulfill({ status: 200, body: JSON.stringify({ results: [] }) })
 	);
@@ -1248,17 +1249,6 @@ async function routePreviewDocWithAttachments(
 			body: JSON.stringify({ slug: 'preview-doc', title: 'Preview Doc', content: '# Preview' })
 		})
 	);
-	await page.route('**/api/**', (route) => {
-		const url = route.request().url();
-		if (
-			url.includes('/api/working/preview-doc') ||
-			url.includes('/api/lateral') ||
-			url.includes('/api/similar')
-		) {
-			return route.fallback();
-		}
-		return route.fulfill({ status: 200, body: '[]' });
-	});
 }
 
 test('attachment rail shows extraction status badges for pending, failed, and dark attachments', async ({

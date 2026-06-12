@@ -1216,3 +1216,114 @@ test('working doc save failure preserves editing and recoverable preview status'
 	);
 	await expect(page.getByRole('button', { name: 'Save working document' })).toBeEnabled();
 });
+
+// ─── AttachmentRail extraction status display ─────────────────────────────────
+
+async function routePreviewDocWithAttachments(
+	page: Page,
+	attachments: object[],
+	descriptionRoutes: Record<number, object | 404> = {}
+) {
+	// Catch-all registered first → lowest priority; specific routes below override it.
+	// More specific routes must be registered AFTER less specific ones (last-registered-wins).
+	await page.route('**/api/**', (route) => route.fulfill({ status: 200, body: '[]' }));
+	await page.route('**/api/lateral**', (route) =>
+		route.fulfill({ status: 200, body: JSON.stringify({ results: [] }) })
+	);
+	await page.route('**/api/similar**', (route) =>
+		route.fulfill({ status: 200, body: JSON.stringify({ results: [] }) })
+	);
+	await page.route('**/api/working/preview-doc', (route) =>
+		route.fulfill({
+			status: 200,
+			body: JSON.stringify({ slug: 'preview-doc', title: 'Preview Doc', content: '# Preview' })
+		})
+	);
+	await page.route('**/api/working/preview-doc/attachments**', (route) =>
+		route.fulfill({ status: 200, body: JSON.stringify(attachments) })
+	);
+	// Description routes registered last → override the attachments list route above
+	for (const [id, fixture] of Object.entries(descriptionRoutes)) {
+		const status = fixture === 404 ? 404 : 200;
+		const body =
+			fixture === 404 ? JSON.stringify({ error: 'No description yet' }) : JSON.stringify(fixture);
+		await page.route(`**/api/working/preview-doc/attachments/${id}/description**`, (route) =>
+			route.fulfill({ status, body })
+		);
+	}
+}
+
+test('attachment rail shows extraction status badges for pending, failed, and dark attachments', async ({
+	page
+}) => {
+	const attachments = [
+		{
+			id: 1,
+			filename: 'doc.pdf',
+			content_type: 'application/pdf',
+			size_bytes: 1024,
+			extraction_status: 'pending'
+		},
+		{
+			id: 2,
+			filename: 'bad.pdf',
+			content_type: 'application/pdf',
+			size_bytes: 512,
+			extraction_status: 'failed'
+		},
+		{
+			id: 3,
+			filename: 'chart.png',
+			content_type: 'image/png',
+			size_bytes: 2048,
+			extraction_status: 'dark'
+		}
+	];
+	await routePreviewDocWithAttachments(page, attachments);
+	await page.goto('/?ref=working:preview-doc');
+
+	const rail = page.getByRole('complementary', { name: 'Attachments' });
+	await expect(rail).toBeVisible();
+	await expect(rail.getByText('extracting…')).toBeVisible();
+	await expect(rail.getByText('failed')).toBeVisible();
+	await expect(
+		rail.getByRole('button', { name: 'Toggle description for chart.png' })
+	).toBeVisible();
+});
+
+test('dark attachment description panel shows description text and Confirm button', async ({
+	page
+}) => {
+	const attachments = [
+		{
+			id: 1,
+			filename: 'photo.jpg',
+			content_type: 'image/jpeg',
+			size_bytes: 3000,
+			extraction_status: 'dark'
+		}
+	];
+	const description = {
+		id: 10,
+		attachment_kind: 'working',
+		attachment_id: 1,
+		produced_text: 'A photo of a garden.',
+		final_text: 'A photo of a garden.',
+		confirmed: false,
+		model_id: 'test-vlm',
+		supersedes: null,
+		created_at: '2026-01-01T00:00:00Z'
+	};
+	await routePreviewDocWithAttachments(page, attachments, { 1: description });
+	await page.goto('/?ref=working:preview-doc');
+
+	const rail = page.getByRole('complementary', { name: 'Attachments' });
+	const descButton = rail.getByRole('button', { name: 'Toggle description for photo.jpg' });
+	await expect(descButton).toBeVisible();
+	await descButton.click();
+
+	const textarea = rail.getByLabel('Description for photo.jpg', { exact: true });
+	await expect(textarea).toBeVisible();
+	await expect(textarea).toHaveValue('A photo of a garden.');
+	await expect(rail.getByRole('button', { name: 'Confirm' })).toBeVisible();
+});

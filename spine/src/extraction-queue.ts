@@ -142,7 +142,7 @@ async function processOne(
 			db.prepare(
 				`UPDATE ${table} SET extraction_status = 'done', extracted_text = ? WHERE id = ?`,
 			).run(text, id);
-			writeIndexFile(id, kind, contentType, text, db);
+			writeIndexFile(id, kind, text, db);
 			refreshIndex();
 			return;
 		}
@@ -186,7 +186,7 @@ async function transcribeOne(
 		db.prepare(
 			`UPDATE ${table} SET extraction_status = 'done', extracted_text = ? WHERE id = ?`,
 		).run(head.final_text, id);
-		writeIndexFile(id, kind, contentType, head.final_text, db);
+		writeIndexFile(id, kind, head.final_text, db);
 		refreshIndex();
 		return;
 	}
@@ -224,7 +224,7 @@ async function transcribeOne(
 			).run(text, id);
 		})();
 
-		writeIndexFile(id, kind, contentType, text, db);
+		writeIndexFile(id, kind, text, db);
 		refreshIndex();
 		emitForCapture(db, kind, id, 'complete', text.slice(0, 120) || '(empty transcript)');
 	} catch (e) {
@@ -270,13 +270,7 @@ function emitForCapture(
 	});
 }
 
-function writeIndexFile(
-	id: number,
-	kind: 'capture' | 'working',
-	_contentType: string,
-	text: string,
-	db: Database,
-): void {
+function writeIndexFile(id: number, kind: 'capture' | 'working', text: string, db: Database): void {
 	if (kind === 'capture') {
 		const row = db
 			.query(

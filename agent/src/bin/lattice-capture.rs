@@ -9,6 +9,10 @@
 //!   1. CLI args (joined with spaces)
 //!   2. stdin if not a TTY
 //!   3. interactive prompt window (eframe, cross-platform)
+//!
+//! `--prompt` forces the prompt window. `--voice` (implies `--prompt`) also
+//! starts a voxtype dictation on Linux so one hotkey opens the prompt with
+//! recording already live; the user's voxtype stop key inserts the transcript.
 
 use anyhow::{Context, Result, bail};
 use lattice_agent::config;
@@ -128,12 +132,23 @@ async fn run() -> Result<()> {
 // ── Text input ────────────────────────────────────────────────────────────────
 
 fn read_text() -> Result<Option<String>> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.iter().any(|a| a == "--prompt") {
-        return platform::prompt_text("Capture to Lattice");
+    let mut prompt = false;
+    let mut voice = false;
+    let mut words: Vec<String> = Vec::new();
+    for arg in std::env::args().skip(1) {
+        match arg.as_str() {
+            "--prompt" => prompt = true,
+            // --voice implies --prompt: dictation is only useful typed into
+            // the prompt window.
+            "--voice" => voice = true,
+            _ => words.push(arg),
+        }
     }
-    if !args.is_empty() {
-        return Ok(Some(args.join(" ")));
+    if prompt || voice {
+        return platform::prompt_text("Capture to Lattice", voice);
+    }
+    if !words.is_empty() {
+        return Ok(Some(words.join(" ")));
     }
     let stdin = io::stdin();
     if !stdin.is_terminal() {
@@ -141,7 +156,7 @@ fn read_text() -> Result<Option<String>> {
         stdin.lock().read_to_string(&mut buf)?;
         return Ok(Some(buf.trim_end_matches('\n').to_owned()));
     }
-    platform::prompt_text("Capture to Lattice")
+    platform::prompt_text("Capture to Lattice", false)
 }
 
 // ── Offline queue ─────────────────────────────────────────────────────────────

@@ -126,15 +126,18 @@
 			};
 		}
 		if (pwa.showUpdateNotice && wb.activeOverlay === 'none') {
+			const failed = pwa.updateState === 'failed';
 			return {
 				kind: 'update',
-				tone: pwa.updateState === 'failed' ? 'warn' : 'info',
-				title: pwa.updateState === 'failed' ? 'Update needs a reload' : 'A Surface update is ready',
-				message:
-					pwa.updateState === 'failed'
-						? 'Reload to recover the newest app shell. No cache clearing or reinstall is needed.'
-						: 'Reload when you are ready. Surface will not interrupt typing or modal work.',
-				actions: [{ label: 'Reload', onclick: () => pwa.reloadForUpdate(), variant: 'primary' }]
+				tone: failed ? 'warn' : 'info',
+				title: failed ? 'Update needs a reload' : 'New version of the Surface app available',
+				message: failed
+					? 'Reload to recover the newest app shell. No cache clearing or reinstall is needed.'
+					: 'A newer version of this web app downloaded in the background. Reload to switch to it. Your captures and documents live on the server and are not affected.',
+				actions: [{ label: 'Reload', onclick: () => pwa.reloadForUpdate(), variant: 'primary' }],
+				// A failed update means the shell may be stale or broken; keep that
+				// notice visible instead of letting it be dismissed for the session.
+				ondismiss: failed ? undefined : () => pwa.dismissUpdate()
 			};
 		}
 		if (pwa.installUnsupported) {

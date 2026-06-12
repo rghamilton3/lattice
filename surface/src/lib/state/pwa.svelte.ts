@@ -1,6 +1,7 @@
 import { getContext, setContext } from 'svelte';
-import { browser } from '$app/environment';
+import { browser, dev } from '$app/environment';
 import { detectDisplayMode, detectNetworkState, isActiveTextEntry } from '$lib/pwa/browserState';
+import { logError } from '$lib/utils/logError';
 import { readInstallDismissed, writeInstallDismissed } from '$lib/pwa/installPreference';
 import type {
 	BeforeInstallPromptEvent,
@@ -21,6 +22,8 @@ type ServiceWorkerContainerLike = Pick<
 export class PwaRuntimeState {
 	#initialized = false;
 	#registration: ServiceWorkerRegistration | null = null;
+	#container: ServiceWorkerContainerLike | null = null;
+	#reloadingForUpdate = false;
 
 	installEvent = $state<BeforeInstallPromptEvent | null>(null);
 	installDismissed = $state(readInstallDismissed());
@@ -29,6 +32,7 @@ export class PwaRuntimeState {
 	serviceState = $state<PwaServiceState>('unknown');
 	updateState = $state<PwaUpdateState>('unknown');
 	activeTextEntry = $state(false);
+	updateDismissed = $state(false);
 	lastCheckedAt = $state<number | null>(null);
 
 	installAvailable = $derived(
@@ -48,7 +52,8 @@ export class PwaRuntimeState {
 		(this.updateState === 'available' ||
 			this.updateState === 'pending' ||
 			this.updateState === 'failed') &&
-			!this.activeTextEntry
+			!this.activeTextEntry &&
+			!this.updateDismissed
 	);
 
 	constructor() {
@@ -61,14 +66,41 @@ export class PwaRuntimeState {
 		const container =
 			serviceWorker ?? (browser && 'serviceWorker' in navigator ? navigator.serviceWorker : null);
 		if (!container) return;
+		this.#container = container;
+
+		// The service worker is registered here, in production only (automatic
+		// registration is disabled in svelte.config.js). In dev, drop any stale
+		// registration so an old shell cannot serve cached assets or surface
+		// bogus update notices on every dev-server restart.
+		if (dev && !serviceWorker) {
+			container
+				.getRegistration()
+				.then((registration) => registration?.unregister())
+				.catch((err) => logError('pwa', err));
+			return;
+		}
+
 		this.updateState = container.controller ? 'current' : 'unknown';
 
+		// clients.claim() in the worker fires controllerchange on every
+		// uncontrolled load (first visit, hard reload). Only a takeover of an
+		// already-controlled page means a newer version activated behind us.
+		let controlled = container.controller !== null;
 		container.addEventListener('controllerchange', () => {
+			if (this.#reloadingForUpdate) return;
+			if (!controlled) {
+				controlled = true;
+				this.updateState = 'current';
+				return;
+			}
 			this.updateState = 'available';
 		});
 
-		container
-			.getRegistration()
+		const registrationPromise = serviceWorker
+			? container.getRegistration()
+			: (container as ServiceWorkerContainer).register('/service-worker.js');
+
+		registrationPromise
 			.then((registration) => {
 				if (!registration) return;
 				this.#registration = registration;
@@ -83,8 +115,12 @@ export class PwaRuntimeState {
 					});
 				});
 			})
-			.catch(() => {
-				this.updateState = 'failed';
+			.catch((err) => {
+				logError('pwa', err);
+				// A failed *update* on a controlled page needs the reload notice.
+				// A failed initial registration has no newer shell to recover, so
+				// a "reload to update" toast would mislead (and loop on reload).
+				if (container.controller) this.updateState = 'failed';
 			});
 	}
 
@@ -161,9 +197,35 @@ export class PwaRuntimeState {
 		this.#registration?.waiting?.postMessage({ type: 'SKIP_WAITING' });
 	}
 
+	dismissUpdate() {
+		this.updateDismissed = true;
+	}
+
 	reloadForUpdate() {
-		this.requestUpdateActivation();
-		window.location.reload();
+		const waiting = this.#registration?.waiting;
+		if (!waiting || !this.#container) {
+			window.location.reload();
+			return;
+		}
+		// Reloading immediately would race the takeover: the next load would
+		// still be served by the old worker, find `waiting` still set, and
+		// re-show the update notice. Activate the waiting worker first and
+		// reload once it actually takes control.
+		this.#reloadingForUpdate = true;
+		let reloaded = false;
+		const reload = () => {
+			if (reloaded) return;
+			reloaded = true;
+			window.location.reload();
+		};
+		this.#container.addEventListener('controllerchange', reload, { once: true });
+		waiting.postMessage({ type: 'SKIP_WAITING' });
+		// Activation is near-instant; reload anyway if it never lands.
+		setTimeout(() => {
+			if (reloaded) return;
+			logError('pwa', new Error('Waiting service worker did not take control within 2s'));
+			reload();
+		}, 2000);
 	}
 }
 

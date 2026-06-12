@@ -29,12 +29,24 @@ test('shows a user-controlled reload affordance for service worker updates', asy
 	await page.goto('/');
 
 	await expect(
-		page.getByRole('status').filter({ hasText: 'A Surface update is ready' })
+		page.getByRole('status').filter({ hasText: 'New version of the Surface app available' })
 	).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Reload' })).toBeVisible();
 });
 
 test('does not interrupt command palette focus with update messaging', async ({ page }) => {
+	// Start controlled (no waiting worker) so the dispatched controllerchange
+	// below registers as a genuine update takeover rather than a first claim.
+	await page.addInitScript(() => {
+		const registration = { waiting: undefined, addEventListener: () => undefined };
+		const serviceWorker = Object.assign(new EventTarget(), {
+			controller: {},
+			getRegistration: async () => registration,
+			register: async () => registration
+		});
+		Object.defineProperty(navigator, 'serviceWorker', { value: serviceWorker, configurable: true });
+	});
+
 	await page.goto('/');
 	await page.getByRole('button', { name: /Find anything|Command palette/i }).click();
 	const palette = page.getByRole('dialog', { name: 'Command palette' });
@@ -44,7 +56,7 @@ test('does not interrupt command palette focus with update messaging', async ({ 
 	await page.evaluate(() => navigator.serviceWorker.dispatchEvent(new Event('controllerchange')));
 
 	await expect(
-		page.getByRole('status').filter({ hasText: 'A Surface update is ready' })
+		page.getByRole('status').filter({ hasText: 'New version of the Surface app available' })
 	).toBeHidden();
 	await expect(palette.getByRole('textbox')).toBeFocused();
 	await expect(palette.getByRole('textbox')).toHaveValue('search');

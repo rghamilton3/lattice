@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import {
 	extractInline,
 	extractSubprocess,
+	extractText,
 	isInlineType,
 	isImageType,
 	isSubprocessType,
@@ -88,5 +89,32 @@ describe('extractSubprocess', () => {
 		const path = join(tmpDir, 'garbage.pdf');
 		writeFileSync(path, 'this is not a real pdf');
 		await expect(extractSubprocess(path, 'application/pdf')).rejects.toThrow();
+	});
+});
+
+describe('extractText', () => {
+	it('dispatches text/plain to Tier 0 and returns file content', async () => {
+		const path = join(tmpDir, 'hello.txt');
+		writeFileSync(path, 'hello world');
+		const result = await extractText(path, 'text/plain');
+		expect(result.tier).toBe(0);
+		expect(result.text).toBe('hello world');
+	});
+
+	it('dispatches image/jpeg to Tier 1 (OCR unconfigured → empty text)', async () => {
+		const path = join(tmpDir, 'img.jpg');
+		writeFileSync(path, 'fake image bytes');
+		// Relies on no ocr_model in test env; if one is ever configured this will hit the inference endpoint
+		const result = await extractText(path, 'image/jpeg');
+		expect(result.tier).toBe(1);
+		expect(result.text).toBe('');
+	});
+
+	it('returns empty text at Tier 0 for unknown formats (e.g. application/octet-stream)', async () => {
+		const path = join(tmpDir, 'blob.bin');
+		writeFileSync(path, '\x00\x01\x02\x03');
+		const result = await extractText(path, 'application/octet-stream');
+		expect(result.tier).toBe(0);
+		expect(result.text).toBe('');
 	});
 });

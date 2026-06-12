@@ -3,6 +3,7 @@ import type { Database } from 'bun:sqlite';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { writeCaptureFile, writeLocalFile, writeAttachmentIndex, refreshIndex } from '../search';
+import { queueAttachment } from '../extraction-queue';
 import { emitCapture } from '../captureEvents';
 import { parseCommand } from '../commands';
 import type { TrackCreateRequest, TrackCreateResponse } from '../db/rows';
@@ -427,6 +428,9 @@ export const agentRoutes = (db: Database, { attachmentsDir, archiveDir }: AgentR
 					now,
 				);
 				refreshIndex();
+				// Ingestion success is durable here (capture + attachment + pending
+				// status); extraction/transcription runs async, never inline.
+				queueAttachment(row.id, 'capture', join(attachmentsDir, storedPath), body.content_type, db);
 				return { id: row.id };
 			},
 			{

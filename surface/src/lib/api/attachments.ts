@@ -37,6 +37,26 @@ export function attachmentRawUrl(captureId: number, attachmentId: number): strin
 	return `/api/captures/${captureId}/attachments/${attachmentId}/raw`;
 }
 
+export function isAudioAttachment(att: { content_type: string }): boolean {
+	return att.content_type.startsWith('audio/');
+}
+
+// Spine prefixes failure reasons with 'transient: ' or 'terminal: ' for its
+// own retry policy; strip them for display (the distinction is not actionable
+// for the user: Retry works either way).
+export function displayFailureReason(reason: string): string {
+	return reason.replace(/^(transient|terminal): /, '');
+}
+
+export function retryExtraction(
+	captureId: number,
+	attachmentId: number
+): Promise<{ status: 'pending' }> {
+	return apiFetch(`/api/captures/${captureId}/attachments/${attachmentId}/retry-extraction`, {
+		method: 'POST'
+	});
+}
+
 export function fetchAttachmentDescription(
 	captureId: number,
 	attachmentId: number

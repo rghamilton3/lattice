@@ -5,7 +5,22 @@
 </script>
 
 {#if wb.toast}
-	{#if wb.toast.onclick}
+	{#if wb.toast.actions && wb.toast.actions.length > 0}
+		<div class="toast toast-multi" role="status" aria-live="polite">
+			<span class="toast-msg">{wb.toast.msg}</span>
+			<span class="toast-btns">
+				{#each wb.toast.actions as action (action.label)}
+					<button
+						class="btn btn-ghost btn-mini"
+						onclick={() => {
+							action.onclick?.();
+							wb.dismissToast();
+						}}>{action.label}</button
+					>
+				{/each}
+			</span>
+		</div>
+	{:else if wb.toast.onclick}
 		<button
 			class="toast toast-action"
 			onclick={() => {

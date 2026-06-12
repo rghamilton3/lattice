@@ -3,6 +3,7 @@ import type { Database } from 'bun:sqlite';
 import type { CaptureRow } from '../db/rows';
 import { writeCaptureFile, refreshIndex } from '../search';
 import { onCapture, emitCapture } from '../captureEvents';
+import { onTranscriptionAttention } from '../transcriptionEvents';
 import { parseCommand } from '../commands';
 import { listArchiveInboxRows } from '../archives';
 
@@ -155,6 +156,7 @@ export const capturesRoutes = (db: Database) =>
 		.get('/api/captures/stream', () => {
 			const encoder = new TextEncoder();
 			let off: (() => void) | null = null;
+			let offTranscription: (() => void) | null = null;
 			let heartbeat: ReturnType<typeof setInterval> | null = null;
 			const stream = new ReadableStream({
 				start(controller) {
@@ -187,10 +189,24 @@ export const capturesRoutes = (db: Database) =>
 							off = null;
 						}
 					});
+					offTranscription = onTranscriptionAttention((input) => {
+						const event =
+							input.type === 'complete' ? 'attachment_transcribed' : 'attachment_extraction_failed';
+						try {
+							controller.enqueue(
+								encoder.encode(`event: ${event}\ndata: ${JSON.stringify(input)}\n\n`),
+							);
+						} catch (e) {
+							if (heartbeat !== null) console.error('[sse] transcription enqueue failed:', e);
+							offTranscription?.();
+							offTranscription = null;
+						}
+					});
 				},
 				cancel() {
 					if (heartbeat !== null) clearInterval(heartbeat);
 					off?.();
+					offTranscription?.();
 				},
 			});
 			return new Response(stream, {

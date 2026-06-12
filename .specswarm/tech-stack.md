@@ -99,6 +99,11 @@
 
 <!-- ss:user-additions -->
 <!-- Add project-specific approved libraries below. Content here is preserved on /ss:init re-run. -->
+
+### asr-shim (Python) <!-- Auto-added: Feature 020, 2026-06-11 -->
+- Python 3.12 + FastAPI + uvicorn + python-multipart (OpenAI-compatible ASR endpoint; new monorepo component, GPU-host deployed)
+- nemo_toolkit['asr'] 2.7.x + torch (NVIDIA NeMo Parakeet EN backend; never installed in spine/surface CI - tests use a fake transcriber)
+- ffmpeg binary (audio normalization to mono 16 kHz s16 WAV; startup-verified)
 <!-- ss:end -->
 
 ---

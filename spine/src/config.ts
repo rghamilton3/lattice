@@ -16,6 +16,8 @@ interface QmdModelsConfig {
 	expand_api_key?: string;
 	ocr_model?: string;
 	vlm_model?: string;
+	asr_model?: string;
+	asr_timeout_s?: number;
 }
 
 interface LatticeConfig {
@@ -74,4 +76,17 @@ export function getOcrModel(): string | undefined {
 
 export function getVlmModel(): string | undefined {
 	return readLatticeConfig().spine?.qmd?.vlm_model;
+}
+
+// Transcription is enabled only when asr_model is set; audio attachments
+// otherwise keep the filename-only indexing behavior.
+export function getAsrModel(): string | undefined {
+	return process.env.LATTICE_ASR_MODEL ?? readLatticeConfig().spine?.qmd?.asr_model;
+}
+
+// Audio is minutes long and llama-swap may cold-start the ASR shim, so this
+// timeout is far larger than the 30s used for OCR/VLM calls.
+export function getAsrTimeoutMs(): number {
+	const s = readLatticeConfig().spine?.qmd?.asr_timeout_s;
+	return (typeof s === 'number' && s > 0 ? s : 300) * 1000;
 }

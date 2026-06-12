@@ -50,6 +50,7 @@ describe('db.initDb', () => {
 			'015_surfaced.sql',
 			'016_clusters.sql',
 			'017_track_bins.sql',
+			'018_audio_transcription.sql',
 		]);
 		db.close();
 	});
@@ -88,7 +89,7 @@ describe('db.initDb', () => {
 		const { initDb, getMigrationStatus } = await import('../../src/db');
 		const db = initDb();
 
-		expect(getMigrationStatus(db)).toEqual({ ready: true, applied: 17 });
+		expect(getMigrationStatus(db)).toEqual({ ready: true, applied: 18 });
 		db.close();
 	});
 

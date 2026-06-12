@@ -10,6 +10,7 @@
 	import { archiveRawUrl } from '$lib/api/archives';
 	import Icon from '$components/icons/Icon.svelte';
 	import ActionRow from '$components/inbox/ActionRow.svelte';
+	import InboxAudioNotes from './InboxAudioNotes.svelte';
 	import { relTime } from '$lib/utils/relTime';
 
 	type Props = {
@@ -218,6 +219,9 @@
 								>
 							{/if}
 						</div>
+						{#if item.item_type === 'capture'}
+							<InboxAudioNotes captureId={item.capture_id} />
+						{/if}
 						<ActionRow actions={item.actions} onAction={(action) => onItemAction(item, action)} />
 					</div>
 					{#if item.item_type === 'capture'}

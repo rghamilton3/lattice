@@ -556,6 +556,24 @@
 .toast-action:hover {
 	background: var(--bg-high);
 }
+.toast-multi {
+	pointer-events: auto;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	max-width: min(520px, calc(100vw - 32px));
+}
+.toast-multi .toast-msg {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.toast-multi .toast-btns {
+	display: flex;
+	gap: 4px;
+	flex-shrink: 0;
+}
 @media (prefers-reduced-motion: reduce) {
 	.toast {
 		animation: none;

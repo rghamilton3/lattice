@@ -313,6 +313,62 @@ describe('WorkbenchStore', () => {
 		expect(wb.toast?.msg).toBe('visible');
 	});
 
+	it('background toast does not overwrite a navigational toast with onclick', () => {
+		const wb = new WorkbenchStore();
+		wb.showToast('Open document', { onclick: () => {} });
+		const nav = wb.toast;
+
+		wb.showToast('Live updates disconnected', { background: true });
+
+		expect(wb.toast).toBe(nav);
+		expect(wb.toast?.msg).toBe('Open document');
+	});
+
+	it('background toast does not overwrite a navigational toast with actions', () => {
+		const wb = new WorkbenchStore();
+		wb.showToast('Transcript ready', {
+			actions: [{ label: 'Open', onclick: () => {} }, { label: 'Skip' }]
+		});
+		const nav = wb.toast;
+
+		wb.showToast('Live updates disconnected', { background: true });
+
+		expect(wb.toast).toBe(nav);
+		expect(wb.toast?.msg).toBe('Transcript ready');
+	});
+
+	it('background toast does not overwrite a plain foreground toast', () => {
+		const wb = new WorkbenchStore();
+		wb.showToast('2 processed');
+		const existing = wb.toast;
+
+		wb.showToast('background info', { background: true });
+
+		expect(wb.toast).toBe(existing);
+		expect(wb.toast?.msg).toBe('2 processed');
+	});
+
+	it('background toast replaces a plain background toast', () => {
+		const wb = new WorkbenchStore();
+		wb.showToast('SSE connected', { background: true });
+
+		wb.showToast('SSE disconnected', { background: true });
+
+		expect(wb.toast?.msg).toBe('SSE disconnected');
+	});
+
+	it('foreground toast always replaces any existing toast', () => {
+		const wb = new WorkbenchStore();
+		wb.showToast('Transcript ready', {
+			background: true,
+			actions: [{ label: 'Open', onclick: () => {} }, { label: 'Skip' }]
+		});
+
+		wb.showToast('Capture saved');
+
+		expect(wb.toast?.msg).toBe('Capture saved');
+	});
+
 	it('exitTriage surfaces a failure count when triageCapture rejects', async () => {
 		triageMock.mockImplementation(async (id: number) => {
 			if (id === 11 || id === 14) throw new Error('boom');

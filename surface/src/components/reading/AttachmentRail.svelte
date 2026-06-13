@@ -14,10 +14,13 @@
 		updateAttachmentDescription,
 		fetchWorkingAttachmentDescription,
 		updateWorkingAttachmentDescription,
+		retryExtraction,
+		isAudioAttachment,
+		displayFailureReason,
 		type DescriptionPatch
 	} from '$lib/api/attachments';
 	import { ApiError } from '$lib/api/client';
-	import type { AttachmentDescription, BaseAttachment } from '$lib/types';
+	import type { AttachmentDescription, BaseAttachment, CaptureAttachment } from '$lib/types';
 	import { logError } from '$lib/utils/logError';
 	import Icon from '$components/icons/Icon.svelte';
 
@@ -99,6 +102,47 @@
 	let saving = $state(false);
 	let saveError = $state('');
 
+	// Descriptions exist for dark attachments; for capture audio attachments the
+	// description row is the transcript (020 RH-4), editable through the same flow.
+	function hasDescription(att: BaseAttachment): boolean {
+		return att.extraction_status === 'dark' || (props.kind === 'capture' && isAudioAttachment(att));
+	}
+
+	function descLabel(att: BaseAttachment): string {
+		return isAudioAttachment(att) ? 'Transcript' : 'Machine description';
+	}
+
+	// Only capture attachments carry extraction_failure_reason in the payload.
+	function failureTitle(att: BaseAttachment): string {
+		const reason = (att as Partial<CaptureAttachment>).extraction_failure_reason ?? '';
+		return displayFailureReason(reason) || 'Text extraction failed';
+	}
+
+	let retryingId = $state<number | null>(null);
+
+	async function retryFailed(att: BaseAttachment) {
+		if (props.kind !== 'capture') return;
+		retryingId = att.id;
+		try {
+			await retryExtraction(props.captureId, att.id);
+			// Optimistically flip back to pending so the hint shows immediately.
+			qc.setQueryData(queryKey, (old: BaseAttachment[] | undefined) =>
+				old?.map((a) =>
+					a.id === att.id
+						? { ...a, extraction_status: 'pending' as const, extraction_failure_reason: '' }
+						: a
+				)
+			);
+			status = `Retrying extraction for ${att.filename}`;
+		} catch (err) {
+			logError('retryExtraction', err);
+			// 409 means the status moved on (e.g. already retried elsewhere); refetch either way.
+			qc.invalidateQueries({ queryKey });
+		} finally {
+			retryingId = null;
+		}
+	}
+
 	function descKey(attachmentId: number) {
 		return props.kind === 'capture'
 			? attachmentKeys.captureDescription(props.captureId, attachmentId)
@@ -158,7 +202,7 @@
 					? await updateAttachmentDescription(props.captureId, att.id, patch)
 					: await updateWorkingAttachmentDescription(props.slug, att.id, patch);
 			qc.setQueryData(descKey(att.id), updated);
-			status = `Saved description for ${att.filename}`;
+			status = `Saved ${descLabel(att).toLowerCase()} for ${att.filename}`;
 		} catch (err) {
 			logError('saveAttachmentDescription', err);
 			// Spine's 409/400 bodies are actionable ("Attachment is not dark" after a
@@ -274,24 +318,34 @@
 								>
 									{att.filename}
 								</a>
-								{#if att.extraction_status === 'pending'}
+								{#if att.extraction_status === 'pending' || att.extraction_status === 'processing'}
 									<span class="att-extract att-extract--pending" title="Text extraction in progress"
-										>extracting…</span
+										>{isAudioAttachment(att) ? 'transcribing…' : 'extracting…'}</span
 									>
 								{:else if att.extraction_status === 'failed'}
-									<span class="att-extract att-extract--failed" title="Text extraction failed"
+									<span class="att-extract att-extract--failed" title={failureTitle(att)}
 										>failed</span
 									>
+									{#if props.kind === 'capture'}
+										<button
+											class="btn btn-ghost btn-mini"
+											disabled={retryingId === att.id}
+											onclick={() => retryFailed(att)}
+											aria-label="Retry extraction for {att.filename}"
+										>
+											{retryingId === att.id ? 'retrying…' : 'retry'}
+										</button>
+									{/if}
 								{/if}
 								<span class="att-size faint">{formatBytes(att.size_bytes)}</span>
-								{#if att.extraction_status === 'dark'}
+								{#if hasDescription(att)}
 									<button
 										class="btn btn-ghost att-desc-toggle"
 										class:att-desc-toggle--open={descOpenId === att.id}
 										onclick={() => toggleDescription(att.id)}
 										aria-expanded={descOpenId === att.id}
-										aria-label="Toggle description for {att.filename}"
-										title="Machine description"
+										aria-label="Toggle {descLabel(att).toLowerCase()} for {att.filename}"
+										title={descLabel(att)}
 									>
 										<Icon name="sparkle" size={12} />
 									</button>
@@ -308,21 +362,21 @@
 							{#if descOpenId === att.id}
 								<div class="att-desc">
 									{#if descQuery.isLoading}
-										<p class="att-message" role="status">Loading description…</p>
+										<p class="att-message" role="status">Loading {descLabel(att).toLowerCase()}…</p>
 									{:else if descMissing}
 										<p class="att-message" role="status">
-											No description yet — it will appear once generated.
+											No {descLabel(att).toLowerCase()} yet; it will appear once generated.
 										</p>
 									{:else if descQuery.isError}
 										<p class="att-message att-message--error" role="alert">
-											Failed to load description.
+											Failed to load {descLabel(att).toLowerCase()}.
 										</p>
 									{:else if descQuery.data}
 										<textarea
 											class="att-desc-text mono"
 											rows="5"
 											bind:value={draft}
-											aria-label="Description for {att.filename}"
+											aria-label="{descLabel(att)} for {att.filename}"
 										></textarea>
 										<div class="att-desc-actions">
 											{#if descQuery.data.confirmed}

@@ -8,7 +8,15 @@
 	import { workingKeys, fetchWorkingList } from '$lib/api/working';
 	import { taskKeys, fetchTasks } from '$lib/api/tasks';
 	import { useCompleteTask } from '$lib/state/useCompleteTask.svelte';
-	import type { ArchiveAction, Capture, DocRef, InboxItem, Task } from '$lib/types';
+	import { attachmentKeys } from '$lib/api/attachments';
+	import type {
+		ArchiveAction,
+		AttachmentAttentionEvent,
+		Capture,
+		DocRef,
+		InboxItem,
+		Task
+	} from '$lib/types';
 	import { captureToInboxItem } from '$lib/utils/inbox';
 	import Icon from '$components/icons/Icon.svelte';
 	import NowCard from './NowCard.svelte';
@@ -23,6 +31,15 @@
 	const wb = getWorkbenchContext();
 	const queryClient = useQueryClient();
 	const doneTask = useCompleteTask();
+
+	// Drop cached attachment state for a capture so inline transcription status
+	// (InboxAudioNotes, AttachmentRail) refetches after an SSE event.
+	function refreshAttachment(ev: AttachmentAttentionEvent) {
+		queryClient.invalidateQueries({ queryKey: attachmentKeys.captureList(ev.capture_id) });
+		queryClient.invalidateQueries({
+			queryKey: attachmentKeys.captureDescription(ev.capture_id, ev.attachment_id)
+		});
+	}
 
 	let connected = false;
 	let liveDisconnected = $state(false);
@@ -41,6 +58,28 @@
 				});
 			} catch (err) {
 				console.error('[sse] malformed capture event:', err);
+			}
+		});
+		sse.addEventListener('attachment_transcribed', (e) => {
+			try {
+				const ev = JSON.parse(e.data) as AttachmentAttentionEvent;
+				refreshAttachment(ev);
+				// Ephemeral, positively dismissed, auto-expires (020 NT-3).
+				wb.showToast(`Transcript ready · ${ev.excerpt}`, {
+					background: true,
+					durationMs: 8000,
+					actions: [{ label: 'Open', onclick: () => openCapture(ev.capture_id) }, { label: 'Skip' }]
+				});
+			} catch (err) {
+				console.error('[sse] malformed attachment_transcribed event:', err);
+			}
+		});
+		sse.addEventListener('attachment_extraction_failed', (e) => {
+			// No toast: the failed state is visible inline in the inbox (020 NT-4).
+			try {
+				refreshAttachment(JSON.parse(e.data) as AttachmentAttentionEvent);
+			} catch (err) {
+				console.error('[sse] malformed attachment_extraction_failed event:', err);
 			}
 		});
 		sse.addEventListener('open', () => {

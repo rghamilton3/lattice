@@ -253,10 +253,10 @@ export interface TrackFollowUp {
 	affirmative_label: string;
 }
 
-// States of the spine extraction pipeline (017); all but `pending` are terminal.
-// `dark` means the file yielded no text, so a machine description was (or will
-// be) generated for it.
-export type ExtractionStatus = 'pending' | 'done' | 'failed' | 'dark';
+// States of the spine extraction pipeline (017, extended by 020); `pending`
+// and `processing` are in-flight, the rest are terminal. `dark` means the file
+// yielded no text, so a machine description was (or will be) generated for it.
+export type ExtractionStatus = 'pending' | 'processing' | 'done' | 'failed' | 'dark';
 
 export interface BaseAttachment {
 	id: number;
@@ -286,6 +286,18 @@ export interface AttachmentDescription {
 export interface CaptureAttachment extends BaseAttachment {
 	capture_id: number;
 	upload_source: string;
+	// '' when none; spine prefixes 'transient: ' or 'terminal: ' on failure.
+	extraction_failure_reason: string;
+}
+
+// SSE payload for `attachment_transcribed` / `attachment_extraction_failed`
+// events on /api/captures/stream. `excerpt` is the first ~120 chars of the
+// transcript on completion, or the failure reason on failure.
+export interface AttachmentAttentionEvent {
+	type: 'complete' | 'failed_terminal' | 'failed_transient';
+	capture_id: number;
+	attachment_id: number;
+	excerpt: string;
 }
 
 export interface WorkingAttachment extends BaseAttachment {

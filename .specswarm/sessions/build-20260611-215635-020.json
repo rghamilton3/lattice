@@ -1,0 +1,28 @@
+{
+  "active": false,
+  "feature_description": "Signal Voice Capture Pipeline: capture Signal voice notes via relay, ingest through spine, async transcription via OpenAI-compatible ASR shim (Parakeet EN), transcript becomes searchable content",
+  "feature_num": "020",
+  "parent_branch": "worktree-feat+signal-voice-capture",
+  "branch_name": "020-signal-voice-capture",
+  "session_id": "build-20260611-215635-020",
+  "started_at": "2026-06-11T21:56:35-05:00",
+  "current_phase": "complete",
+  "phases_complete": [
+    "specify",
+    "clarify",
+    "plan",
+    "tasks",
+    "implement",
+    "quality"
+  ],
+  "quality_threshold": 80,
+  "run_validate": false,
+  "background_mode": false,
+  "notify_on_complete": false,
+  "orchestrate_flag": "",
+  "run_analyze": false,
+  "run_checklist": false,
+  "quick_mode": false,
+  "use_orchestration": true,
+  "quality_score": 92
+}

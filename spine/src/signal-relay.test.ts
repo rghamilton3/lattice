@@ -1,12 +1,17 @@
 import { expect, test } from 'bun:test';
 import {
+	fetchWithSpineRetry,
 	firstImageAttachmentId,
+	postAttachment,
 	postCapture,
 	postTrack,
 	shouldSendSignalReply,
 	signalNotificationPosture,
 	spineBaseFromCaptureUrl,
 } from './signal-relay';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 test('spineBaseFromCaptureUrl accepts capture or track endpoint env values', () => {
 	expect(spineBaseFromCaptureUrl('http://127.0.0.1:3000/api/agent/capture')).toBe(
@@ -149,6 +154,7 @@ test('postCapture: throws on non-ok response (failure event path)', async () => 
 			agentToken: 'token',
 			notificationPosture: 'standard',
 			fetchImpl: async () => new Response('internal error', { status: 500 }),
+			retryDelaysMs: [],
 		}),
 	).rejects.toThrow('POST /api/agent/capture returned 500');
 });
@@ -184,4 +190,75 @@ test('signalNotificationPosture: round-trips each valid value', () => {
 	}
 	if (prev !== undefined) process.env.SIGNAL_NOTIFICATION_POSTURE = prev;
 	else delete process.env.SIGNAL_NOTIFICATION_POSTURE;
+});
+
+// --- fetchWithSpineRetry (SR-5: bounded retry while the spine is momentarily down) ---
+
+test('fetchWithSpineRetry: retries connection errors then succeeds', async () => {
+	let calls = 0;
+	const flaky = async () => {
+		calls++;
+		if (calls < 3) throw new Error('ECONNREFUSED');
+		return new Response('{"id":1}', { status: 200 });
+	};
+	const res = await fetchWithSpineRetry(flaky, 'http://spine.test/', undefined, [0, 0, 0]);
+	expect(res.status).toBe(200);
+	expect(calls).toBe(3);
+});
+
+test('fetchWithSpineRetry: retries 5xx and returns the last response when exhausted', async () => {
+	let calls = 0;
+	const down = async () => {
+		calls++;
+		return new Response('unavailable', { status: 503 });
+	};
+	const res = await fetchWithSpineRetry(down, 'http://spine.test/', undefined, [0, 0]);
+	expect(res.status).toBe(503);
+	expect(calls).toBe(3); // initial + 2 retries, then the 5xx is surfaced to the caller
+});
+
+test('fetchWithSpineRetry: does not retry 4xx responses', async () => {
+	let calls = 0;
+	const badRequest = async () => {
+		calls++;
+		return new Response('bad', { status: 400 });
+	};
+	const res = await fetchWithSpineRetry(badRequest, 'http://spine.test/', undefined, [0, 0]);
+	expect(res.status).toBe(400);
+	expect(calls).toBe(1);
+});
+
+test('fetchWithSpineRetry: throws the last error when all attempts fail to connect', async () => {
+	let calls = 0;
+	const dead = async () => {
+		calls++;
+		throw new Error('ECONNREFUSED');
+	};
+	await expect(fetchWithSpineRetry(dead, 'http://spine.test/', undefined, [0, 0])).rejects.toThrow(
+		'ECONNREFUSED',
+	);
+	expect(calls).toBe(3);
+});
+
+test('postAttachment: succeeds after transient spine failures (SR-5)', async () => {
+	const dir = mkdtempSync(join(tmpdir(), 'relay-retry-'));
+	writeFileSync(join(dir, 'att-1'), 'voice-bytes');
+	let calls = 0;
+	await postAttachment(
+		7,
+		{ id: 'att-1', contentType: 'audio/aac', filename: 'note.aac', size: 11 },
+		{
+			attachmentsDir: dir,
+			spineBase: 'http://spine.test',
+			agentToken: 'tok',
+			fetchImpl: async () => {
+				calls++;
+				if (calls < 2) throw new Error('ECONNREFUSED');
+				return new Response('{"id":42}', { status: 200 });
+			},
+			retryDelaysMs: [0, 0],
+		},
+	);
+	expect(calls).toBe(2);
+	rmSync(dir, { recursive: true, force: true });
 });

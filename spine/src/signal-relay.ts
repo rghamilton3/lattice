@@ -352,6 +352,43 @@ export interface PostMessageOptions {
 	agentToken?: string;
 	notificationPosture?: NotificationPosture;
 	fetchImpl?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+	retryDelaysMs?: number[];
+	sleep?: (ms: number) => Promise<void>;
+}
+
+// SR-5: a voice note is not handled until the spine durably accepts it. The
+// spine sharing this host means outages are momentary (restarts, deploys);
+// bounded backoff covers them without a durable spool. signal-cli's attachment
+// directory keeps the bytes on disk throughout.
+const SPINE_RETRY_DELAYS_MS = [5_000, 15_000, 45_000];
+
+export async function fetchWithSpineRetry(
+	fetchImpl: (input: string | URL | Request, init?: RequestInit) => Promise<Response>,
+	input: string | URL | Request,
+	init?: RequestInit,
+	delaysMs: number[] = SPINE_RETRY_DELAYS_MS,
+	sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+): Promise<Response> {
+	let lastError: unknown = null;
+	for (let attempt = 0; attempt <= delaysMs.length; attempt++) {
+		try {
+			const res = await fetchImpl(input, init);
+			// 5xx means the spine is up but unhealthy; 4xx is our bug, not retryable.
+			if (res.status >= 500 && attempt < delaysMs.length) {
+				lastError = new Error(`spine returned ${res.status}`);
+				await sleep(delaysMs[attempt]);
+				continue;
+			}
+			return res;
+		} catch (e) {
+			lastError = e;
+			if (attempt < delaysMs.length) {
+				console.warn(`[signal-relay] spine unreachable (attempt ${attempt + 1}):`, e);
+				await sleep(delaysMs[attempt]);
+			}
+		}
+	}
+	throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 export async function postCapture(
@@ -360,15 +397,21 @@ export async function postCapture(
 	options: PostMessageOptions = {},
 ): Promise<CaptureResult> {
 	const fetchImpl = options.fetchImpl ?? fetch;
-	const res = await fetchImpl(options.spineUrl ?? config.spineUrl, {
-		method: 'POST',
-		headers: {
-			'content-type': 'application/json',
-			authorization: `Bearer ${options.agentToken ?? config.agentToken}`,
-			'x-forwarded-proto': 'https',
+	const res = await fetchWithSpineRetry(
+		fetchImpl,
+		options.spineUrl ?? config.spineUrl,
+		{
+			method: 'POST',
+			headers: {
+				'content-type': 'application/json',
+				authorization: `Bearer ${options.agentToken ?? config.agentToken}`,
+				'x-forwarded-proto': 'https',
+			},
+			body: JSON.stringify({ text, source: 'signal', captured_at }),
 		},
-		body: JSON.stringify({ text, source: 'signal', captured_at }),
-	});
+		options.retryDelaysMs,
+		options.sleep,
+	);
 
 	if (!res.ok) {
 		const body = await res.text().catch(() => '');
@@ -477,6 +520,8 @@ export interface PostAttachmentOptions {
 	spineBase?: string;
 	agentToken?: string;
 	fetchImpl?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+	retryDelaysMs?: number[];
+	sleep?: (ms: number) => Promise<void>;
 }
 
 export async function postAttachment(
@@ -503,15 +548,21 @@ export async function postAttachment(
 
 	const url = `${spineBase}/api/agent/capture/${captureId}/attachments`;
 
-	const res = await fetchImpl(url, {
-		method: 'POST',
-		headers: {
-			'content-type': 'application/json',
-			authorization: `Bearer ${agentToken}`,
-			'x-forwarded-proto': 'https',
+	const res = await fetchWithSpineRetry(
+		fetchImpl,
+		url,
+		{
+			method: 'POST',
+			headers: {
+				'content-type': 'application/json',
+				authorization: `Bearer ${agentToken}`,
+				'x-forwarded-proto': 'https',
+			},
+			body: JSON.stringify(body),
 		},
-		body: JSON.stringify(body),
-	});
+		options.retryDelaysMs,
+		options.sleep,
+	);
 
 	if (!res.ok) {
 		const responseBody = await res.text().catch(() => '');

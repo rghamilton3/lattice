@@ -1287,7 +1287,7 @@ test('attachment rail shows extraction status badges for pending, failed, and da
 	await expect(rail.getByText('extracting…')).toBeVisible();
 	await expect(rail.getByText('failed')).toBeVisible();
 	await expect(
-		rail.getByRole('button', { name: 'Toggle description for chart.png' })
+		rail.getByRole('button', { name: 'Toggle machine description for chart.png' })
 	).toBeVisible();
 });
 
@@ -1318,11 +1318,11 @@ test('dark attachment description panel shows description text and Confirm butto
 	await page.goto('/?ref=working:preview-doc');
 
 	const rail = page.getByRole('complementary', { name: 'Attachments' });
-	const descButton = rail.getByRole('button', { name: 'Toggle description for photo.jpg' });
+	const descButton = rail.getByRole('button', { name: 'Toggle machine description for photo.jpg' });
 	await expect(descButton).toBeVisible();
 	await descButton.click();
 
-	const textarea = rail.getByLabel('Description for photo.jpg', { exact: true });
+	const textarea = rail.getByLabel('Machine description for photo.jpg', { exact: true });
 	await expect(textarea).toBeVisible();
 	await expect(textarea).toHaveValue('A photo of a garden.');
 	await expect(rail.getByRole('button', { name: 'Confirm' })).toBeVisible();

@@ -23,8 +23,32 @@ async fn main() -> Result<()> {
         .init();
 
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        print!(
+            "lattice-agent — Local file indexer for the Lattice knowledge system.\n\
+             \n\
+             Usage:\n\
+             \x20 lattice-agent               Run the indexer daemon\n\
+             \x20 lattice-agent --force        Run and re-index all files (ignores cache)\n\
+             \x20 lattice-agent update check   Check for available updates\n\
+             \x20 lattice-agent update apply <product>  Apply an available update\n\
+             \x20 lattice-agent update history Show past update history\n\
+             \x20 lattice-agent --help         Show this help\n\
+             \n\
+             Desktop companions: lattice-capture, lattice-tray, lattice-config\n"
+        );
+        return Ok(());
+    }
     if args.first().is_some_and(|arg| arg == "update") {
         std::process::exit(lattice_agent::update::run_cli(&args[1..]).await?);
+    }
+
+    for arg in &args {
+        if arg != "--force" {
+            eprintln!("lattice-agent: unrecognized argument `{arg}`");
+            eprintln!("Run `lattice-agent --help` for usage.");
+            std::process::exit(1);
+        }
     }
 
     let force = args.iter().any(|a| a == "--force");

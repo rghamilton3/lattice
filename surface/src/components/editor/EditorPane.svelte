@@ -17,6 +17,9 @@
 	import type { PaneContent } from '$lib/types';
 	import Icon from '$components/icons/Icon.svelte';
 	import VimToggle from './VimToggle.svelte';
+	import { parseToc } from '$lib/editor/parseToc';
+	import type { TocEntry } from '$lib/editor/parseToc';
+	import EditorToc from './EditorToc.svelte';
 
 	const mermaidTemplate = '```mermaid\nflowchart TD\n  A[Start] --> B[Next]\n```\n';
 
@@ -43,6 +46,11 @@
 	let saveErrorMsg = $state('');
 	let statusTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastLoadedSlug = '';
+	let docText = $state('');
+	let debouncedText = $state('');
+	let tocOpen = $state(browser ? localStorage.getItem('lattice.editor.tocOpen') !== 'false' : true);
+	let tocDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	const tocEntries: TocEntry[] = $derived(parseToc(debouncedText));
 	const previewTargetPane = $derived(paneIndex === 0 ? 1 : 0);
 	const previewTargetContent = $derived(wb.panes[previewTargetPane]);
 	const isPreviewOpenInSplit = $derived(
@@ -258,6 +266,16 @@
 		view.focus();
 	}
 
+	function navigateToLine(lineNumber: number) {
+		if (!view) return;
+		const line = view.state.doc.line(lineNumber);
+		view.dispatch({
+			selection: EditorSelection.cursor(line.from),
+			effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 16 })
+		});
+		view.focus();
+	}
+
 	// Wire vim ex commands (global registry — last-mounted editor wins when two are open simultaneously)
 	Vim.defineEx('write', 'w', () => saveNow());
 	Vim.defineEx('wq', 'wq', () => {
@@ -268,6 +286,21 @@
 		const force = params?.argString?.trim() === '!';
 		if (!force && isDirty && !window.confirm('Unsaved changes. Leave without saving?')) return;
 		goBack();
+	});
+
+	$effect(() => {
+		const text = docText;
+		if (tocDebounceTimer) clearTimeout(tocDebounceTimer);
+		tocDebounceTimer = setTimeout(() => {
+			debouncedText = text;
+		}, 300);
+		return () => {
+			if (tocDebounceTimer) clearTimeout(tocDebounceTimer);
+		};
+	});
+
+	$effect(() => {
+		if (browser) localStorage.setItem('lattice.editor.tocOpen', String(tocOpen));
 	});
 
 	// Mount editor once we have content
@@ -310,6 +343,7 @@
 		}
 		mountedSlug = slug;
 		loadedContent = docQuery.data.content;
+		docText = docQuery.data.content;
 
 		const state = EditorState.create({
 			doc: docQuery.data.content,
@@ -344,7 +378,9 @@
 				]),
 				EditorView.updateListener.of((update) => {
 					if (update.docChanged && !adoptingServerContent) {
-						scheduleAutosave(update.state.doc.toString());
+						const content = update.state.doc.toString();
+						scheduleAutosave(content);
+						docText = content;
 					}
 				})
 			]
@@ -383,6 +419,7 @@
 		return () => {
 			if (saveTimer) clearTimeout(saveTimer);
 			if (statusTimer) clearTimeout(statusTimer);
+			if (tocDebounceTimer) clearTimeout(tocDebounceTimer);
 			view?.destroy();
 			view = null;
 			editorReady = false;
@@ -400,6 +437,16 @@
 			onclick={goBack}
 		>
 			<Icon name="arrow-right" size={14} class="rotate-180" /> Back
+		</button>
+		<button
+			type="button"
+			class="btn btn-ghost toc-toggle"
+			title={tocOpen ? 'Hide table of contents' : 'Show table of contents'}
+			aria-label={tocOpen ? 'Hide table of contents' : 'Show table of contents'}
+			aria-pressed={tocOpen}
+			onclick={() => (tocOpen = !tocOpen)}
+		>
+			<Icon name="menu" size={14} />
 		</button>
 		<span class="mono faint truncate" style="font-size:12px"
 			>{slug ? `${slug}.md` : 'No document selected'}</span
@@ -465,33 +512,40 @@
 		</span>
 	</div>
 
-	<div class="min-h-0 flex-1 overflow-hidden">
-		{#if !slug}
-			<div class="p-3 text-xs" style="color:var(--c-alarm)" role="alert">
-				<p>No working document selected.</p>
-				<button class="btn btn-ghost" style="margin-top:8px" onclick={goBack}
-					>Back to library</button
-				>
+	<div class="content-row">
+		{#if tocOpen}
+			<div class="toc-sidebar">
+				<EditorToc entries={tocEntries} onNavigate={navigateToLine} />
 			</div>
-		{:else if docQuery.isLoading}
-			<p class="p-3 text-sm" style="color:var(--text-mute)">loading…</p>
-		{:else if docQuery.isError}
-			<div class="p-3 text-xs" style="color:var(--c-alarm)" role="alert">
-				<p>{docQuery.error?.message ?? 'error loading doc'}</p>
-				<button
-					class="btn btn-ghost"
-					style="margin-top:8px"
-					aria-label="Back to previous view"
-					onclick={goBack}>Back</button
-				>
-			</div>
-		{:else}
-			<div
-				bind:this={editorContainer}
-				class="h-full"
-				aria-label={`Markdown editor for ${slug}.md`}
-			></div>
 		{/if}
+		<div class="editor-area">
+			{#if !slug}
+				<div class="p-3 text-xs" style="color:var(--c-alarm)" role="alert">
+					<p>No working document selected.</p>
+					<button class="btn btn-ghost" style="margin-top:8px" onclick={goBack}
+						>Back to library</button
+					>
+				</div>
+			{:else if docQuery.isLoading}
+				<p class="p-3 text-sm" style="color:var(--text-mute)">loading…</p>
+			{:else if docQuery.isError}
+				<div class="p-3 text-xs" style="color:var(--c-alarm)" role="alert">
+					<p>{docQuery.error?.message ?? 'error loading doc'}</p>
+					<button
+						class="btn btn-ghost"
+						style="margin-top:8px"
+						aria-label="Back to previous view"
+						onclick={goBack}>Back</button
+					>
+				</div>
+			{:else}
+				<div
+					bind:this={editorContainer}
+					class="h-full"
+					aria-label={`Markdown editor for ${slug}.md`}
+				></div>
+			{/if}
+		</div>
 	</div>
 </div>
 
@@ -522,6 +576,29 @@
 		font-size: 12px;
 	}
 
+	.content-row {
+		display: flex;
+		flex: 1;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	.toc-sidebar {
+		width: 200px;
+		flex-shrink: 0;
+		border-right: 1px solid var(--line);
+		background: var(--bg-raised);
+		overflow-y: auto;
+		overflow-x: hidden;
+	}
+
+	.editor-area {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		height: 100%;
+	}
+
 	/* tablet breakpoint - mirrors --breakpoint-tablet (64rem) in layout.css */
 	@media (width < 64rem) {
 		.editor-status {
@@ -530,6 +607,14 @@
 
 		.editor-actions {
 			margin-left: 0;
+		}
+
+		.toc-sidebar {
+			display: none;
+		}
+
+		.toc-toggle {
+			display: none;
 		}
 	}
 </style>

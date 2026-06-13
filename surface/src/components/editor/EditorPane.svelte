@@ -50,7 +50,13 @@
 	let debouncedText = $state('');
 	let tocOpen = $state(browser ? localStorage.getItem('lattice.editor.tocOpen') !== 'false' : true);
 	let tocDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	let cursorLine = $state(1);
 	const tocEntries: TocEntry[] = $derived(parseToc(debouncedText));
+	const activeTocEntry: TocEntry | null = $derived(
+		tocEntries.length === 0
+			? null
+			: ([...tocEntries].reverse().find((e) => e.lineNumber <= cursorLine) ?? null)
+	);
 	const previewTargetPane = $derived(paneIndex === 0 ? 1 : 0);
 	const previewTargetContent = $derived(wb.panes[previewTargetPane]);
 	const isPreviewOpenInSplit = $derived(
@@ -399,6 +405,10 @@
 						scheduleAutosave(content);
 						docText = content;
 					}
+					if (update.selectionSet || update.docChanged) {
+						const pos = update.state.selection.main.head;
+						cursorLine = update.state.doc.lineAt(pos).number;
+					}
 				})
 			]
 		});
@@ -454,16 +464,6 @@
 			onclick={goBack}
 		>
 			<Icon name="arrow-right" size={14} class="rotate-180" /> Back
-		</button>
-		<button
-			type="button"
-			class="btn btn-ghost toc-toggle"
-			title={tocOpen ? 'Hide table of contents' : 'Show table of contents'}
-			aria-label={tocOpen ? 'Hide table of contents' : 'Show table of contents'}
-			aria-pressed={tocOpen}
-			onclick={() => (tocOpen = !tocOpen)}
-		>
-			<Icon name="menu" size={14} />
 		</button>
 		<span class="mono faint truncate" style="font-size:12px"
 			>{slug ? `${slug}.md` : 'No document selected'}</span
@@ -530,11 +530,25 @@
 	</div>
 
 	<div class="content-row">
-		{#if tocOpen}
-			<div class="toc-sidebar">
-				<EditorToc entries={tocEntries} onNavigate={navigateToLine} />
-			</div>
-		{/if}
+		<div class="toc-sidebar" class:collapsed={!tocOpen}>
+			<button
+				type="button"
+				class="btn btn-ghost toc-collapse-btn"
+				title={tocOpen ? 'Hide table of contents' : 'Show table of contents'}
+				aria-label={tocOpen ? 'Hide table of contents' : 'Show table of contents'}
+				aria-pressed={tocOpen}
+				onclick={() => (tocOpen = !tocOpen)}
+			>
+				<Icon name="arrow-right" size={11} class={tocOpen ? 'rotate-180' : ''} />
+			</button>
+			{#if tocOpen}
+				<EditorToc
+					entries={tocEntries}
+					onNavigate={(entry) => navigateToLine(entry.lineNumber)}
+					activeLineNumber={activeTocEntry?.lineNumber ?? 0}
+				/>
+			{/if}
+		</div>
 		<div class="editor-area">
 			{#if !slug}
 				<div class="p-3 text-xs" style="color:var(--c-alarm)" role="alert">
@@ -601,12 +615,33 @@
 	}
 
 	.toc-sidebar {
+		position: relative;
 		width: 200px;
 		flex-shrink: 0;
 		border-right: 1px solid var(--line);
 		background: var(--bg-raised);
 		overflow-y: auto;
 		overflow-x: hidden;
+		transition: width var(--t-base) var(--ease);
+	}
+
+	.toc-sidebar.collapsed {
+		width: 20px;
+		overflow: hidden;
+	}
+
+	.toc-collapse-btn {
+		position: absolute;
+		top: 5px;
+		right: 4px;
+		padding: 2px 4px;
+		z-index: 1;
+	}
+
+	.toc-sidebar.collapsed .toc-collapse-btn {
+		right: auto;
+		left: 50%;
+		transform: translateX(-50%);
 	}
 
 	.editor-area {
@@ -627,10 +662,6 @@
 		}
 
 		.toc-sidebar {
-			display: none;
-		}
-
-		.toc-toggle {
 			display: none;
 		}
 	}

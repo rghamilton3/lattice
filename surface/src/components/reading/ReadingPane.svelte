@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { createMutation, createQuery, useQueryClient } from '@tanstack/svelte-query';
 	import { browser } from '$app/environment';
+	import { parseToc, type TocEntry } from '$lib/editor/parseToc';
+	import EditorToc from '$components/editor/EditorToc.svelte';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { captureKeys, fetchCapture } from '$lib/api/captures';
 	import { fileKeys, fetchFile } from '$lib/api/files';
@@ -32,6 +34,12 @@
 
 	const wb = getWorkbenchContext();
 	const qc = useQueryClient();
+
+	let tocOpen = $state(browser ? localStorage.getItem('lattice.toc.open') !== 'false' : true);
+
+	$effect(() => {
+		if (browser) localStorage.setItem('lattice.toc.open', String(tocOpen));
+	});
 
 	let promoteError = $state('');
 	let createAnnotationError = $state('');
@@ -241,6 +249,18 @@
 					? workingQuery.data?.content
 					: archiveQuery.data?.extracted_text
 	);
+	const tocEntries: TocEntry[] = $derived(parseToc(renderedContent ?? ''));
+
+	function navigateToHeading(entry: TocEntry) {
+		if (!readingBody) return;
+		const headings = Array.from(readingBody.querySelectorAll('h1,h2,h3,h4,h5,h6'));
+		const match = headings.find(
+			(el) =>
+				el.tagName.toLowerCase() === `h${entry.level}` && el.textContent?.trim() === entry.text
+		);
+		match?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
+
 	const renderErrorMessage = $derived(
 		renderError && renderError.content === renderedContent ? renderError.message : ''
 	);
@@ -511,6 +531,21 @@
 	{/if}
 
 	<div class="doc-content">
+		<div class="reading-toc-sidebar" class:collapsed={!tocOpen}>
+			<button
+				type="button"
+				class="btn btn-ghost toc-collapse-btn"
+				title={tocOpen ? 'Hide table of contents' : 'Show table of contents'}
+				aria-label={tocOpen ? 'Hide table of contents' : 'Show table of contents'}
+				aria-pressed={tocOpen}
+				onclick={() => (tocOpen = !tocOpen)}
+			>
+				<Icon name="arrow-right" size={11} class={tocOpen ? 'rotate-180' : ''} />
+			</button>
+			{#if tocOpen}
+				<EditorToc entries={tocEntries} onNavigate={navigateToHeading} />
+			{/if}
+		</div>
 		<div class="doc-body" bind:this={readingBody}>
 			{#if isLoading}
 				<p class="p-3 text-sm" style="color:var(--text-mute)">loading…</p>
@@ -683,5 +718,40 @@
 		border-bottom: 2px solid var(--color-accent);
 		color: inherit;
 		padding: 0 2px;
+	}
+
+	.reading-toc-sidebar {
+		position: relative;
+		width: 200px;
+		flex-shrink: 0;
+		border-right: 1px solid var(--line);
+		background: var(--bg-raised);
+		overflow-y: auto;
+		overflow-x: hidden;
+	}
+
+	.reading-toc-sidebar.collapsed {
+		width: 20px;
+		overflow: hidden;
+	}
+
+	.toc-collapse-btn {
+		position: absolute;
+		top: 4px;
+		right: 2px;
+		padding: 1px 3px;
+		z-index: 1;
+	}
+
+	.reading-toc-sidebar.collapsed .toc-collapse-btn {
+		right: auto;
+		left: 50%;
+		transform: translateX(-50%);
+	}
+
+	@media (width < 64rem) {
+		.reading-toc-sidebar {
+			display: none;
+		}
 	}
 </style>

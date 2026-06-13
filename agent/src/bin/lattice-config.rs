@@ -513,7 +513,24 @@ fn send_reindex() -> Result<(), String> {
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
+fn print_help() {
+    print!(
+        "lattice-config — Edit Lattice agent configuration.\n\
+         \n\
+         Usage:\n\
+         \x20 lattice-config           Open the configuration editor\n\
+         \x20 lattice-config --help    Show this help\n\
+         \n\
+         Configuration is stored in ~/.config/lattice/config.toml.\n"
+    );
+}
+
 fn main() {
+    if std::env::args().any(|a| a == "--help" || a == "-h") {
+        print_help();
+        return;
+    }
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Lattice Config")

@@ -43,6 +43,11 @@ struct CaptureResponse {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
+    if std::env::args().any(|a| a == "--help" || a == "-h") {
+        print_help();
+        return;
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -127,6 +132,25 @@ async fn run() -> Result<()> {
     }
 
     Ok(())
+}
+
+// ── Help ──────────────────────────────────────────────────────────────────────
+
+fn print_help() {
+    print!(
+        "lattice-capture — POST quick text captures to the Lattice spine.\n\
+         \n\
+         Usage:\n\
+         \x20 lattice-capture [TEXT...]    Capture the given words (joined with spaces)\n\
+         \x20 echo TEXT | lattice-capture  Capture from stdin\n\
+         \x20 lattice-capture              Interactive prompt window\n\
+         \x20 lattice-capture --prompt     Force the interactive prompt window\n\
+         \x20 lattice-capture --voice      Prompt + start voxtype dictation (Linux)\n\
+         \x20 lattice-capture --help       Show this help\n\
+         \n\
+         Captures are queued locally when the spine is unreachable and drained on the\n\
+         next successful run.\n"
+    );
 }
 
 // ── Text input ────────────────────────────────────────────────────────────────

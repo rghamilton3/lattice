@@ -237,7 +237,25 @@ fn pump_windows_messages() {
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 #[cfg(windows)]
+fn print_help() {
+    print!(
+        "lattice-tray — System tray icon for the Lattice agent (Windows).\n\
+         \n\
+         Usage:\n\
+         \x20 lattice-tray-windows         Run the tray icon\n\
+         \x20 lattice-tray-windows --help  Show this help\n\
+         \n\
+         Normally started automatically by Task Scheduler (LatticeAgent task).\n"
+    );
+}
+
+#[cfg(windows)]
 fn main() {
+    if std::env::args().any(|a| a == "--help" || a == "-h") {
+        print_help();
+        return;
+    }
+
     tracing_subscriber::fmt::init();
 
     let (tray, menu) = build_tray();

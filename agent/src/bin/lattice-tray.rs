@@ -235,8 +235,26 @@ fn service_control(op: &str) {
 
 // ── Entry points ──────────────────────────────────────────────────────────────
 
+fn print_help() {
+    print!(
+        "lattice-tray — System tray icon for the Lattice agent (Linux).\n\
+         \n\
+         Usage:\n\
+         \x20 lattice-tray         Run the tray icon\n\
+         \x20 lattice-tray --help  Show this help\n\
+         \n\
+         Requires a panel with StatusNotifierItem support (e.g. waybar 'tray' module).\n\
+         Communicates with lattice-agent over $XDG_RUNTIME_DIR/lattice-agent.sock.\n"
+    );
+}
+
 #[cfg(unix)]
 fn main() {
+    if std::env::args().any(|a| a == "--help" || a == "-h") {
+        print_help();
+        return;
+    }
+
     tracing_subscriber::fmt::init();
     let handle = LatticeTray::default()
         .spawn()

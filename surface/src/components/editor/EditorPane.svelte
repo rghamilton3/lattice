@@ -18,8 +18,7 @@
 	import type { PaneContent } from '$lib/types';
 	import Icon from '$components/icons/Icon.svelte';
 	import VimToggle from './VimToggle.svelte';
-	import { parseToc } from '$lib/editor/parseToc';
-	import type { TocEntry } from '$lib/editor/parseToc';
+	import { parseToc, type TocEntry } from '$lib/editor/parseToc';
 	import EditorToc from './EditorToc.svelte';
 
 	const mermaidTemplate = '```mermaid\nflowchart TD\n  A[Start] --> B[Next]\n```\n';
@@ -284,6 +283,7 @@
 
 	function navigateToLine(lineNumber: number) {
 		if (!view) return;
+		if (lineNumber < 1 || lineNumber > view.state.doc.lines) return;
 		const line = view.state.doc.line(lineNumber);
 		view.dispatch({
 			selection: EditorSelection.cursor(line.from),

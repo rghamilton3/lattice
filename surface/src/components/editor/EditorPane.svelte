@@ -11,6 +11,7 @@
 	import { oneDark } from '@codemirror/theme-one-dark';
 	import { vim, Vim } from '@replit/codemirror-vim';
 	import { livePreview } from '$lib/editor/livePreview';
+	import { relativeLineNumbers } from '$lib/editor/relativeLineNumbers';
 	import { shouldAdoptServerContent, clampPos } from '$lib/editor/docSync';
 	import { getWorkbenchContext } from '$lib/state/workbench.svelte';
 	import { workingKeys, fetchWorking, updateWorking, deleteWorking } from '$lib/api/working';
@@ -167,8 +168,8 @@
 	function buildEditorTheme(theme: string) {
 		const palette = editorPalette(theme);
 		// Obsidian-style editing surface: proportional reading font, a centered
-		// reading column, wrapped lines, no gutter — the Live Preview extension
-		// renders markdown inline on top of this base.
+		// reading column, wrapped lines, relative line number gutter. The Live
+		// Preview extension renders markdown inline on top of this base.
 		const shellTheme = EditorView.theme(
 			{
 				'&': {
@@ -192,7 +193,22 @@
 				'.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
 					backgroundColor: palette.selection
 				},
-				'.cm-line': { color: palette.foreground, padding: '0 2px' }
+				'.cm-line': { color: palette.foreground, padding: '0 2px' },
+				'.cm-gutters': {
+					backgroundColor: palette.background,
+					borderRight: `1px solid ${palette.line}`
+				},
+				'.cm-lineNumbers .cm-gutterElement': {
+					color: palette.muted,
+					padding: '0 8px 0 12px',
+					fontSize: '0.8rem',
+					fontFamily: 'monospace',
+					lineHeight: '1.6'
+				},
+				'.cm-lineNumbers .cm-activeLineGutter': {
+					color: palette.foreground,
+					fontWeight: '600'
+				}
 			},
 			{ dark: theme === 'dark' }
 		);
@@ -314,6 +330,7 @@
 		const state = EditorState.create({
 			doc: docQuery.data.content,
 			extensions: [
+				relativeLineNumbers(),
 				history(),
 				drawSelection(),
 				EditorView.lineWrapping,

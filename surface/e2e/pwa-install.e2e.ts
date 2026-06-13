@@ -12,6 +12,13 @@ test.beforeEach(async ({ page }) => {
 		route.fulfill({ status: 200, body: JSON.stringify({ agents: [], active_agent_count: 0 }) })
 	);
 	await page.route('**/api/**', (route) => route.fulfill({ status: 200, body: '[]' }));
+	// The captures SSE stream must answer as a real event-stream. A plain '[]'
+	// (from the catch-all) closes the EventSource, which fires a "Live updates
+	// disconnected" toast that clobbers foreground toasts like "Invalid link".
+	// Registered last so it wins route precedence over the catch-all above.
+	await page.route('**/api/captures/stream', (route) =>
+		route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: '' })
+	);
 });
 
 test('exposes installable manifest metadata and app shell', async ({ page }) => {

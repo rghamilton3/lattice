@@ -336,6 +336,10 @@ export class WorkbenchStore {
 		} = {}
 	) {
 		if (opts.background && !this.postureView.allowBackgroundToasts) return;
+		// A background toast must not clobber a navigational toast the user can
+		// still interact with (onclick / actions). Let the existing toast expire
+		// naturally instead.
+		if (opts.background && this.toast && (this.toast.onclick || this.toast.actions?.length)) return;
 		const id = ++this.toastSeq;
 		this.toast = { id, msg, onclick: opts.onclick, actions: opts.actions };
 		if (this.toastTimer) clearTimeout(this.toastTimer);

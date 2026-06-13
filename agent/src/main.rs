@@ -43,6 +43,14 @@ async fn main() -> Result<()> {
         std::process::exit(lattice_agent::update::run_cli(&args[1..]).await?);
     }
 
+    for arg in &args {
+        if arg != "--force" {
+            eprintln!("lattice-agent: unrecognized argument `{arg}`");
+            eprintln!("Run `lattice-agent --help` for usage.");
+            std::process::exit(1);
+        }
+    }
+
     let force = args.iter().any(|a| a == "--force");
 
     let cfg = Arc::new(config::load()?);

@@ -146,11 +146,13 @@ async fn check() -> Result<i32> {
     let mut attempts = base_attempt("check", &products, &started_at);
 
     println!("Product updates");
+    println!("{}", "─".repeat(15));
     match metadata {
         Ok(release) => {
             for product in &products {
                 let update = release.update_for(product);
                 let status = classify(product, update.as_ref(), false);
+                println!();
                 println!("{}", status_line(product, update.as_ref(), status));
                 if let Some(update) = update {
                     attempts
@@ -158,6 +160,7 @@ async fn check() -> Result<i32> {
                         .insert(product.id.clone(), update.target_version.to_string());
                 }
             }
+            println!();
             attempts.outcome = if products.iter().all(|p| !p.automatic_update) {
                 AttemptOutcome::ManualActionRequired
             } else {
@@ -171,8 +174,10 @@ async fn check() -> Result<i32> {
         }
         Err(err) => {
             for product in &products {
+                println!();
                 println!("{}", status_line(product, None, ProductStatus::Offline));
             }
+            println!();
             attempts.outcome = AttemptOutcome::Offline;
             attempts.message = "Release metadata was unavailable. Installed files were not changed; try again when the network is reachable.".to_owned();
             attempts.error_detail = Some(err.to_string());
@@ -279,19 +284,28 @@ async fn apply(args: &[String]) -> Result<i32> {
         return Ok(0);
     }
 
-    println!("The following products will be updated after confirmation:");
+    println!("Pending updates");
+    println!("{}", "─".repeat(15));
     for (product, update) in &plan {
+        println!();
         println!(
-            "{}: {} -> {}. {}",
-            product.display_name,
-            product.installed_version,
-            update.target_version,
-            update
-                .summary
-                .as_deref()
-                .unwrap_or("Release summary unavailable.")
+            "  {}  {}  →  {}",
+            product.display_name, product.installed_version, update.target_version,
         );
+        if let Some(summary) = update.summary.as_deref() {
+            let mut lines = summary.lines().peekable();
+            let mut shown = 0;
+            while let Some(line) = lines.next() {
+                if shown == 3 && lines.peek().is_some() {
+                    println!("    ...");
+                    break;
+                }
+                println!("    {line}");
+                shown += 1;
+            }
+        }
     }
+    println!();
     if !confirm()? {
         let mut attempt = base_attempt("apply", &requested_products, &started_at);
         attempt.outcome = AttemptOutcome::DeclinedConfirmation;
@@ -364,8 +378,10 @@ fn print_history() -> Result<i32> {
                 .with_context(|| format!("invalid history entry in {}", path.display()))?,
         );
     }
+    println!("Update history");
+    println!("{}", "─".repeat(14));
     for attempt in attempts.iter().rev().take(25) {
-        let products = attempt.products.join(",");
+        let products = attempt.products.join(", ");
         let target = attempt
             .target_versions
             .values()
@@ -378,6 +394,7 @@ fn print_history() -> Result<i32> {
             .next()
             .cloned()
             .unwrap_or_else(|| "unknown".to_owned());
+        println!();
         println!("{}", history_line(attempt, &products, &starting, &target));
     }
     Ok(0)
@@ -407,7 +424,7 @@ fn select_products(args: &[String], products: &[Product]) -> Result<Vec<Product>
 }
 
 fn discover_products() -> Vec<Product> {
-    let mut products = vec![
+    vec![
         binary_product(
             "lattice-agent",
             "lattice-agent",
@@ -432,16 +449,7 @@ fn discover_products() -> Vec<Product> {
             ProductKind::DesktopCompanion,
             true,
         ),
-    ];
-    products.push(manual_product("spine", "spine", ProductKind::ServerComponent, "Update the self-hosted spine deployment manually from the project release notes and your Docker deployment files."));
-    products.push(manual_product(
-        "surface",
-        "surface",
-        ProductKind::WebSurface,
-        "Build and deploy the surface static assets with the self-hosted spine deployment.",
-    ));
-    products.push(manual_product("installer", "installer scripts and service units", ProductKind::Installer, "Review release notes and rerun the installer only when you are ready to preserve or reapply local customizations."));
-    products
+    ]
 }
 
 fn binary_product(id: &str, display: &str, kind: ProductKind, automatic_update: bool) -> Product {
@@ -470,6 +478,7 @@ fn binary_product(id: &str, display: &str, kind: ProductKind, automatic_update: 
     }
 }
 
+#[cfg(test)]
 fn manual_product(id: &str, display: &str, kind: ProductKind, guidance: &str) -> Product {
     Product {
         id: id.to_owned(),
@@ -523,7 +532,7 @@ fn status_line(
         .map(|u| u.target_version.to_string())
         .unwrap_or_else(|| "unavailable".to_owned());
     format!(
-        "{}: installed {}, latest {}, {}. {}",
+        "  {}\n    installed {}  ·  latest {}  ·  {}\n    {}",
         product.display_name,
         product.installed_version,
         latest,
@@ -717,7 +726,7 @@ fn preserve_state(state: &UserState) -> Result<()> {
 }
 
 fn confirm() -> Result<bool> {
-    print!("Type yes to replace the listed installed files: ");
+    print!("Type yes to apply these updates: ");
     io::stdout().flush()?;
     let mut input = String::new();
     if io::stdin().read_line(&mut input)? == 0 {
@@ -943,15 +952,17 @@ fn outcome_text(outcome: AttemptOutcome) -> &'static str {
 
 fn history_line(attempt: &UpdateAttempt, products: &str, starting: &str, target: &str) -> String {
     let mut line = format!(
-        "{} {} {} {} -> {}: {}. {}",
+        "  {}  {}  {}  {} → {}  {}",
         attempt.completed_at,
         attempt.operation,
         products,
         starting,
         target,
         outcome_text(attempt.outcome),
-        attempt.message
     );
+    line.push('\n');
+    line.push_str("    ");
+    line.push_str(&attempt.message);
     if let Some(error_detail) = &attempt.error_detail {
         line.push_str(" Reported issue: ");
         line.push_str(error_detail);

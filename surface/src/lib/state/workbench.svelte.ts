@@ -56,6 +56,7 @@ export interface Toast {
 	msg: string;
 	onclick?: () => void;
 	actions?: ToastAction[];
+	background?: boolean;
 }
 
 interface PersistedSession {
@@ -336,8 +337,21 @@ export class WorkbenchStore {
 		} = {}
 	) {
 		if (opts.background && !this.postureView.allowBackgroundToasts) return;
+		// A background toast must not replace a foreground or interactive toast; let the existing one expire.
+		if (
+			opts.background &&
+			this.toast &&
+			(!this.toast.background || this.toast.onclick || this.toast.actions?.length)
+		)
+			return;
 		const id = ++this.toastSeq;
-		this.toast = { id, msg, onclick: opts.onclick, actions: opts.actions };
+		this.toast = {
+			id,
+			msg,
+			onclick: opts.onclick,
+			actions: opts.actions,
+			background: opts.background
+		};
 		if (this.toastTimer) clearTimeout(this.toastTimer);
 		// Clickable toasts stay longer so the user has time to act on them.
 		this.toastTimer = setTimeout(

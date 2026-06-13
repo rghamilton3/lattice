@@ -293,8 +293,15 @@ async fn apply(args: &[String]) -> Result<i32> {
             product.display_name, product.installed_version, update.target_version,
         );
         if let Some(summary) = update.summary.as_deref() {
-            for line in summary.lines().take(3) {
+            let mut lines = summary.lines().peekable();
+            let mut shown = 0;
+            while let Some(line) = lines.next() {
+                if shown == 3 && lines.peek().is_some() {
+                    println!("    ...");
+                    break;
+                }
                 println!("    {line}");
+                shown += 1;
             }
         }
     }
@@ -417,7 +424,7 @@ fn select_products(args: &[String], products: &[Product]) -> Result<Vec<Product>
 }
 
 fn discover_products() -> Vec<Product> {
-    let products = vec![
+    vec![
         binary_product(
             "lattice-agent",
             "lattice-agent",
@@ -442,8 +449,7 @@ fn discover_products() -> Vec<Product> {
             ProductKind::DesktopCompanion,
             true,
         ),
-    ];
-    products
+    ]
 }
 
 fn binary_product(id: &str, display: &str, kind: ProductKind, automatic_update: bool) -> Product {
@@ -720,7 +726,7 @@ fn preserve_state(state: &UserState) -> Result<()> {
 }
 
 fn confirm() -> Result<bool> {
-    print!("Type yes to replace the listed installed files: ");
+    print!("Type yes to apply these updates: ");
     io::stdout().flush()?;
     let mut input = String::new();
     if io::stdin().read_line(&mut input)? == 0 {

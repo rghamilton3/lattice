@@ -32,7 +32,6 @@ export function relativeLineNumbers(): Extension {
 		gutters(),
 		gutter({
 			class: 'cm-lineNumbers',
-			renderEmptyElements: false,
 			markers(view: EditorView) {
 				const builder = new RangeSetBuilder<GutterMarker>();
 				const curLine = view.state.doc.lineAt(view.state.selection.main.head).number;

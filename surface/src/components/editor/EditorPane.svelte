@@ -168,8 +168,8 @@
 	function buildEditorTheme(theme: string) {
 		const palette = editorPalette(theme);
 		// Obsidian-style editing surface: proportional reading font, a centered
-		// reading column, wrapped lines, no gutter — the Live Preview extension
-		// renders markdown inline on top of this base.
+		// reading column, wrapped lines, relative line number gutter. The Live
+		// Preview extension renders markdown inline on top of this base.
 		const shellTheme = EditorView.theme(
 			{
 				'&': {

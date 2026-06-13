@@ -327,7 +327,6 @@ describe('WorkbenchStore', () => {
 	it('background toast does not overwrite a navigational toast with actions', () => {
 		const wb = new WorkbenchStore();
 		wb.showToast('Transcript ready', {
-			background: true,
 			actions: [{ label: 'Open', onclick: () => {} }, { label: 'Skip' }]
 		});
 		const nav = wb.toast;
@@ -338,13 +337,24 @@ describe('WorkbenchStore', () => {
 		expect(wb.toast?.msg).toBe('Transcript ready');
 	});
 
-	it('background toast replaces a plain (non-navigational) toast', () => {
+	it('background toast does not overwrite a plain foreground toast', () => {
 		const wb = new WorkbenchStore();
 		wb.showToast('2 processed');
+		const existing = wb.toast;
 
 		wb.showToast('background info', { background: true });
 
-		expect(wb.toast?.msg).toBe('background info');
+		expect(wb.toast).toBe(existing);
+		expect(wb.toast?.msg).toBe('2 processed');
+	});
+
+	it('background toast replaces a plain background toast', () => {
+		const wb = new WorkbenchStore();
+		wb.showToast('SSE connected', { background: true });
+
+		wb.showToast('SSE disconnected', { background: true });
+
+		expect(wb.toast?.msg).toBe('SSE disconnected');
 	});
 
 	it('foreground toast always replaces any existing toast', () => {

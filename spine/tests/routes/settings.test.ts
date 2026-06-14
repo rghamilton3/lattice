@@ -25,11 +25,11 @@ function browserReq(path: string, init?: RequestInit) {
 // ── GET /api/settings/inference ───────────────────────────────────────────────
 
 describe('GET /api/settings/inference', () => {
-	it('returns all four roles with has_key:false when DB is empty', async () => {
+	it('returns all roles with has_key:false when DB is empty', async () => {
 		const res = await app.app.handle(browserReq('/api/settings/inference'));
 		expect(res.status).toBe(200);
 		const body = await json(res);
-		for (const role of ['embed', 'rerank', 'expand', 'asr']) {
+		for (const role of ['embed', 'rerank', 'expand', 'asr', 'vlm']) {
 			expect(body[role]).toBeDefined();
 			expect(body[role].has_key).toBe(false);
 		}
@@ -103,6 +103,131 @@ describe('PUT /api/settings/inference', () => {
 		expect(res.status).toBe(422);
 		const body = await json(res);
 		expect(body.errors['embed.api_url']).toBeDefined();
+	});
+});
+
+// ── Global inheritance + overrides ────────────────────────────────────────────
+
+describe('global inheritance', () => {
+	it('roles inherit the global URL and key when they have no override', async () => {
+		app.db.run(
+			`INSERT INTO inference_config (role, api_url, api_key) VALUES ('global', 'https://api.example.com/v1', 'g-key')`,
+		);
+		const res = await app.app.handle(browserReq('/api/settings/inference'));
+		const body = await json(res);
+
+		expect(body.global.api_url).toBe('https://api.example.com/v1');
+		expect(body.global.has_key).toBe(true);
+
+		for (const role of ['embed', 'rerank', 'expand', 'asr', 'vlm']) {
+			expect(body[role].api_url).toBe('https://api.example.com/v1');
+			expect(body[role].inherits_url).toBe(true);
+			expect(body[role].own_api_url).toBeUndefined();
+			expect(body[role].has_key).toBe(true);
+			expect(body[role].has_own_key).toBe(false);
+			expect(body[role].inherits_key).toBe(true);
+		}
+	});
+
+	it('a per-role URL override wins over global', async () => {
+		app.db.run(
+			`INSERT INTO inference_config (role, api_url) VALUES ('global', 'https://global.example.com/v1')`,
+		);
+		app.db.run(
+			`INSERT INTO inference_config (role, api_url) VALUES ('expand', 'https://expand.example.com/v1')`,
+		);
+		const res = await app.app.handle(browserReq('/api/settings/inference'));
+		const body = await json(res);
+
+		expect(body.expand.api_url).toBe('https://expand.example.com/v1');
+		expect(body.expand.own_api_url).toBe('https://expand.example.com/v1');
+		expect(body.expand.inherits_url).toBe(false);
+		// Siblings still inherit global.
+		expect(body.embed.api_url).toBe('https://global.example.com/v1');
+		expect(body.embed.inherits_url).toBe(true);
+	});
+
+	it('ASR falls back to the embed endpoint when no global/own URL is set', async () => {
+		app.db.run(
+			`INSERT INTO inference_config (role, api_url) VALUES ('embed', 'https://embed.example.com/v1')`,
+		);
+		const res = await app.app.handle(browserReq('/api/settings/inference'));
+		const body = await json(res);
+		expect(body.asr.api_url).toBe('https://embed.example.com/v1');
+		expect(body.asr.inherits_url).toBe(true);
+	});
+
+	it('ASR/VLM inheriting an env-sourced embed endpoint report source=env, not database', async () => {
+		process.env.QMD_EMBED_API_URL = 'https://env-embed.example.com/v1';
+		try {
+			const res = await app.app.handle(browserReq('/api/settings/inference'));
+			const body = await json(res);
+			expect(body.embed.source).toBe('env');
+			for (const role of ['asr', 'vlm']) {
+				expect(body[role].api_url).toBe('https://env-embed.example.com/v1');
+				expect(body[role].inherits_url).toBe(true);
+				// Regression: provenance was hardcoded to 'database' for inherited embed.
+				expect(body[role].source).toBe('env');
+			}
+		} finally {
+			delete process.env.QMD_EMBED_API_URL;
+		}
+	});
+
+	it('PUT persists a global override row', async () => {
+		const res = await app.app.handle(
+			browserReq('/api/settings/inference', {
+				method: 'PUT',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ global: { api_url: 'https://g.example.com/v1', api_key: 'gk' } }),
+			}),
+		);
+		expect(res.status).toBe(204);
+		const row = app.db
+			.query(`SELECT api_url, api_key FROM inference_config WHERE role = 'global'`)
+			.get() as { api_url: string; api_key: string };
+		expect(row.api_url).toBe('https://g.example.com/v1');
+		expect(row.api_key).toBe('gk');
+	});
+});
+
+// ── POST /api/settings/inference/models ───────────────────────────────────────
+
+describe('POST /api/settings/inference/models', () => {
+	function modelsReq(params: Record<string, string>) {
+		const qs = new URLSearchParams(params).toString();
+		return browserReq(`/api/settings/inference/models?${qs}`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({}),
+		});
+	}
+
+	it('returns 422 for an unknown role', async () => {
+		const res = await app.app.handle(modelsReq({ role: 'bogus' }));
+		expect(res.status).toBe(422);
+	});
+
+	it('returns 422 for a malformed provided URL', async () => {
+		const res = await app.app.handle(modelsReq({ role: 'embed', url: 'not-a-url' }));
+		expect(res.status).toBe(422);
+	});
+
+	it('returns 400 when no URL is provided and none is stored', async () => {
+		const res = await app.app.handle(modelsReq({ role: 'embed' }));
+		expect(res.status).toBe(400);
+	});
+});
+
+// ── GET /api/settings/version ─────────────────────────────────────────────────
+
+describe('GET /api/settings/version', () => {
+	it('returns the spine version string', async () => {
+		const res = await app.app.handle(browserReq('/api/settings/version'));
+		expect(res.status).toBe(200);
+		const body = await json(res);
+		expect(typeof body.spine).toBe('string');
+		expect(body.spine.length).toBeGreaterThan(0);
 	});
 });
 

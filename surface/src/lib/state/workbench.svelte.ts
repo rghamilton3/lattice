@@ -28,6 +28,8 @@ export type ActiveOverlay =
 	| 'newTask'
 	| 'fileUpload';
 
+export type SettingsTab = 'display' | 'inference' | 'security';
+
 const THEMES: readonly Theme[] = ['light', 'dark', 'sepia', 'system'];
 const DENSITIES: readonly Density[] = ['compact', 'comfortable', 'spacious'];
 const POSTURES: readonly Posture[] = ['quiet', 'standard', 'active'];
@@ -86,6 +88,9 @@ export class WorkbenchStore {
 	// All persisted fields auto-save via +layout.svelte's $effect; never call
 	// persist() from components.
 	activeOverlay = $state<ActiveOverlay>('none');
+	// Which tab the settings overlay shows. Hoisted out of the component so
+	// commands (e.g. "Switch theme") can open settings to a specific tab.
+	settingsTab = $state<SettingsTab>('display');
 	// Text carried from QuickCapture when switching to the file upload overlay.
 	fileUploadInitialNote = $state('');
 

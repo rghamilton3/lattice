@@ -3,7 +3,12 @@ import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { execSync } from 'child_process';
+import { readFileSync } from 'fs';
 import { resolve } from 'path';
+
+const pkg = JSON.parse(readFileSync(resolve(import.meta.dirname, 'package.json'), 'utf8')) as {
+	version: string;
+};
 
 // In a git worktree, node_modules hardlinks resolve to the main checkout's paths.
 // Vite's fs-allow check uses realpath, so we need to include the main repo root.
@@ -24,6 +29,10 @@ const mainRoot = worktreeMainRoot();
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
+
+	define: {
+		__SURFACE_VERSION__: JSON.stringify(pkg.version)
+	},
 
 	server: {
 		...(mainRoot ? { fs: { allow: [mainRoot] } } : {}),

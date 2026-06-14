@@ -95,12 +95,23 @@
 				run: () => wb.toggleVim()
 			},
 			{
+				id: 'settings',
+				label: 'Settings',
+				hint: 'display, inference, security, version',
+				kbd: ['Ctrl', ','],
+				kind: 'action',
+				run: () => (wb.activeOverlay = 'settings')
+			},
+			{
 				id: 'theme',
 				label: 'Switch theme…',
 				hint: 'light / dark / sepia / system',
 				kbd: [],
 				kind: 'action',
-				run: () => (wb.activeOverlay = 'settings')
+				run: () => {
+					wb.settingsTab = 'display';
+					wb.activeOverlay = 'settings';
+				}
 			}
 		];
 	}

@@ -160,6 +160,25 @@ describe('voice capture healthy path (US1)', () => {
 		expect(seen[0].attachment_id).toBe(attId);
 	});
 
+	it('transcribes audio when the ASR model is configured only in the database', async () => {
+		// Regression: the queue guard once read getAsrModel() (config.toml/env only),
+		// so a DB-configured ASR model silently fell through to text extraction.
+		delete process.env.LATTICE_ASR_MODEL;
+		app.db.run(
+			`INSERT INTO inference_config (role, api_url, model) VALUES ('asr', 'https://asr.example.com/v1', 'db-asr-model')`,
+		);
+		stubAsr('transcribed via db-configured asr');
+
+		const captureId = await createSignalCapture('caption');
+		const attId = await uploadSignalAudio(captureId);
+		await __awaitQueueForTests();
+
+		expect(asrCalls).toBe(1);
+		const row = attRow(attId);
+		expect(row.extraction_status).toBe('done');
+		expect(row.extracted_text).toBe('transcribed via db-configured asr');
+	});
+
 	it('non-audio signal uploads still extract through the existing path', async () => {
 		const captureId = await createSignalCapture('caption');
 		const bytes = Buffer.from('plain text attachment content');

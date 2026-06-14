@@ -101,6 +101,13 @@ models:
       --no-mmap
 
   # --- Query expansion: chat completions (expand_api_model) ---
+  # --reasoning-budget 0 forces Qwen3's thinking off. With --jinja the native
+  # template enables thinking by default, so the model would spend the expand
+  # call's token budget emitting a <think>...</think> trace. QMD's expandQuery caps
+  # output at max_tokens:600 and keeps only lines prefixed 'lex:/vec:/hyde:', so a
+  # thinking trace yields zero parseable variants -> expansion silently fails over
+  # to local/BM25 on every query. Budget 0 ends thinking immediately so the
+  # formatted variants are all that's generated.
   qwen3-4b:
     cmd: |
       ${llama-server}
@@ -108,6 +115,7 @@ models:
       --ctx-size 8192
       -ngl 99
       --jinja
+      --reasoning-budget 0
       --flash-attn on
       --no-mmap
 
@@ -121,6 +129,8 @@ models:
       --mmproj ${models}/qwen3-vl-8b-instruct-mmproj-f16.gguf
       --ctx-size 8192
       -ngl 99
+      # FA kept here (unlike the bge encoders above): Qwen3-VL is a causal decoder,
+      # so the graph builds a real FLASH_ATTN_EXT node. Not a no-op; leave it on.
       --flash-attn on
       --no-mmap
 

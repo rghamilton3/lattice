@@ -1,6 +1,6 @@
 {
 	"name": "spine",
-	"version": "1.4.0",
+	"version": "1.5.0",
 	"scripts": {
 		"test": "bun test",
 		"dev": "bun run --watch src/index.ts",

@@ -63,6 +63,11 @@
 			wb.activeOverlay = 'palette';
 			return;
 		}
+		if (mod && e.key === ',') {
+			e.preventDefault();
+			wb.activeOverlay = 'settings';
+			return;
+		}
 		if (mod && e.key === '.') {
 			e.preventDefault();
 			wb.focusMode = !wb.focusMode;

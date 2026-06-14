@@ -10,6 +10,7 @@ import {
 	type TranscribeOptions,
 } from './transcribe';
 import { getAsrModel } from './config';
+import { resolveInferenceConfig } from './settings';
 import {
 	emitTranscriptionAttention,
 	transcriptionNotificationPosture,
@@ -136,7 +137,13 @@ async function processOne(
 	}
 
 	try {
-		const { text } = await extractText(storedFullPath, contentType);
+		// VLM serves OCR too — same model, different prompt.
+		const vlm = resolveInferenceConfig(db).vlm;
+		const { text } = await extractText(storedFullPath, contentType, {
+			baseUrl: vlm.api_url,
+			apiKey: vlm.api_key,
+			model: vlm.model,
+		});
 
 		if (text) {
 			db.prepare(
@@ -195,11 +202,16 @@ async function transcribeOne(
 		filename: string;
 	} | null;
 
+	const asr = resolveInferenceConfig(db).asr;
+
 	try {
 		const { text, modelId } = await _transcribeImpl({
 			storedFullPath,
 			filename: row?.filename ?? 'audio',
 			contentType,
+			baseUrl: asr.api_url,
+			apiKey: asr.api_key,
+			model: asr.model,
 		} satisfies TranscribeOptions);
 
 		const now = new Date().toISOString();

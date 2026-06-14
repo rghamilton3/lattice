@@ -1,15 +1,58 @@
 <script lang="ts">
+	import { createQuery } from '@tanstack/svelte-query';
+	import { browser } from '$app/environment';
 	import {
 		getWorkbenchContext,
 		type Theme,
 		type Density,
 		type Posture
 	} from '$lib/state/workbench.svelte';
+	import { settingsKeys, fetchSpineVersion } from '$lib/api/settings';
 	import Icon from '$components/icons/Icon.svelte';
 	import InferenceSettings from './InferenceSettings.svelte';
 	import SecuritySettings from './SecuritySettings.svelte';
 
 	const wb = getWorkbenchContext();
+
+	const surfaceVersion = __SURFACE_VERSION__;
+	const versionQuery = createQuery(() => ({
+		queryKey: settingsKeys.version(),
+		queryFn: fetchSpineVersion,
+		enabled: browser
+	}));
+
+	// Resizable drawer width, persisted across sessions.
+	const MIN_WIDTH = 320;
+	const MAX_WIDTH = 900;
+	const WIDTH_KEY = 'lattice:settings-width';
+	let width = $state(360);
+
+	$effect(() => {
+		if (!browser) return;
+		const saved = Number(localStorage.getItem(WIDTH_KEY));
+		if (saved >= MIN_WIDTH && saved <= MAX_WIDTH) width = saved;
+	});
+
+	function startResize(e: PointerEvent) {
+		const startX = e.clientX;
+		const startWidth = width;
+		const handle = e.currentTarget as HTMLElement;
+		handle.setPointerCapture(e.pointerId);
+
+		function move(ev: PointerEvent) {
+			const next = startWidth - (ev.clientX - startX);
+			width = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, next));
+		}
+		function up() {
+			handle.releasePointerCapture?.(e.pointerId);
+			window.removeEventListener('pointermove', move);
+			window.removeEventListener('pointerup', up);
+			if (browser) localStorage.setItem(WIDTH_KEY, String(width));
+		}
+		window.addEventListener('pointermove', move);
+		window.addEventListener('pointerup', up);
+		e.preventDefault();
+	}
 
 	const themes: Theme[] = ['light', 'dark', 'sepia', 'system'];
 	const densities: Density[] = ['compact', 'comfortable', 'spacious'];
@@ -41,8 +84,16 @@
 	aria-modal="false"
 	aria-label="Settings"
 	tabindex="-1"
+	style:--settings-width={`${width}px`}
 	onkeydown={onKey}
 >
+	<div
+		class="settings-resize"
+		role="separator"
+		aria-label="Resize settings panel"
+		aria-orientation="vertical"
+		onpointerdown={startResize}
+	></div>
 	<div class="settings-head">
 		<div class="row" style="gap:8px">
 			<Icon name="cog" size={14} />
@@ -164,9 +215,39 @@
 			</p>
 		{/if}
 	</div>
+	<div class="settings-foot faint">
+		<span>Surface v{surfaceVersion}</span>
+		<span>·</span>
+		<span>Spine v{versionQuery.data?.spine ?? '…'}</span>
+	</div>
 </div>
 
 <style>
+	.settings-resize {
+		position: absolute;
+		left: 0;
+		top: 0;
+		bottom: 0;
+		width: 6px;
+		cursor: ew-resize;
+		touch-action: none;
+		z-index: 1;
+	}
+
+	.settings-resize:hover {
+		background: var(--accent);
+		opacity: 0.4;
+	}
+
+	.settings-foot {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		padding: 8px 16px;
+		border-top: 1px solid var(--line);
+		font-size: 11px;
+	}
+
 	.tab-strip {
 		display: flex;
 		border-bottom: 1px solid var(--border);

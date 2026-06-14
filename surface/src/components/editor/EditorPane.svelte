@@ -187,6 +187,7 @@
 				'.cm-content': {
 					caretColor: palette.accent,
 					flex: '0 1 46rem',
+					minWidth: '0',
 					padding: '2.2rem 1.6rem 4rem'
 				},
 				'.cm-cursor, .cm-dropCursor': { borderLeftColor: palette.accent, borderLeftWidth: '2px' },
@@ -197,7 +198,7 @@
 				'.cm-gutters': {
 					backgroundColor: palette.background,
 					borderRight: `1px solid ${palette.line}`,
-					position: 'relative',
+					position: 'sticky',
 					insetInlineStart: 'unset'
 				},
 				'.cm-lineNumbers .cm-gutterElement': {

@@ -7,7 +7,7 @@ export interface AuthentikGuardOptions {
 
 export interface AgentGuardOptions {
 	allowHttp: boolean;
-	agentToken: string | undefined;
+	getAgentToken: () => string | undefined;
 }
 
 interface BeforeHandleCtx {
@@ -36,7 +36,7 @@ export function authentikBeforeHandle({ allowHttp, devUser }: AuthentikGuardOpti
 	};
 }
 
-export function agentBeforeHandle({ allowHttp, agentToken }: AgentGuardOptions) {
+export function agentBeforeHandle({ allowHttp, getAgentToken }: AgentGuardOptions) {
 	return ({ headers, set }: BeforeHandleCtx): string | undefined => {
 		if (!allowHttp && headers['x-forwarded-proto'] !== 'https') {
 			set.status = 400;
@@ -44,6 +44,7 @@ export function agentBeforeHandle({ allowHttp, agentToken }: AgentGuardOptions) 
 		}
 		const authHeader = headers['authorization'] ?? '';
 		const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+		const agentToken = getAgentToken();
 		if (!agentToken || !token || !tokenMatches(token, agentToken)) {
 			set.status = 401;
 			return 'Unauthorized';

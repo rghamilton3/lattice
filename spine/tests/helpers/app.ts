@@ -10,6 +10,7 @@ export interface TestApp {
 }
 
 export interface BuildTestAppOptions {
+	// Set to override the active agent token (default: 'test-token'; undefined = no token)
 	agentToken?: string | undefined;
 	allowHttp?: boolean;
 	devUser?: string | undefined;
@@ -32,15 +33,17 @@ export async function buildTestApp(opts: BuildTestAppOptions = {}): Promise<Test
 	const { initDb } = await import('../../src/db');
 	const { initSearch, __resetSearchForTests } = await import('../../src/search');
 	const { buildApp } = await import('../../src/app');
+	const { setActiveAgentToken } = await import('../../src/settings');
 
 	__resetSearchForTests();
 
 	const db = initDb();
 	await initSearch(db);
 
+	setActiveAgentToken('agentToken' in opts ? opts.agentToken : 'test-token');
+
 	const app = buildApp({
 		db,
-		agentToken: 'agentToken' in opts ? opts.agentToken : 'test-token',
 		allowHttp: opts.allowHttp ?? true,
 		devUser: 'devUser' in opts ? opts.devUser : 'dev@local',
 		surfaceBuild: opts.surfaceBuild,

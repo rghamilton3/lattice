@@ -34,7 +34,7 @@ def test_transcription_success(client: TestClient) -> None:
     response = client.post(
         "/v1/audio/transcriptions",
         files={"file": ("note.wav", tone_wav_bytes(), "audio/wav")},
-        data={"model": "parakeet-tdt-0.6b-v2"},
+        data={"model": "parakeet-tdt-0.6b-v3"},
     )
     assert response.status_code == 200
     body = response.json()
@@ -47,7 +47,7 @@ def test_empty_file_returns_audio_empty(client: TestClient) -> None:
     response = client.post(
         "/v1/audio/transcriptions",
         files={"file": ("note.ogg", b"", "audio/ogg")},
-        data={"model": "parakeet-tdt-0.6b-v2"},
+        data={"model": "parakeet-tdt-0.6b-v3"},
     )
     assert response.status_code == 400
     error = response.json()["error"]
@@ -60,7 +60,7 @@ def test_garbage_bytes_return_audio_undecodable(client: TestClient) -> None:
     response = client.post(
         "/v1/audio/transcriptions",
         files={"file": ("note.m4a", b"\x00\x01not audio\xff" * 64, "audio/mp4")},
-        data={"model": "parakeet-tdt-0.6b-v2"},
+        data={"model": "parakeet-tdt-0.6b-v3"},
     )
     assert response.status_code == 400
     error = response.json()["error"]
@@ -83,7 +83,7 @@ def test_missing_model_field_returns_invalid_request(client: TestClient) -> None
 def test_missing_file_field_returns_invalid_request(client: TestClient) -> None:
     response = client.post(
         "/v1/audio/transcriptions",
-        data={"model": "parakeet-tdt-0.6b-v2"},
+        data={"model": "parakeet-tdt-0.6b-v3"},
     )
     assert response.status_code == 400
     error = response.json()["error"]

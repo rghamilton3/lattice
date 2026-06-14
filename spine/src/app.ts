@@ -12,6 +12,7 @@ import { lateralRoutes } from './routes/lateral';
 import { tracksRoutes } from './routes/tracks';
 import { agentRoutes } from './routes/agent';
 import { statusRoutes } from './routes/status';
+import { settingsRoutes } from './routes/settings';
 import { tasksRoutes } from './routes/tasks';
 import { attachmentRoutes } from './routes/attachments';
 import { archivesRoutes } from './routes/archives';
@@ -19,10 +20,10 @@ import { annotationsRoutes } from './routes/annotations';
 import { resurfacedRoutes } from './routes/resurfaced';
 import { clusterRoutes } from './routes/clusters';
 import { buildPlatformStatus } from './status';
+import { getActiveAgentToken } from './settings';
 
 export interface AppDeps {
 	db: Database;
-	agentToken: string | undefined;
 	allowHttp: boolean;
 	devUser: string | undefined;
 	surfaceBuild: string | undefined;
@@ -31,7 +32,7 @@ export interface AppDeps {
 }
 
 export function buildApp(deps: AppDeps) {
-	const { db, agentToken, allowHttp, devUser, surfaceBuild, attachmentsDir, archiveDir } = deps;
+	const { db, allowHttp, devUser, surfaceBuild, attachmentsDir, archiveDir } = deps;
 
 	const surface =
 		surfaceBuild && existsSync(surfaceBuild)
@@ -62,18 +63,26 @@ export function buildApp(deps: AppDeps) {
 				.use(tracksRoutes(db, { attachmentsDir }))
 				.use(
 					statusRoutes(db, () =>
-						buildPlatformStatus({ db, agentToken, allowHttp, devUser, surfaceBuild }),
+						buildPlatformStatus({
+							db,
+							agentToken: getActiveAgentToken(),
+							allowHttp,
+							devUser,
+							surfaceBuild,
+						}),
 					),
 				)
 				.use(attachmentRoutes(db, { attachmentsDir }))
 				.use(annotationsRoutes(db))
 				.use(archivesRoutes(db, { archiveDir }))
 				.use(resurfacedRoutes(db))
-				.use(clusterRoutes(db)),
+				.use(clusterRoutes(db))
+				.use(settingsRoutes(db)),
 		)
 		.group('/api/agent', (app) =>
-			app.guard({ beforeHandle: agentBeforeHandle({ allowHttp, agentToken }) }, (inner) =>
-				inner.use(agentRoutes(db, { attachmentsDir, archiveDir })),
+			app.guard(
+				{ beforeHandle: agentBeforeHandle({ allowHttp, getAgentToken: getActiveAgentToken }) },
+				(inner) => inner.use(agentRoutes(db, { attachmentsDir, archiveDir })),
 			),
 		);
 }

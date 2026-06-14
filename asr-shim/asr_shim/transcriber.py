@@ -10,7 +10,7 @@ import os
 import wave
 from typing import Protocol
 
-DEFAULT_MODEL_ID = "nvidia/parakeet-tdt-0.6b-v2"
+DEFAULT_MODEL_ID = "nvidia/parakeet-tdt-0.6b-v3"
 
 
 class Transcriber(Protocol):

@@ -5,7 +5,7 @@
 #   scripts/release.sh prepare [--dry-run] <artifact>@<version> [...]
 #   scripts/release.sh tag     [--dry-run] <artifact>@<version> [...]
 #
-# Artifacts: agent  spine  surface
+# Artifacts: agent  spine  surface  llama-swap
 # Version:   semver without leading "v" — e.g. 0.12.0
 #
 # prepare: bumps version manifests, creates a release branch, commits,
@@ -53,6 +53,12 @@ current_version() {
         surface)
             node -e "process.stdout.write(require('$REPO_ROOT/surface/package.json').version)"
             ;;
+        llama-swap)
+            # Versioned off the asr-shim manifest — the shim is the only
+            # Lattice-authored content in the custom llama-swap image.
+            grep '^version = ' "$REPO_ROOT/asr-shim/pyproject.toml" \
+                | head -1 | sed 's/version = "\(.*\)"/\1/'
+            ;;
         *) die "unknown artifact '$artifact'" ;;
     esac
 }
@@ -92,6 +98,20 @@ bump_version() {
                 fs.writeFileSync(p, JSON.stringify(pkg, null, '\t') + '\n');
             "
             ;;
+        llama-swap)
+            info "bumping asr-shim/pyproject.toml to $new_ver"
+            # Replace only the first [project] version line (deps use >= specifiers)
+            run sed -i "0,/^version = \".*\"/{s/^version = \".*\"/version = \"$new_ver\"/}" \
+                "$REPO_ROOT/asr-shim/pyproject.toml"
+            # Keep uv.lock's project version in sync (mirrors agent's Cargo.lock)
+            if $dry_run; then
+                echo "  [dry-run] uv lock (in asr-shim/)"
+            elif command -v uv >/dev/null 2>&1; then
+                (cd "$REPO_ROOT/asr-shim" && uv lock)
+            else
+                echo "  warning: uv not on PATH — uv.lock not updated (CI will catch drift)"
+            fi
+            ;;
         *) die "unknown artifact '$artifact'" ;;
     esac
 }
@@ -102,9 +122,10 @@ manifest_files() {
     # one path per line — callers read with mapfile
     local artifact="$1"
     case "$artifact" in
-        agent)   printf '%s\n' "agent/Cargo.toml" "agent/Cargo.lock" ;;
-        spine)   printf '%s\n' "spine/package.json" ;;
-        surface) printf '%s\n' "surface/package.json" ;;
+        agent)      printf '%s\n' "agent/Cargo.toml" "agent/Cargo.lock" ;;
+        spine)      printf '%s\n' "spine/package.json" ;;
+        surface)    printf '%s\n' "surface/package.json" ;;
+        llama-swap) printf '%s\n' "asr-shim/pyproject.toml" "asr-shim/uv.lock" ;;
     esac
 }
 
@@ -134,8 +155,8 @@ for pair in "$@"; do
     ver="${pair##*@}"
     validate_semver "$ver"
     case "$art" in
-        agent|spine|surface) ;;
-        *) die "unknown artifact '$art' (valid: agent spine surface)" ;;
+        agent|spine|surface|llama-swap) ;;
+        *) die "unknown artifact '$art' (valid: agent spine surface llama-swap)" ;;
     esac
     artifacts+=("$art")
     versions["$art"]="$ver"
@@ -216,6 +237,7 @@ cmd_prepare() {
             agent)   pr_body+="  - After merge: push tag \`$tag\` → CI builds Linux/Windows binaries and publishes GitHub Release\n" ;;
             spine)   pr_body+="  - After merge: push tag \`$tag\` → CI builds and pushes Docker image to GHCR\n" ;;
             surface) pr_body+="  - After merge: push tag \`$tag\` (version tracking only — bundled in spine Docker image)\n" ;;
+            llama-swap) pr_body+="  - After merge: push tag \`$tag\` → CI builds and pushes the llama-swap image to GHCR and attaches the config + fetch helper to the release\n" ;;
         esac
     done
     pr_body+="\n### Next step\n\nOnce this PR is merged, run:\n\`\`\`\n"

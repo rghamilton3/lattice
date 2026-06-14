@@ -1,6 +1,6 @@
 ---
 name: release
-description: Cut a new release — bump versions, create release branch, open PR, push tags, trigger CI publish. Use when asked to release, cut a release, bump version, publish, or tag a new version of agent, spine, surface, or llama-swap.
+description: Cut a new release — bump versions, create release branch, open PR, push tags, trigger CI publish. Use when asked to release, cut a release, bump version, publish, or tag a new version of agent, spine, surface, llama-swap, or llama-swap-config.
 ---
 
 # Lattice release workflow
@@ -17,14 +17,16 @@ and push Docker images to GHCR.
 | `agent` | `agent/Cargo.toml` | `agent-v*` | builds binaries → GitHub Release |
 | `spine` | `spine/package.json` | `spine-v*` | builds Docker image → GHCR |
 | `surface` | `surface/package.json` | `surface-v*` | version tracking only (bundled in spine) |
-| `llama-swap` | `asr-shim/pyproject.toml` | `llama-swap-v*` | builds image → GHCR + attaches config/fetch assets to the release |
+| `llama-swap` | `asr-shim/pyproject.toml` | `llama-swap-v*` | builds Docker image → GHCR (use when ASR shim code changes) |
+| `llama-swap-config` | `scripts/llama-swap-config.version` | `llama-swap-config-v*` | attaches `llama-swap.config.yaml` + `fetch-models.sh` to a GitHub Release — no Docker build |
 
-`llama-swap` is the custom inference image (llama-swap base + the ASR shim); it's versioned
-off the shim's `pyproject.toml` since that's the only Lattice-authored content in it. The
-GPU host (spacelab) pulls `ghcr.io/rghamilton3/lattice-llama-swap:<version>` and the matching
-`llama-swap.config.yaml` release asset — no repo clone.
+`llama-swap` and `llama-swap-config` are separate release tracks. Use `llama-swap-config`
+when only the model config or fetch script changes (e.g. swapping models, tuning parameters,
+fixing flags). Use `llama-swap` only when `asr-shim/` code changes. The GPU host pulls the
+Docker image from the latest `llama-swap-v*` release and the config from the latest
+`llama-swap-config-v*` release independently.
 
-Current versions (as of last check): agent `0.11.2`, spine `1.2.1`, surface `0.11.1`,
+Current versions (as of last check): agent `0.11.2`, spine `1.2.1`, surface `0.11.1`, llama-swap-config `0.1.2`,
 llama-swap `0.1.0`. Always verify with the script itself — it reads manifests directly.
 
 ## Prerequisites

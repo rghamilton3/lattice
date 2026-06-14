@@ -1,0 +1,20 @@
+{
+  "active": true,
+  "feature_description": "add a left side table of content index to the surface editor using standard markdown hierarchy",
+  "feature_num": "021",
+  "parent_branch": "main",
+  "branch_name": "worktree-feat+toc",
+  "session_id": "build-20260613-163852-021",
+  "started_at": "2026-06-13T16:38:52-05:00",
+  "current_phase": "specify",
+  "phases_complete": [],
+  "quality_threshold": 80,
+  "run_validate": false,
+  "background_mode": false,
+  "notify_on_complete": false,
+  "orchestrate_flag": "",
+  "run_analyze": false,
+  "run_checklist": false,
+  "quick_mode": false,
+  "use_orchestration": false
+}

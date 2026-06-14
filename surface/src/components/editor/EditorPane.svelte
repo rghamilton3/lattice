@@ -18,6 +18,8 @@
 	import type { PaneContent } from '$lib/types';
 	import Icon from '$components/icons/Icon.svelte';
 	import VimToggle from './VimToggle.svelte';
+	import { parseToc, type TocEntry } from '$lib/editor/parseToc';
+	import EditorToc from './EditorToc.svelte';
 
 	const mermaidTemplate = '```mermaid\nflowchart TD\n  A[Start] --> B[Next]\n```\n';
 
@@ -44,6 +46,17 @@
 	let saveErrorMsg = $state('');
 	let statusTimer: ReturnType<typeof setTimeout> | null = null;
 	let lastLoadedSlug = '';
+	let docText = $state('');
+	let debouncedText = $state('');
+	let tocOpen = $state(browser ? localStorage.getItem('lattice.editor.tocOpen') !== 'false' : true);
+	let tocDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	let cursorLine = $state(1);
+	const tocEntries: TocEntry[] = $derived(parseToc(debouncedText));
+	const activeTocEntry: TocEntry | null = $derived(
+		tocEntries.length === 0
+			? null
+			: ([...tocEntries].reverse().find((e) => e.lineNumber <= cursorLine) ?? null)
+	);
 	const previewTargetPane = $derived(paneIndex === 0 ? 1 : 0);
 	const previewTargetContent = $derived(wb.panes[previewTargetPane]);
 	const isPreviewOpenInSplit = $derived(
@@ -274,6 +287,17 @@
 		view.focus();
 	}
 
+	function navigateToLine(lineNumber: number) {
+		if (!view) return;
+		if (lineNumber < 1 || lineNumber > view.state.doc.lines) return;
+		const line = view.state.doc.line(lineNumber);
+		view.dispatch({
+			selection: EditorSelection.cursor(line.from),
+			effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 16 })
+		});
+		view.focus();
+	}
+
 	// Wire vim ex commands (global registry — last-mounted editor wins when two are open simultaneously)
 	Vim.defineEx('write', 'w', () => saveNow());
 	Vim.defineEx('wq', 'wq', () => {
@@ -284,6 +308,21 @@
 		const force = params?.argString?.trim() === '!';
 		if (!force && isDirty && !window.confirm('Unsaved changes. Leave without saving?')) return;
 		goBack();
+	});
+
+	$effect(() => {
+		const text = docText;
+		if (tocDebounceTimer) clearTimeout(tocDebounceTimer);
+		tocDebounceTimer = setTimeout(() => {
+			debouncedText = text;
+		}, 300);
+		return () => {
+			if (tocDebounceTimer) clearTimeout(tocDebounceTimer);
+		};
+	});
+
+	$effect(() => {
+		if (browser) localStorage.setItem('lattice.editor.tocOpen', String(tocOpen));
 	});
 
 	// Mount editor once we have content
@@ -326,6 +365,7 @@
 		}
 		mountedSlug = slug;
 		loadedContent = docQuery.data.content;
+		docText = docQuery.data.content;
 
 		const state = EditorState.create({
 			doc: docQuery.data.content,
@@ -361,7 +401,13 @@
 				]),
 				EditorView.updateListener.of((update) => {
 					if (update.docChanged && !adoptingServerContent) {
-						scheduleAutosave(update.state.doc.toString());
+						const content = update.state.doc.toString();
+						scheduleAutosave(content);
+						docText = content;
+					}
+					if (update.selectionSet || update.docChanged) {
+						const pos = update.state.selection.main.head;
+						cursorLine = update.state.doc.lineAt(pos).number;
 					}
 				})
 			]
@@ -400,6 +446,7 @@
 		return () => {
 			if (saveTimer) clearTimeout(saveTimer);
 			if (statusTimer) clearTimeout(statusTimer);
+			if (tocDebounceTimer) clearTimeout(tocDebounceTimer);
 			view?.destroy();
 			view = null;
 			editorReady = false;
@@ -482,33 +529,54 @@
 		</span>
 	</div>
 
-	<div class="min-h-0 flex-1 overflow-hidden">
-		{#if !slug}
-			<div class="p-3 text-xs" style="color:var(--c-alarm)" role="alert">
-				<p>No working document selected.</p>
-				<button class="btn btn-ghost" style="margin-top:8px" onclick={goBack}
-					>Back to library</button
-				>
-			</div>
-		{:else if docQuery.isLoading}
-			<p class="p-3 text-sm" style="color:var(--text-mute)">loading…</p>
-		{:else if docQuery.isError}
-			<div class="p-3 text-xs" style="color:var(--c-alarm)" role="alert">
-				<p>{docQuery.error?.message ?? 'error loading doc'}</p>
-				<button
-					class="btn btn-ghost"
-					style="margin-top:8px"
-					aria-label="Back to previous view"
-					onclick={goBack}>Back</button
-				>
-			</div>
-		{:else}
-			<div
-				bind:this={editorContainer}
-				class="h-full"
-				aria-label={`Markdown editor for ${slug}.md`}
-			></div>
-		{/if}
+	<div class="content-row">
+		<div class="toc-sidebar" class:collapsed={!tocOpen}>
+			<button
+				type="button"
+				class="btn btn-ghost toc-collapse-btn"
+				title={tocOpen ? 'Hide table of contents' : 'Show table of contents'}
+				aria-label={tocOpen ? 'Hide table of contents' : 'Show table of contents'}
+				aria-pressed={tocOpen}
+				onclick={() => (tocOpen = !tocOpen)}
+			>
+				<Icon name="arrow-right" size={11} class={tocOpen ? 'rotate-180' : ''} />
+			</button>
+			{#if tocOpen}
+				<EditorToc
+					entries={tocEntries}
+					onNavigate={(entry) => navigateToLine(entry.lineNumber)}
+					activeLineNumber={activeTocEntry?.lineNumber ?? 0}
+				/>
+			{/if}
+		</div>
+		<div class="editor-area">
+			{#if !slug}
+				<div class="p-3 text-xs" style="color:var(--c-alarm)" role="alert">
+					<p>No working document selected.</p>
+					<button class="btn btn-ghost" style="margin-top:8px" onclick={goBack}
+						>Back to library</button
+					>
+				</div>
+			{:else if docQuery.isLoading}
+				<p class="p-3 text-sm" style="color:var(--text-mute)">loading…</p>
+			{:else if docQuery.isError}
+				<div class="p-3 text-xs" style="color:var(--c-alarm)" role="alert">
+					<p>{docQuery.error?.message ?? 'error loading doc'}</p>
+					<button
+						class="btn btn-ghost"
+						style="margin-top:8px"
+						aria-label="Back to previous view"
+						onclick={goBack}>Back</button
+					>
+				</div>
+			{:else}
+				<div
+					bind:this={editorContainer}
+					class="h-full"
+					aria-label={`Markdown editor for ${slug}.md`}
+				></div>
+			{/if}
+		</div>
 	</div>
 </div>
 
@@ -539,6 +607,50 @@
 		font-size: 12px;
 	}
 
+	.content-row {
+		display: flex;
+		flex: 1;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	.toc-sidebar {
+		position: relative;
+		width: 200px;
+		flex-shrink: 0;
+		border-right: 1px solid var(--line);
+		background: var(--bg-raised);
+		overflow-y: auto;
+		overflow-x: hidden;
+		transition: width var(--t-base) var(--ease);
+	}
+
+	.toc-sidebar.collapsed {
+		width: 20px;
+		overflow: hidden;
+	}
+
+	.toc-collapse-btn {
+		position: absolute;
+		top: 5px;
+		right: 4px;
+		padding: 2px 4px;
+		z-index: 1;
+	}
+
+	.toc-sidebar.collapsed .toc-collapse-btn {
+		right: auto;
+		left: 50%;
+		transform: translateX(-50%);
+	}
+
+	.editor-area {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		height: 100%;
+	}
+
 	/* tablet breakpoint - mirrors --breakpoint-tablet (64rem) in layout.css */
 	@media (width < 64rem) {
 		.editor-status {
@@ -547,6 +659,10 @@
 
 		.editor-actions {
 			margin-left: 0;
+		}
+
+		.toc-sidebar {
+			display: none;
 		}
 	}
 </style>

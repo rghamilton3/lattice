@@ -194,12 +194,13 @@
 					overflow: 'auto',
 					fontFamily: 'var(--font-reading)',
 					fontSize: '1rem',
-					lineHeight: '1.6'
+					lineHeight: '1.6',
+					justifyContent: 'center'
 				},
 				'.cm-content': {
 					caretColor: palette.accent,
-					maxWidth: '46rem',
-					margin: '0 auto',
+					flex: '0 1 46rem',
+					minWidth: '0',
 					padding: '2.2rem 1.6rem 4rem'
 				},
 				'.cm-cursor, .cm-dropCursor': { borderLeftColor: palette.accent, borderLeftWidth: '2px' },
@@ -209,7 +210,9 @@
 				'.cm-line': { color: palette.foreground, padding: '0 2px' },
 				'.cm-gutters': {
 					backgroundColor: palette.background,
-					borderRight: `1px solid ${palette.line}`
+					borderRight: `1px solid ${palette.line}`,
+					position: 'sticky',
+					insetInlineStart: 'unset'
 				},
 				'.cm-lineNumbers .cm-gutterElement': {
 					color: palette.muted,

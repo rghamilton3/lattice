@@ -16,18 +16,20 @@ database_path = "/var/lib/lattice/lattice.db"
 # [spine.qmd]
 # embed_api_url    = "http://127.0.0.1:8081/v1"
 # embed_api_model  = "bge-m3"
-# embed_api_key    = ""          # bearer token, if required
+# embed_api_key    = ""          # literal bearer token if the endpoint requires one (no
+#                                # ${env.*} expansion here); or set QMD_EMBED_API_KEY in the
+#                                # env, which wins. One key covers rerank/expand via fallback.
 # rerank_api_url   = "http://127.0.0.1:8082/v1"
 # rerank_api_model = "bge-reranker-v2-m3"
-# rerank_api_key   = ""
+# rerank_api_key   = ""          # optional; defaults to embed_api_key
 # expand_api_url   = "http://127.0.0.1:8083/v1"
-# expand_api_model = "qwen2.5-3b-instruct"
-# expand_api_key   = ""
+# expand_api_model = "qwen3-4b"
+# expand_api_key   = ""          # optional; defaults to embed_api_key
 #
 # Optional: voice-note transcription via an OpenAI-compatible ASR shim behind the
 # same /v1 front door (llama-swap routes on the model id). Transcription is off
 # until asr_model is set; audio attachments then index filename-only as before.
-# asr_model     = "parakeet-tdt-0.6b-v2"
+# asr_model     = "parakeet-tdt-0.6b-v3"
 # asr_timeout_s = 300   # generous: audio is minutes long and the model may cold-start
 #
 # When the inference endpoint is unreachable, spine stays up and degrades gracefully:

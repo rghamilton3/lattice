@@ -22,13 +22,19 @@
 #   [spine.qmd]
 #   embed_api_url    = "http://<host-tailnet-ip>:9292/v1"
 #   embed_api_model  = "bge-m3"
+#   embed_api_key    = "<same string as LLAMA_SWAP_API_KEY below>"
 #   rerank_api_url   = "http://<host-tailnet-ip>:9292/v1"
 #   rerank_api_model = "bge-reranker-v2-m3"
 #   expand_api_url   = "http://<host-tailnet-ip>:9292/v1"
-#   expand_api_model = "qwen2.5-3b-instruct"
-#   vlm_model        = "qwen2.5-vl-7b-instruct"   # optional: image descriptions
+#   expand_api_model = "qwen3-4b"
+#   vlm_model        = "qwen3-vl-8b-instruct"   # optional: image descriptions
 #   asr_model        = "parakeet-tdt-0.6b-v3"     # optional: voice-note transcription
 #   asr_timeout_s    = 300
+#
+# The apiKeys below gate this endpoint; spine must present a matching key or every
+# embed/rerank/expand call 401s. config.toml is plain TOML with NO ${env.*} expansion,
+# so set embed_api_key to the LITERAL key string, or set QMD_EMBED_API_KEY in spine's
+# env (it takes precedence). One key covers all three: rerank/expand fall back to it.
 #
 # The model id keys below are the only contract with Lattice: each must match the
 # corresponding *_api_model / vlm_model string in config.toml.
@@ -59,18 +65,21 @@ groups:
     members:
       - bge-m3
       - bge-reranker-v2-m3
-      - qwen2.5-3b-instruct
+      - qwen3-4b
   # VLM + ASR are background attachment jobs; they share a swap slot that
   # coexists with the search trio and unloads on idle (ttl per model below).
   media:
     swap: true
     exclusive: false
     members:
-      - qwen2.5-vl-7b-instruct
+      - qwen3-vl-8b-instruct
       - parakeet-tdt-0.6b-v3
 
 models:
   # --- Embeddings: QMD dense vectors (embed_api_model) ---
+  # No --flash-attn here (or on the reranker): both are XLM-RoBERTa encoders whose
+  # graph never builds an FA node (n_embd_head_k==n_embd_head_v path), so the flag
+  # is a silent no-op. FA stays on the causal decoders (qwen3-4b, VLM) where it works.
   bge-m3:
     cmd: |
       ${llama-server}
@@ -79,7 +88,6 @@ models:
       --ctx-size 8192
       --batch-size 8192
       -ngl 99
-      --flash-attn on
       --no-mmap
 
   # --- Reranking: QMD result reranking (rerank_api_model) ---
@@ -90,14 +98,13 @@ models:
       --reranking
       --ctx-size 8192
       -ngl 99
-      --flash-attn on
       --no-mmap
 
   # --- Query expansion: chat completions (expand_api_model) ---
-  qwen2.5-3b-instruct:
+  qwen3-4b:
     cmd: |
       ${llama-server}
-      -m ${models}/qwen2.5-3b-instruct-q4_k_m.gguf
+      -m ${models}/qwen3-4b-q4_k_m.gguf
       --ctx-size 8192
       -ngl 99
       --jinja
@@ -106,12 +113,12 @@ models:
 
   # --- Vision: attachment image descriptions (vlm_model), POSTed to
   #     /v1/chat/completions with image_url parts. Needs an mmproj projector. ---
-  qwen2.5-vl-7b-instruct:
+  qwen3-vl-8b-instruct:
     ttl: 600   # unload 10 min after last use to free VRAM
     cmd: |
       ${llama-server}
-      -m ${models}/qwen2.5-vl-7b-instruct-q4_k_m.gguf
-      --mmproj ${models}/qwen2.5-vl-7b-instruct-mmproj-f16.gguf
+      -m ${models}/qwen3-vl-8b-instruct-q4_k_m.gguf
+      --mmproj ${models}/qwen3-vl-8b-instruct-mmproj-f16.gguf
       --ctx-size 8192
       -ngl 99
       --flash-attn on

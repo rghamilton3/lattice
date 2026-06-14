@@ -37,7 +37,7 @@
 healthCheckTimeout: 300
 logLevel: info
 apiKeys:
-  - ${LLAMA_SWAP_API_KEY}
+  - ${env.LLAMA_SWAP_API_KEY}
 
 # Base port for the ${PORT} macro; auto-incremented per running model. These are
 # container-internal ports llama-swap proxies to; only :8080 is published.

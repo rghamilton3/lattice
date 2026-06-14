@@ -7,17 +7,42 @@ import type { InferenceConfigRow, AgentTokenRow, InferenceRole } from './db/rows
 export type { InferenceRole };
 
 export interface InferenceRoleSettings {
+	/** Effective URL after applying global + file/env fallbacks. */
 	api_url: string | undefined;
+	/** This role's own override only (undefined when inheriting). */
+	own_api_url: string | undefined;
 	model: string | undefined;
+	/** Effective key present (own override, global, or file/env). */
 	has_key: boolean;
+	/** This role has its own key override. */
+	has_own_key: boolean;
+	/** Effective URL came from somewhere other than this role's own override. */
+	inherits_url: boolean;
+	/** Effective key came from somewhere other than this role's own override. */
+	inherits_key: boolean;
 	source: 'database' | 'config' | 'env' | 'none';
 }
 
+export interface GlobalInferenceSettings {
+	api_url: string | undefined;
+	has_key: boolean;
+	source: 'database' | 'none';
+}
+
 export interface InferenceSettings {
+	global: GlobalInferenceSettings;
 	embed: InferenceRoleSettings;
 	rerank: InferenceRoleSettings;
 	expand: InferenceRoleSettings;
 	asr: InferenceRoleSettings;
+	vlm: InferenceRoleSettings;
+}
+
+/** Fully resolved endpoint config (including secret key) for internal use. */
+export interface ResolvedRole {
+	api_url: string | undefined;
+	model: string | undefined;
+	api_key: string | undefined;
 }
 
 // In-memory active agent token - updated on rotation, read by the agent guard.
@@ -49,156 +74,226 @@ export function getAgentTokenSource(db: Database): 'database' | 'config' | 'env'
 	return 'none';
 }
 
-export function getInferenceSettings(db: Database): InferenceSettings {
+// Env var names QMD reads per role. ASR/VLM/OCR have no dedicated URL/key — they
+// share the embed endpoint.
+const ENV_KEYS: Record<InferenceRole, { url?: string; model?: string; key?: string }> = {
+	embed: { url: 'QMD_EMBED_API_URL', model: 'QMD_EMBED_API_MODEL', key: 'QMD_EMBED_API_KEY' },
+	rerank: { url: 'QMD_RERANK_API_URL', model: 'QMD_RERANK_API_MODEL', key: 'QMD_RERANK_API_KEY' },
+	expand: { url: 'QMD_EXPAND_API_URL', model: 'QMD_EXPAND_API_MODEL', key: 'QMD_EXPAND_API_KEY' },
+	asr: { model: 'LATTICE_ASR_MODEL' },
+	vlm: {},
+};
+
+// Roles with no endpoint of their own — they fall back to the embed endpoint.
+const SHARES_EMBED_ENDPOINT = new Set<InferenceRole>(['asr', 'vlm']);
+
+type FileConfig = ReturnType<typeof getQmdModelsConfig>;
+
+function fileRole(
+	fileConfig: FileConfig,
+	role: InferenceRole,
+): {
+	url?: string;
+	model?: string;
+	key?: string;
+} {
+	switch (role) {
+		case 'embed':
+			return {
+				url: fileConfig?.embed_api_url,
+				model: fileConfig?.embed_api_model,
+				key: fileConfig?.embed_api_key,
+			};
+		case 'rerank':
+			return {
+				url: fileConfig?.rerank_api_url,
+				model: fileConfig?.rerank_api_model,
+				key: fileConfig?.rerank_api_key,
+			};
+		case 'expand':
+			return {
+				url: fileConfig?.expand_api_url,
+				model: fileConfig?.expand_api_model,
+				key: fileConfig?.expand_api_key,
+			};
+		case 'asr':
+			return { model: fileConfig?.asr_model };
+		case 'vlm':
+			// One vision model serves description + OCR; honor legacy ocr_model too.
+			return { model: fileConfig?.vlm_model ?? fileConfig?.ocr_model };
+	}
+}
+
+interface RoleComputation {
+	settings: InferenceRoleSettings;
+	resolved: ResolvedRole;
+}
+
+// Single resolution pass shared by the public settings view and internal callers.
+// Precedence per role: own override > global > config.toml > env. ASR additionally
+// falls back to the embed endpoint (URL and key) to preserve historical behavior.
+function computeInference(db: Database): {
+	global: GlobalInferenceSettings;
+	roles: Record<InferenceRole, RoleComputation>;
+} {
 	const rows = db
 		.query('SELECT role, api_url, model, api_key FROM inference_config')
 		.all() as InferenceConfigRow[];
 	const dbMap = new Map(rows.map((r) => [r.role, r]));
 	const fileConfig = getQmdModelsConfig();
 
-	function roleSettings(
+	const globalRow = dbMap.get('global');
+	const globalUrl = globalRow?.api_url ?? undefined;
+	const globalKey = globalRow?.api_key ?? undefined;
+	const global: GlobalInferenceSettings = {
+		api_url: globalUrl,
+		has_key: globalKey != null,
+		source: globalUrl != null || globalKey != null ? 'database' : 'none',
+	};
+
+	function computeRole(
 		role: InferenceRole,
-		urlEnvKey?: string,
-		modelEnvKey?: string,
-		keyEnvKey?: string,
-	): InferenceRoleSettings {
+		embedFallbackUrl?: string,
+		embedFallbackKey?: string,
+		embedFallbackSource?: InferenceRoleSettings['source'],
+	): RoleComputation {
 		const dbRow = dbMap.get(role);
+		const ownUrl = dbRow?.api_url ?? undefined;
+		const ownModel = dbRow?.model ?? undefined;
+		const ownKey = dbRow?.api_key ?? undefined;
 
-		const urlFromEnv = urlEnvKey ? process.env[urlEnvKey] : undefined;
-		const modelFromEnv = modelEnvKey ? process.env[modelEnvKey] : undefined;
-		const keyFromEnv = keyEnvKey ? process.env[keyEnvKey] : undefined;
+		const env = ENV_KEYS[role];
+		const envUrl = env.url ? process.env[env.url] : undefined;
+		const envModel = env.model ? process.env[env.model] : undefined;
+		const envKey = env.key ? process.env[env.key] : undefined;
+		const file = fileRole(fileConfig, role);
 
-		// DB values take precedence, then file config, then env
-		if (dbRow) {
-			const hasUrl = dbRow.api_url != null;
-			const hasModel = dbRow.model != null;
-			const hasKey = dbRow.api_key != null;
-			if (hasUrl || hasModel || hasKey) {
-				return {
-					api_url: dbRow.api_url ?? undefined,
-					model: dbRow.model ?? undefined,
-					has_key: hasKey,
-					source: 'database',
-				};
-			}
+		let api_url: string | undefined;
+		let source: InferenceRoleSettings['source'];
+		let inherits_url: boolean;
+		if (ownUrl) {
+			api_url = ownUrl;
+			source = 'database';
+			inherits_url = false;
+		} else if (globalUrl) {
+			api_url = globalUrl;
+			source = 'database';
+			inherits_url = true;
+		} else if (file.url) {
+			api_url = file.url;
+			source = 'config';
+			inherits_url = true;
+		} else if (envUrl) {
+			api_url = envUrl;
+			source = 'env';
+			inherits_url = true;
+		} else if (SHARES_EMBED_ENDPOINT.has(role) && embedFallbackUrl) {
+			api_url = embedFallbackUrl;
+			// Inherit the embed endpoint's true provenance (db/config/env), not 'database'.
+			source = embedFallbackSource ?? 'database';
+			inherits_url = true;
+		} else {
+			api_url = undefined;
+			source = 'none';
+			inherits_url = true;
 		}
 
-		// Fall through to file config
-		switch (role) {
-			case 'embed': {
-				const url = fileConfig?.embed_api_url ?? urlFromEnv;
-				const model = fileConfig?.embed_api_model ?? modelFromEnv;
-				const hasKey = Boolean(fileConfig?.embed_api_key ?? keyFromEnv);
-				if (url || model || hasKey)
-					return {
-						api_url: url,
-						model,
-						has_key: hasKey,
-						source: fileConfig?.embed_api_url ? 'config' : 'env',
-					};
-				break;
-			}
-			case 'rerank': {
-				const url = fileConfig?.rerank_api_url ?? urlFromEnv;
-				const model = fileConfig?.rerank_api_model ?? modelFromEnv;
-				const hasKey = Boolean(fileConfig?.rerank_api_key ?? keyFromEnv);
-				if (url || model || hasKey)
-					return {
-						api_url: url,
-						model,
-						has_key: hasKey,
-						source: fileConfig?.rerank_api_url ? 'config' : 'env',
-					};
-				break;
-			}
-			case 'expand': {
-				const url = fileConfig?.expand_api_url ?? urlFromEnv;
-				const model = fileConfig?.expand_api_model ?? modelFromEnv;
-				const hasKey = Boolean(fileConfig?.expand_api_key ?? keyFromEnv);
-				if (url || model || hasKey)
-					return {
-						api_url: url,
-						model,
-						has_key: hasKey,
-						source: fileConfig?.expand_api_url ? 'config' : 'env',
-					};
-				break;
-			}
-			case 'asr': {
-				const model = fileConfig?.asr_model ?? modelFromEnv;
-				if (model)
-					return {
-						api_url: undefined,
-						model,
-						has_key: false,
-						source: fileConfig?.asr_model ? 'config' : 'env',
-					};
-				break;
-			}
-		}
+		const model = ownModel ?? file.model ?? envModel ?? undefined;
 
-		return { api_url: undefined, model: undefined, has_key: false, source: 'none' };
+		const resolvedKey =
+			ownKey ??
+			globalKey ??
+			file.key ??
+			envKey ??
+			(SHARES_EMBED_ENDPOINT.has(role) ? embedFallbackKey : undefined);
+		const has_own_key = ownKey != null;
+		const has_key = resolvedKey != null;
+		const inherits_key = has_key && !has_own_key;
+
+		return {
+			settings: {
+				api_url,
+				own_api_url: ownUrl,
+				model,
+				has_key,
+				has_own_key,
+				inherits_url,
+				inherits_key,
+				source,
+			},
+			resolved: { api_url, model, api_key: resolvedKey },
+		};
 	}
 
+	const embed = computeRole('embed');
+	const rerank = computeRole('rerank');
+	const expand = computeRole('expand');
+	const asr = computeRole(
+		'asr',
+		embed.resolved.api_url,
+		embed.resolved.api_key,
+		embed.settings.source,
+	);
+	const vlm = computeRole(
+		'vlm',
+		embed.resolved.api_url,
+		embed.resolved.api_key,
+		embed.settings.source,
+	);
+
+	return { global, roles: { embed, rerank, expand, asr, vlm } };
+}
+
+export function getInferenceSettings(db: Database): InferenceSettings {
+	const { global, roles } = computeInference(db);
 	return {
-		embed: roleSettings('embed', 'QMD_EMBED_API_URL', 'QMD_EMBED_API_MODEL', 'QMD_EMBED_API_KEY'),
-		rerank: roleSettings(
-			'rerank',
-			'QMD_RERANK_API_URL',
-			'QMD_RERANK_API_MODEL',
-			'QMD_RERANK_API_KEY',
-		),
-		expand: roleSettings(
-			'expand',
-			'QMD_EXPAND_API_URL',
-			'QMD_EXPAND_API_MODEL',
-			'QMD_EXPAND_API_KEY',
-		),
-		asr: roleSettings('asr', undefined, 'LATTICE_ASR_MODEL', undefined),
+		global,
+		embed: roles.embed.settings,
+		rerank: roles.rerank.settings,
+		expand: roles.expand.settings,
+		asr: roles.asr.settings,
+		vlm: roles.vlm.settings,
 	};
 }
 
-// Retrieve raw API keys from DB for use in RemoteLLM config (never returned in API responses).
-function getDbApiKeys(db: Database): Record<string, string | null> {
-	const rows = db.query('SELECT role, api_key FROM inference_config').all() as Pick<
-		InferenceConfigRow,
-		'role' | 'api_key'
-	>[];
-	return Object.fromEntries(rows.map((r) => [r.role, r.api_key]));
+// Fully resolved endpoints (including secret keys) for internal use only — never
+// expose this in an API response.
+export function resolveInferenceConfig(db: Database): Record<InferenceRole, ResolvedRole> {
+	const { roles } = computeInference(db);
+	return {
+		embed: roles.embed.resolved,
+		rerank: roles.rerank.resolved,
+		expand: roles.expand.resolved,
+		asr: roles.asr.resolved,
+		vlm: roles.vlm.resolved,
+	};
 }
 
 export function applyInferenceSettings(db: Database): void {
-	const s = getInferenceSettings(db);
+	const r = resolveInferenceConfig(db);
 
-	if (!s.embed.api_url || !s.embed.model) {
+	if (!r.embed.api_url || !r.embed.model) {
 		setDefaultLLM(null);
 		return;
 	}
 
-	const keys = getDbApiKeys(db);
-	const fileConfig = getQmdModelsConfig();
-
 	const cfg: RemoteLLMConfig = {
-		embedApiUrl: s.embed.api_url,
-		embedApiModel: s.embed.model,
+		embedApiUrl: r.embed.api_url,
+		embedApiModel: r.embed.model,
 	};
 
-	// API keys: DB wins over env/config
-	const embedKey = keys.embed ?? process.env.QMD_EMBED_API_KEY ?? fileConfig?.embed_api_key;
-	if (embedKey) cfg.embedApiKey = embedKey;
+	if (r.embed.api_key) cfg.embedApiKey = r.embed.api_key;
 
-	if (s.rerank.api_url && s.rerank.model) {
-		cfg.rerankApiUrl = s.rerank.api_url;
-		cfg.rerankApiModel = s.rerank.model;
-		const rerankKey = keys.rerank ?? process.env.QMD_RERANK_API_KEY ?? fileConfig?.rerank_api_key;
-		if (rerankKey) cfg.rerankApiKey = rerankKey;
+	if (r.rerank.api_url && r.rerank.model) {
+		cfg.rerankApiUrl = r.rerank.api_url;
+		cfg.rerankApiModel = r.rerank.model;
+		if (r.rerank.api_key) cfg.rerankApiKey = r.rerank.api_key;
 	}
 
-	if (s.expand.api_url && s.expand.model) {
-		cfg.expandApiUrl = s.expand.api_url;
-		cfg.expandApiModel = s.expand.model;
-		const expandKey = keys.expand ?? process.env.QMD_EXPAND_API_KEY ?? fileConfig?.expand_api_key;
-		if (expandKey) cfg.expandApiKey = expandKey;
+	if (r.expand.api_url && r.expand.model) {
+		cfg.expandApiUrl = r.expand.api_url;
+		cfg.expandApiModel = r.expand.model;
+		if (r.expand.api_key) cfg.expandApiKey = r.expand.api_key;
 	}
 
 	try {

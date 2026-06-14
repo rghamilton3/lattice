@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite';
 import { readFileSync } from 'node:fs';
-import { getVlmModel, getQmdBaseUrl, getQmdApiKey } from './config';
+import { resolveInferenceConfig } from './settings';
 import { writeAttachmentIndex, writeWorkingAttachmentIndex, refreshIndex } from './search';
 
 export async function generateDescription(
@@ -9,11 +9,13 @@ export async function generateDescription(
 	storedFullPath: string,
 	db: Database,
 ): Promise<void> {
-	const model = getVlmModel();
+	const vlm = resolveInferenceConfig(db).vlm;
+	const model = vlm.model;
 	if (!model) return;
 
-	const baseUrl = getQmdBaseUrl();
+	const baseUrl = vlm.api_url;
 	if (!baseUrl) return;
+	const apiKey = vlm.api_key;
 
 	const existing = db
 		.query(
@@ -46,7 +48,7 @@ export async function generateDescription(
 		signal: AbortSignal.timeout(30_000),
 		headers: {
 			'Content-Type': 'application/json',
-			...(getQmdApiKey() ? { Authorization: `Bearer ${getQmdApiKey()}` } : {}),
+			...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
 		},
 		body: JSON.stringify({
 			model,

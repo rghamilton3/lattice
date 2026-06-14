@@ -52,6 +52,8 @@ describe('db.initDb', () => {
 			'017_track_bins.sql',
 			'018_audio_transcription.sql',
 			'019_settings.sql',
+			'020_inference_global.sql',
+			'021_inference_vlm_ocr.sql',
 		]);
 		db.close();
 	});
@@ -90,7 +92,7 @@ describe('db.initDb', () => {
 		const { initDb, getMigrationStatus } = await import('../../src/db');
 		const db = initDb();
 
-		expect(getMigrationStatus(db)).toEqual({ ready: true, applied: 19 });
+		expect(getMigrationStatus(db)).toEqual({ ready: true, applied: 21 });
 		db.close();
 	});
 

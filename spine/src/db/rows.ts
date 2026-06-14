@@ -215,10 +215,13 @@ export interface TrackPhotoCreateResponse {
 	url: string;
 }
 
-export type InferenceRole = 'embed' | 'rerank' | 'expand' | 'asr';
+export type InferenceRole = 'embed' | 'rerank' | 'expand' | 'asr' | 'vlm';
+
+// The 'global' row holds shared URL/key defaults that roles inherit.
+export type InferenceConfigKey = InferenceRole | 'global';
 
 export interface InferenceConfigRow {
-	role: InferenceRole;
+	role: InferenceConfigKey;
 	api_url: string | null;
 	model: string | null;
 	api_key: string | null;

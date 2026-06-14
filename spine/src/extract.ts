@@ -1,6 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { getOcrModel, getQmdBaseUrl, getQmdApiKey } from './config';
 
+// Resolved OCR endpoint override (from inference settings). Falls back to the
+// config.toml/env getters when omitted.
+export interface OcrOverride {
+	baseUrl?: string;
+	apiKey?: string;
+	model?: string;
+}
+
 const INLINE_TYPES = new Set([
 	'text/plain',
 	'text/csv',
@@ -87,12 +95,17 @@ export async function extractSubprocess(
 	return truncate(stdout);
 }
 
-export async function ocrImage(storedFullPath: string, contentType: string): Promise<string> {
-	const model = getOcrModel();
+export async function ocrImage(
+	storedFullPath: string,
+	contentType: string,
+	override?: OcrOverride,
+): Promise<string> {
+	const model = override?.model ?? getOcrModel();
 	if (!model) return '';
 
-	const baseUrl = getQmdBaseUrl();
+	const baseUrl = override?.baseUrl ?? getQmdBaseUrl();
 	if (!baseUrl) return '';
+	const apiKey = override?.apiKey ?? getQmdApiKey();
 
 	const bytes = readFileSync(storedFullPath);
 	const b64 = bytes.toString('base64');
@@ -103,7 +116,7 @@ export async function ocrImage(storedFullPath: string, contentType: string): Pro
 		signal: AbortSignal.timeout(30_000),
 		headers: {
 			'Content-Type': 'application/json',
-			...(getQmdApiKey() ? { Authorization: `Bearer ${getQmdApiKey()}` } : {}),
+			...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
 		},
 		body: JSON.stringify({
 			model,
@@ -131,6 +144,7 @@ export async function ocrImage(storedFullPath: string, contentType: string): Pro
 export async function extractText(
 	storedFullPath: string,
 	contentType: string,
+	ocrOverride?: OcrOverride,
 ): Promise<{ text: string; tier: 0 | 1 }> {
 	const norm = contentType.split(';')[0].trim().toLowerCase();
 	if (isInlineType(norm)) {
@@ -141,7 +155,7 @@ export async function extractText(
 		return { text, tier: 0 };
 	}
 	if (isImageType(norm)) {
-		const text = await ocrImage(storedFullPath, norm);
+		const text = await ocrImage(storedFullPath, norm, ocrOverride);
 		return { text, tier: 1 };
 	}
 	return { text: '', tier: 0 };

@@ -17,6 +17,11 @@ export interface TranscribeOptions {
 	storedFullPath: string;
 	filename: string;
 	contentType: string;
+	// Resolved ASR endpoint overrides (from inference settings). Fall back to
+	// config.toml/env getters when omitted (keeps existing tests untouched).
+	baseUrl?: string;
+	apiKey?: string;
+	model?: string;
 	fetchImpl?: FetchLike;
 	retryDelaysMs?: number[];
 	sleep?: (ms: number) => Promise<void>;
@@ -43,12 +48,14 @@ async function requestOnce(
 	form.append('file', new Blob([bytes], { type: opts.contentType }), opts.filename || 'audio');
 	form.append('model', model);
 
+	const apiKey = opts.apiKey ?? getQmdApiKey();
+
 	let resp: Response;
 	try {
 		resp = await fetchImpl(`${baseUrl}/audio/transcriptions`, {
 			method: 'POST',
 			signal: AbortSignal.timeout(getAsrTimeoutMs()),
-			headers: getQmdApiKey() ? { Authorization: `Bearer ${getQmdApiKey()}` } : {},
+			headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
 			body: form,
 		});
 	} catch (e) {
@@ -76,9 +83,9 @@ async function requestOnce(
  * persist a `transient:` failure reason for later reconciliation.
  */
 export async function transcribeAudioFile(opts: TranscribeOptions): Promise<TranscriptionResult> {
-	const model = getAsrModel();
+	const model = opts.model ?? getAsrModel();
 	if (!model) throw new TerminalTranscriptionError('asr_model is not configured');
-	const baseUrl = getQmdBaseUrl();
+	const baseUrl = opts.baseUrl ?? getQmdBaseUrl();
 	if (!baseUrl) throw new TransientTranscriptionError('inference endpoint is not configured');
 
 	const fetchImpl = opts.fetchImpl ?? fetch;

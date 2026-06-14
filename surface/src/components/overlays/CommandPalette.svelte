@@ -108,7 +108,10 @@
 				hint: 'light / dark / sepia / system',
 				kbd: [],
 				kind: 'action',
-				run: () => (wb.activeOverlay = 'settings')
+				run: () => {
+					wb.settingsTab = 'display';
+					wb.activeOverlay = 'settings';
+				}
 			}
 		];
 	}

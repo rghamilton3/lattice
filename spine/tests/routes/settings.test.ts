@@ -25,11 +25,11 @@ function browserReq(path: string, init?: RequestInit) {
 // ── GET /api/settings/inference ───────────────────────────────────────────────
 
 describe('GET /api/settings/inference', () => {
-	it('returns all four roles with has_key:false when DB is empty', async () => {
+	it('returns all roles with has_key:false when DB is empty', async () => {
 		const res = await app.app.handle(browserReq('/api/settings/inference'));
 		expect(res.status).toBe(200);
 		const body = await json(res);
-		for (const role of ['embed', 'rerank', 'expand', 'asr']) {
+		for (const role of ['embed', 'rerank', 'expand', 'asr', 'vlm']) {
 			expect(body[role]).toBeDefined();
 			expect(body[role].has_key).toBe(false);
 		}
@@ -119,7 +119,7 @@ describe('global inheritance', () => {
 		expect(body.global.api_url).toBe('https://api.example.com/v1');
 		expect(body.global.has_key).toBe(true);
 
-		for (const role of ['embed', 'rerank', 'expand', 'asr']) {
+		for (const role of ['embed', 'rerank', 'expand', 'asr', 'vlm']) {
 			expect(body[role].api_url).toBe('https://api.example.com/v1');
 			expect(body[role].inherits_url).toBe(true);
 			expect(body[role].own_api_url).toBeUndefined();
@@ -155,6 +155,23 @@ describe('global inheritance', () => {
 		const body = await json(res);
 		expect(body.asr.api_url).toBe('https://embed.example.com/v1');
 		expect(body.asr.inherits_url).toBe(true);
+	});
+
+	it('ASR/VLM inheriting an env-sourced embed endpoint report source=env, not database', async () => {
+		process.env.QMD_EMBED_API_URL = 'https://env-embed.example.com/v1';
+		try {
+			const res = await app.app.handle(browserReq('/api/settings/inference'));
+			const body = await json(res);
+			expect(body.embed.source).toBe('env');
+			for (const role of ['asr', 'vlm']) {
+				expect(body[role].api_url).toBe('https://env-embed.example.com/v1');
+				expect(body[role].inherits_url).toBe(true);
+				// Regression: provenance was hardcoded to 'database' for inherited embed.
+				expect(body[role].source).toBe('env');
+			}
+		} finally {
+			delete process.env.QMD_EMBED_API_URL;
+		}
 	});
 
 	it('PUT persists a global override row', async () => {

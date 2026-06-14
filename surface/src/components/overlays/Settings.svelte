@@ -54,6 +54,16 @@
 		e.preventDefault();
 	}
 
+	// Keyboard resize: the handle is on the left edge, so Left widens / Right narrows.
+	function resizeKey(e: KeyboardEvent) {
+		const STEP = 16;
+		if (e.key === 'ArrowLeft') width = Math.min(MAX_WIDTH, width + STEP);
+		else if (e.key === 'ArrowRight') width = Math.max(MIN_WIDTH, width - STEP);
+		else return;
+		e.preventDefault();
+		if (browser) localStorage.setItem(WIDTH_KEY, String(width));
+	}
+
 	const themes: Theme[] = ['light', 'dark', 'sepia', 'system'];
 	const densities: Density[] = ['compact', 'comfortable', 'spacious'];
 	const postures: Posture[] = ['quiet', 'standard', 'active'];
@@ -63,8 +73,7 @@
 		{ id: 'system-ui', label: 'System' }
 	];
 
-	type Tab = 'display' | 'inference' | 'security';
-	let activeTab = $state<Tab>('display');
+	// Tab state lives on the workbench so commands can target a specific tab.
 
 	function close() {
 		wb.activeOverlay = 'none';
@@ -87,12 +96,20 @@
 	style:--settings-width={`${width}px`}
 	onkeydown={onKey}
 >
+	<!-- Focusable window-splitter: the separator owns resize via pointer + arrow keys. -->
+	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<div
 		class="settings-resize"
 		role="separator"
 		aria-label="Resize settings panel"
 		aria-orientation="vertical"
+		aria-valuenow={width}
+		aria-valuemin={MIN_WIDTH}
+		aria-valuemax={MAX_WIDTH}
+		tabindex="0"
 		onpointerdown={startResize}
+		onkeydown={resizeKey}
 	></div>
 	<div class="settings-head">
 		<div class="row" style="gap:8px">
@@ -106,30 +123,30 @@
 	<div class="tab-strip" role="tablist" aria-label="Settings sections">
 		<button
 			role="tab"
-			aria-selected={activeTab === 'display'}
+			aria-selected={wb.settingsTab === 'display'}
 			onclick={() => {
-				activeTab = 'display';
+				wb.settingsTab = 'display';
 			}}>Display</button
 		>
 		<button
 			role="tab"
-			aria-selected={activeTab === 'inference'}
+			aria-selected={wb.settingsTab === 'inference'}
 			onclick={() => {
-				activeTab = 'inference';
+				wb.settingsTab = 'inference';
 			}}>Inference</button
 		>
 		<button
 			role="tab"
-			aria-selected={activeTab === 'security'}
+			aria-selected={wb.settingsTab === 'security'}
 			onclick={() => {
-				activeTab = 'security';
+				wb.settingsTab = 'security';
 			}}>Security</button
 		>
 	</div>
 	<div class="settings-body">
-		{#if activeTab === 'inference'}
+		{#if wb.settingsTab === 'inference'}
 			<InferenceSettings />
-		{:else if activeTab === 'security'}
+		{:else if wb.settingsTab === 'security'}
 			<SecuritySettings />
 		{:else}
 			<section class="settings-section">

@@ -9,8 +9,7 @@ import {
 	TransientTranscriptionError,
 	type TranscribeOptions,
 } from './transcribe';
-import { getAsrModel } from './config';
-import { resolveInferenceConfig } from './settings';
+import { resolveInferenceConfig, type ResolvedRole } from './settings';
 import {
 	emitTranscriptionAttention,
 	transcriptionNotificationPosture,
@@ -131,14 +130,18 @@ async function processOne(
 		`UPDATE ${table} SET extraction_status = 'processing', extraction_failure_reason = '' WHERE id = ?`,
 	).run(id);
 
-	if (isAudioType(contentType) && getAsrModel()) {
-		await transcribeOne(id, kind, storedFullPath, contentType, db);
+	// Resolve once per attachment: the guard, transcription, and VLM extraction
+	// all read from the same DB-backed config (own > global > config.toml > env).
+	const inference = resolveInferenceConfig(db);
+
+	if (isAudioType(contentType) && inference.asr.model) {
+		await transcribeOne(id, kind, storedFullPath, contentType, inference.asr, db);
 		return;
 	}
 
 	try {
 		// VLM serves OCR too — same model, different prompt.
-		const vlm = resolveInferenceConfig(db).vlm;
+		const vlm = inference.vlm;
 		const { text } = await extractText(storedFullPath, contentType, {
 			baseUrl: vlm.api_url,
 			apiKey: vlm.api_key,
@@ -176,6 +179,7 @@ async function transcribeOne(
 	kind: 'capture' | 'working',
 	storedFullPath: string,
 	contentType: string,
+	asr: ResolvedRole,
 	db: Database,
 ): Promise<void> {
 	const table = kind === 'capture' ? 'capture_attachments' : 'working_attachments';
@@ -201,8 +205,6 @@ async function transcribeOne(
 	const row = db.query(`SELECT filename FROM ${table} WHERE id = ?`).get(id) as {
 		filename: string;
 	} | null;
-
-	const asr = resolveInferenceConfig(db).asr;
 
 	try {
 		const { text, modelId } = await _transcribeImpl({

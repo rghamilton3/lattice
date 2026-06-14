@@ -155,6 +155,7 @@ function computeInference(db: Database): {
 		role: InferenceRole,
 		embedFallbackUrl?: string,
 		embedFallbackKey?: string,
+		embedFallbackSource?: InferenceRoleSettings['source'],
 	): RoleComputation {
 		const dbRow = dbMap.get(role);
 		const ownUrl = dbRow?.api_url ?? undefined;
@@ -188,7 +189,8 @@ function computeInference(db: Database): {
 			inherits_url = true;
 		} else if (SHARES_EMBED_ENDPOINT.has(role) && embedFallbackUrl) {
 			api_url = embedFallbackUrl;
-			source = 'database';
+			// Inherit the embed endpoint's true provenance (db/config/env), not 'database'.
+			source = embedFallbackSource ?? 'database';
 			inherits_url = true;
 		} else {
 			api_url = undefined;
@@ -226,8 +228,18 @@ function computeInference(db: Database): {
 	const embed = computeRole('embed');
 	const rerank = computeRole('rerank');
 	const expand = computeRole('expand');
-	const asr = computeRole('asr', embed.resolved.api_url, embed.resolved.api_key);
-	const vlm = computeRole('vlm', embed.resolved.api_url, embed.resolved.api_key);
+	const asr = computeRole(
+		'asr',
+		embed.resolved.api_url,
+		embed.resolved.api_key,
+		embed.settings.source,
+	);
+	const vlm = computeRole(
+		'vlm',
+		embed.resolved.api_url,
+		embed.resolved.api_key,
+		embed.settings.source,
+	);
 
 	return { global, roles: { embed, rerank, expand, asr, vlm } };
 }

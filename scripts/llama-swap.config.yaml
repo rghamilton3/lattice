@@ -77,7 +77,7 @@ models:
       --ctx-size 8192
       --batch-size 8192
       -ngl 99
-      --flash-attn
+      --flash-attn on
       --no-mmap
 
   # --- Reranking: QMD result reranking (rerank_api_model) ---
@@ -88,7 +88,7 @@ models:
       --reranking
       --ctx-size 8192
       -ngl 99
-      --flash-attn
+      --flash-attn on
       --no-mmap
 
   # --- Query expansion: chat completions (expand_api_model) ---
@@ -99,7 +99,7 @@ models:
       --ctx-size 8192
       -ngl 99
       --jinja
-      --flash-attn
+      --flash-attn on
       --no-mmap
 
   # --- Vision: attachment image descriptions (vlm_model), POSTed to
@@ -112,7 +112,7 @@ models:
       --mmproj ${models}/qwen2.5-vl-7b-instruct-mmproj-f16.gguf
       --ctx-size 8192
       -ngl 99
-      --flash-attn
+      --flash-attn on
       --no-mmap
 
   # --- ASR: voice-note transcription (asr_model), POSTed to

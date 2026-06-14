@@ -13,6 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate ref is a versioned tag
+        run: |
+          [[ "$GITHUB_REF_NAME" == llama-swap-config-v* ]] \
+            || { echo "workflow_dispatch only — '$GITHUB_REF_NAME' is not a versioned tag, skipping"; exit 0; }
+
       - name: Attach config + fetch helper to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

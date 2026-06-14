@@ -26,7 +26,7 @@ fixing flags). Use `llama-swap` only when `asr-shim/` code changes. The GPU host
 Docker image from the latest `llama-swap-v*` release and the config from the latest
 `llama-swap-config-v*` release independently.
 
-Current versions (as of last check): agent `0.11.2`, spine `1.2.1`, surface `0.11.1`,
+Current versions (as of last check): agent `0.11.2`, spine `1.2.1`, surface `0.11.1`, llama-swap-config `0.1.2`,
 llama-swap `0.1.0`. Always verify with the script itself — it reads manifests directly.
 
 ## Prerequisites

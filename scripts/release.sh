@@ -117,7 +117,11 @@ bump_version() {
             ;;
         llama-swap-config)
             info "bumping scripts/llama-swap-config.version to $new_ver"
-            run printf '%s\n' "$new_ver" > "$REPO_ROOT/scripts/llama-swap-config.version"
+            if $dry_run; then
+                echo "  [dry-run] printf '%s\n' $new_ver > scripts/llama-swap-config.version"
+            else
+                printf '%s\n' "$new_ver" > "$REPO_ROOT/scripts/llama-swap-config.version"
+            fi
             ;;
         *) die "unknown artifact '$artifact'" ;;
     esac

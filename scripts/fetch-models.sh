@@ -30,9 +30,9 @@ HF_BASE="${HF_ENDPOINT:-https://huggingface.co}"
 MODELS=(
 	"bge-m3.gguf|gpustack/bge-m3-GGUF|bge-m3-Q8_0.gguf"
 	"bge-reranker-v2-m3.gguf|gpustack/bge-reranker-v2-m3-GGUF|bge-reranker-v2-m3-Q8_0.gguf"
-	"qwen2.5-3b-instruct-q4_k_m.gguf|Qwen/Qwen2.5-3B-Instruct-GGUF|qwen2.5-3b-instruct-q4_k_m.gguf"
-	"qwen2.5-vl-7b-instruct-q4_k_m.gguf|ggml-org/Qwen2.5-VL-7B-Instruct-GGUF|Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf"
-	"qwen2.5-vl-7b-instruct-mmproj-f16.gguf|ggml-org/Qwen2.5-VL-7B-Instruct-GGUF|mmproj-Qwen2.5-VL-7B-Instruct-f16.gguf"
+	"qwen3-4b-q4_k_m.gguf|Qwen/Qwen3-4B-GGUF|Qwen3-4B-Q4_K_M.gguf"
+	"qwen3-vl-8b-instruct-q4_k_m.gguf|Qwen/Qwen3-VL-8B-Instruct-GGUF|Qwen3VL-8B-Instruct-Q4_K_M.gguf"
+	"qwen3-vl-8b-instruct-mmproj-f16.gguf|Qwen/Qwen3-VL-8B-Instruct-GGUF|mmproj-Qwen3VL-8B-Instruct-F16.gguf"
 )
 
 if ! command -v aria2c >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then

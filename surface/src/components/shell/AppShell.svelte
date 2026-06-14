@@ -417,6 +417,13 @@
 					Keyword-only
 				</span>
 			{/if}
+			{#each (statusQuery.data?.inference_endpoints ?? []).filter((ep) => ep.status === 'degraded') as ep (ep.role)}
+				<span
+					class="chip chip-keyword-only"
+					role="status"
+					title="{ep.role} endpoint degraded: {ep.url ?? 'unknown URL'}">{ep.role} degraded</span
+				>
+			{/each}
 		</div>
 		<span class="faint statusbar-tagline">
 			Lattice&nbsp;·&nbsp;ADHD-aware substrate&nbsp;·&nbsp;captured loosely, retrieved intelligently

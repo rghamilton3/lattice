@@ -1,8 +1,9 @@
 import { dirname, join, resolve } from 'node:path';
 import { initDb } from './db';
 import { initSearch } from './search';
-import { getAgentToken, getDatabasePath } from './config';
+import { getDatabasePath } from './config';
 import { buildApp } from './app';
+import { initActiveAgentToken, applyInferenceSettings, getActiveAgentToken } from './settings';
 import { sweepPending, startTranscriptRetryLoop } from './extraction-queue';
 import { startResurfaceTimer } from './resurface';
 
@@ -12,13 +13,14 @@ const ARCHIVE_DIR = process.env.ARCHIVE_STORAGE_DIR ?? join(dirname(DB_PATH), 'w
 const SURFACE_BUILD = process.env.SURFACE_BUILD ?? join(import.meta.dir, '../../surface/build');
 
 const db = initDb();
+initActiveAgentToken(db);
+applyInferenceSettings(db);
 await initSearch(db);
 await sweepPending(db, ATTACHMENTS_DIR);
 startTranscriptRetryLoop(db, ATTACHMENTS_DIR);
 startResurfaceTimer(db);
 
-const agentToken = getAgentToken();
-if (!agentToken) {
+if (!getActiveAgentToken()) {
 	console.warn('WARNING: LATTICE_AGENT_TOKEN not set — all agent routes will reject');
 }
 if (process.env.DEV_USER) {
@@ -29,7 +31,6 @@ if (process.env.DEV_USER) {
 
 const app = buildApp({
 	db,
-	agentToken,
 	allowHttp: process.env.ALLOW_HTTP === 'true',
 	devUser: process.env.DEV_USER,
 	surfaceBuild: SURFACE_BUILD,

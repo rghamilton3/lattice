@@ -7,6 +7,13 @@ export interface AgentSummary {
 	last_indexed: number;
 }
 
+export interface InferenceEndpointStatus {
+	role: 'embed' | 'rerank' | 'expand' | 'asr';
+	url: string | null;
+	status: 'ok' | 'degraded' | 'unconfigured';
+	last_ok_at: string | null;
+}
+
 export interface StatusResponse {
 	agents: AgentSummary[];
 	active_agent_count: number;
@@ -16,6 +23,7 @@ export interface StatusResponse {
 	needs_embedding: number | null;
 	/** Consecutive lexical index failures (0 when healthy). */
 	index_failures: number;
+	inference_endpoints: InferenceEndpointStatus[];
 }
 
 export const statusKeys = {

@@ -214,3 +214,20 @@ export interface TrackPhotoCreateResponse {
 	size_bytes: number;
 	url: string;
 }
+
+export type InferenceRole = 'embed' | 'rerank' | 'expand' | 'asr';
+
+export interface InferenceConfigRow {
+	role: InferenceRole;
+	api_url: string | null;
+	model: string | null;
+	api_key: string | null;
+	updated_at: string;
+}
+
+export interface AgentTokenRow {
+	id: number;
+	token: string;
+	created_at: string;
+	active: number; // SQLite boolean: 1 = active, 0 = inactive
+}

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { createTestDb } from './testSupport/db';
 import { TEST_AGENT_TOKEN, browserGet } from './testSupport/http';
 import { buildApp } from './app';
+import { setActiveAgentToken } from './settings';
 
 let cleanup: (() => void) | undefined;
 
@@ -24,9 +25,9 @@ function setup(withSurfaceBuild: boolean) {
 			'<!doctype html><html><body>spa-shell</body></html>',
 		);
 	}
+	setActiveAgentToken(TEST_AGENT_TOKEN);
 	const app = buildApp({
 		db: ctx.db,
-		agentToken: TEST_AGENT_TOKEN,
 		allowHttp: true,
 		devUser: undefined,
 		surfaceBuild,

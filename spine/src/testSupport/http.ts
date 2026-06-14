@@ -1,13 +1,14 @@
 import { join } from 'node:path';
 import type { Database } from 'bun:sqlite';
 import { buildApp } from '../app';
+import { setActiveAgentToken } from '../settings';
 
 export const TEST_AGENT_TOKEN = 'test-agent-token';
 
 export function buildTestApp(db: Database, attachmentsDir: string) {
+	setActiveAgentToken(TEST_AGENT_TOKEN);
 	return buildApp({
 		db,
-		agentToken: TEST_AGENT_TOKEN,
 		allowHttp: true,
 		devUser: undefined,
 		surfaceBuild: undefined,

@@ -84,6 +84,7 @@ describe('GET /api/status', () => {
 			'agents',
 			'checks',
 			'index_failures',
+			'inference_endpoints',
 			'needs_embedding',
 			'ready',
 			'search_degraded',

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # fetch-models.sh — download the GGUF weights for Lattice's llama-swap config.
 #
-# Pulls the four llama.cpp models referenced by scripts/llama-swap.config.yaml into
+# Pulls the five GGUF files (four model checkpoints + one mmproj projector) referenced by scripts/llama-swap.config.yaml into
 # the llama-swap models dir, renamed to the exact filenames that config's `-m` /
 # `--mmproj` paths expect. Run this on the inference host (or anywhere, then rsync
 # the dir up).
@@ -15,7 +15,7 @@
 # via NeMo, which downloads the .nemo from HuggingFace into its own cache on first
 # request — it is not staged in the models dir. See asr-shim/README.md.
 #
-# All four repos are public; no HF token needed. Downloads resume (-C -) and are
+# All five repos are public; no HF token needed. Downloads resume (-C -) and are
 # validated to start with the GGUF magic so a captive-portal/HTML error page is
 # caught instead of silently saved as a "model".
 set -euo pipefail

@@ -27,7 +27,7 @@ RUN apt-get update \
 
 # uv provisions its own Python 3.12 and builds the venv reproducibly, so we do
 # not depend on the base image's Python version.
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.14 /uv /uvx /usr/local/bin/
 
 # Build the shim venv with the real NeMo backend at /opt/asr-shim/.venv.
 # Not --frozen: the lockfile is resolved without the (CI-excluded) nemo extra,

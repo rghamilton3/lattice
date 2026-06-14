@@ -7,6 +7,7 @@
 [![CI surface](https://github.com/rghamilton3/lattice/actions/workflows/surface-ci.yml/badge.svg)](https://github.com/rghamilton3/lattice/actions/workflows/surface-ci.yml)
 [![CI quality](https://github.com/rghamilton3/lattice/actions/workflows/ci-quality.yml/badge.svg)](https://github.com/rghamilton3/lattice/actions/workflows/ci-quality.yml)
 [![Docker](https://github.com/rghamilton3/lattice/actions/workflows/spine-docker.yml/badge.svg)](https://github.com/rghamilton3/lattice/actions/workflows/spine-docker.yml)
+[![llama-swap Docker](https://github.com/rghamilton3/lattice/actions/workflows/llama-swap-docker.yml/badge.svg)](https://github.com/rghamilton3/lattice/actions/workflows/llama-swap-docker.yml)
 
 Personal knowledge management substrate, designed around ADHD-aware constraints: capture loosely, retrieve intelligently, no required rituals.
 

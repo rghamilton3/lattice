@@ -1,6 +1,6 @@
 [project]
 name = "asr-shim"
-version = "0.1.0"
+version = "0.1.1"
 description = "OpenAI-compatible audio transcription shim for Lattice: ffmpeg normalization + NeMo Parakeet ASR behind llama-swap"
 requires-python = ">=3.12"
 dependencies = [

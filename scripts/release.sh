@@ -5,7 +5,7 @@
 #   scripts/release.sh prepare [--dry-run] <artifact>@<version> [...]
 #   scripts/release.sh tag     [--dry-run] <artifact>@<version> [...]
 #
-# Artifacts: agent  spine  surface  llama-swap
+# Artifacts: agent  spine  surface  llama-swap  llama-swap-config
 # Version:   semver without leading "v" — e.g. 0.12.0
 #
 # prepare: bumps version manifests, creates a release branch, commits,
@@ -58,6 +58,9 @@ current_version() {
             # Lattice-authored content in the custom llama-swap image.
             grep '^version = ' "$REPO_ROOT/asr-shim/pyproject.toml" \
                 | head -1 | sed 's/version = "\(.*\)"/\1/'
+            ;;
+        llama-swap-config)
+            cat "$REPO_ROOT/scripts/llama-swap-config.version"
             ;;
         *) die "unknown artifact '$artifact'" ;;
     esac
@@ -112,6 +115,10 @@ bump_version() {
                 echo "  warning: uv not on PATH — uv.lock not updated (CI will catch drift)"
             fi
             ;;
+        llama-swap-config)
+            info "bumping scripts/llama-swap-config.version to $new_ver"
+            run printf '%s\n' "$new_ver" > "$REPO_ROOT/scripts/llama-swap-config.version"
+            ;;
         *) die "unknown artifact '$artifact'" ;;
     esac
 }
@@ -125,7 +132,8 @@ manifest_files() {
         agent)      printf '%s\n' "agent/Cargo.toml" "agent/Cargo.lock" ;;
         spine)      printf '%s\n' "spine/package.json" ;;
         surface)    printf '%s\n' "surface/package.json" ;;
-        llama-swap) printf '%s\n' "asr-shim/pyproject.toml" "asr-shim/uv.lock" ;;
+        llama-swap)        printf '%s\n' "asr-shim/pyproject.toml" "asr-shim/uv.lock" ;;
+        llama-swap-config) printf '%s\n' "scripts/llama-swap-config.version" ;;
     esac
 }
 
@@ -155,8 +163,8 @@ for pair in "$@"; do
     ver="${pair##*@}"
     validate_semver "$ver"
     case "$art" in
-        agent|spine|surface|llama-swap) ;;
-        *) die "unknown artifact '$art' (valid: agent spine surface llama-swap)" ;;
+        agent|spine|surface|llama-swap|llama-swap-config) ;;
+        *) die "unknown artifact '$art' (valid: agent spine surface llama-swap llama-swap-config)" ;;
     esac
     artifacts+=("$art")
     versions["$art"]="$ver"
@@ -237,7 +245,8 @@ cmd_prepare() {
             agent)   pr_body+="  - After merge: push tag \`$tag\` → CI builds Linux/Windows binaries and publishes GitHub Release\n" ;;
             spine)   pr_body+="  - After merge: push tag \`$tag\` → CI builds and pushes Docker image to GHCR\n" ;;
             surface) pr_body+="  - After merge: push tag \`$tag\` (version tracking only — bundled in spine Docker image)\n" ;;
-            llama-swap) pr_body+="  - After merge: push tag \`$tag\` → CI builds and pushes the llama-swap image to GHCR and attaches the config + fetch helper to the release\n" ;;
+            llama-swap)        pr_body+="  - After merge: push tag \`$tag\` → CI builds and pushes the llama-swap Docker image to GHCR (use when asr-shim code changes)\n" ;;
+            llama-swap-config) pr_body+="  - After merge: push tag \`$tag\` → CI attaches updated \`llama-swap.config.yaml\` + \`fetch-models.sh\` to a GitHub Release — no Docker rebuild\n" ;;
         esac
     done
     pr_body+="\n### Next step\n\nOnce this PR is merged, run:\n\`\`\`\n"

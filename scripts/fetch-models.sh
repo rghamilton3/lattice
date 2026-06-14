@@ -35,13 +35,26 @@ MODELS=(
 	"qwen2.5-vl-7b-instruct-mmproj-f16.gguf|ggml-org/Qwen2.5-VL-7B-Instruct-GGUF|mmproj-Qwen2.5-VL-7B-Instruct-f16.gguf"
 )
 
-if ! command -v curl >/dev/null 2>&1; then
-	echo "error: curl not found on PATH" >&2
+if ! command -v aria2c >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then
+	echo "error: aria2c or curl is required" >&2
 	exit 1
 fi
 
+download_file() {
+	local url=$1 out=$2
+	if command -v aria2c >/dev/null 2>&1; then
+		aria2c -x 16 -s 16 -k 1M --retry-wait=2 --max-tries=3 \
+			--continue=true \
+			-d "$(dirname "$out")" -o "$(basename "$out")" "$url"
+	else
+		curl -L --fail --retry 3 --retry-delay 2 -C - -o "$out" "$url"
+	fi
+}
+
 mkdir -p "$MODELS_DIR"
+_dl=$(command -v aria2c >/dev/null 2>&1 && echo "aria2c (16 connections)" || echo "curl")
 echo "Fetching ${#MODELS[@]} GGUF files into ${MODELS_DIR}"
+echo "Downloader: ${_dl}"
 echo "Endpoint: ${HF_BASE}  (override with HF_ENDPOINT, e.g. a mirror)"
 echo
 
@@ -63,7 +76,7 @@ for entry in "${MODELS[@]}"; do
 
 	echo "↓ ${dest}"
 	echo "    from ${repo} :: ${src}"
-	curl -L --fail --retry 3 --retry-delay 2 -C - -o "$out" "$url"
+	download_file "$url" "$out"
 
 	if ! is_gguf "$out"; then
 		echo "error: ${out} is not a GGUF file (got an HTML/error page?)." >&2

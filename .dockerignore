@@ -19,3 +19,6 @@ surface/build/
 .agents/
 .claude/
 agent/
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/

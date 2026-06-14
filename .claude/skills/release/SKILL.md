@@ -1,14 +1,14 @@
 ---
 name: release
-description: Cut a new release — bump versions, create release branch, open PR, push tags, trigger CI publish. Use when asked to release, cut a release, bump version, publish, or tag a new version of agent, spine, or surface.
+description: Cut a new release — bump versions, create release branch, open PR, push tags, trigger CI publish. Use when asked to release, cut a release, bump version, publish, or tag a new version of agent, spine, surface, or llama-swap.
 ---
 
 # Lattice release workflow
 
 The release script at `scripts/release.sh` handles two phases: **prepare** (version bump
 PR) and **tag** (trigger CI to build and publish). CI takes over after the tag is pushed —
-agent tags build Linux/Windows binaries and a GitHub Release; spine tags build and push the
-Docker image to GHCR.
+agent tags build Linux/Windows binaries and a GitHub Release; spine and llama-swap tags build
+and push Docker images to GHCR.
 
 ## Artifacts
 
@@ -17,9 +17,15 @@ Docker image to GHCR.
 | `agent` | `agent/Cargo.toml` | `agent-v*` | builds binaries → GitHub Release |
 | `spine` | `spine/package.json` | `spine-v*` | builds Docker image → GHCR |
 | `surface` | `surface/package.json` | `surface-v*` | version tracking only (bundled in spine) |
+| `llama-swap` | `asr-shim/pyproject.toml` | `llama-swap-v*` | builds image → GHCR + attaches config/fetch assets to the release |
 
-Current versions (as of last check): agent `0.11.2`, spine `1.2.1`, surface `0.11.1`.
-Always verify with the script itself — it reads manifests directly.
+`llama-swap` is the custom inference image (llama-swap base + the ASR shim); it's versioned
+off the shim's `pyproject.toml` since that's the only Lattice-authored content in it. The
+GPU host (spacelab) pulls `ghcr.io/rghamilton3/lattice-llama-swap:<version>` and the matching
+`llama-swap.config.yaml` release asset — no repo clone.
+
+Current versions (as of last check): agent `0.11.2`, spine `1.2.1`, surface `0.11.1`,
+llama-swap `0.1.0`. Always verify with the script itself — it reads manifests directly.
 
 ## Prerequisites
 
@@ -86,6 +92,9 @@ https://github.com/rghamilton3/lattice/actions
 - **spine-v\*** tag: watch `Build and push spine Docker image` — pushes to
   `ghcr.io/rghamilton3/lattice-spine:<version>` and `:latest`.
 - **surface-v\*** tag: no CI workflow; tag is version-tracking only.
+- **llama-swap-v\*** tag: watch `Build and push llama-swap Docker image` — pushes to
+  `ghcr.io/rghamilton3/lattice-llama-swap:<version>` and `:latest`, and attaches
+  `llama-swap.config.yaml` + `fetch-models.sh` to the GitHub Release for that tag.
 
 ## Gotchas
 

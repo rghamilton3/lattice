@@ -1,0 +1,142 @@
+# llama-swap configuration for Lattice
+# =====================================
+# This is an EXTERNAL INPUT to the spacelab/ai `llama_swap` role. That role
+# provisions an inference host running llama-swap in Docker
+# (ghcr.io/mostlygeek/llama-swap:*-cuda) and starts it ONLY once this file exists.
+#
+# Deploy contract (from spacelab/ai/roles/llama_swap):
+#   - llama-server is bundled in the image at  /app/llama-server
+#   - your .gguf weights are mounted at        /models   (host: /opt/llama-swap/models/)
+#   - this config is mounted read-only at      /app/config.yaml
+#   - container listens on :8080, published on the Tailscale mesh IP at host :9292
+#
+# Install:
+#   1. scp this file to the inference host at  /opt/llama-swap/config.yaml
+#   2. drop the .gguf weights into            /opt/llama-swap/models/
+#   3. on the host: cd /opt/llama-swap && docker compose up -d
+#      (or, from spacelab/ai: make apply TAGS=llama_swap)
+#
+# Point Lattice's spine at it (every *_api_url shares this one mesh endpoint;
+# routing is by model id, not URL). In ~/.config/lattice/config.toml:
+#
+#   [spine.qmd]
+#   embed_api_url    = "http://<host-tailnet-ip>:9292/v1"
+#   embed_api_model  = "bge-m3"
+#   rerank_api_url   = "http://<host-tailnet-ip>:9292/v1"
+#   rerank_api_model = "bge-reranker-v2-m3"
+#   expand_api_url   = "http://<host-tailnet-ip>:9292/v1"
+#   expand_api_model = "qwen2.5-3b-instruct"
+#   vlm_model        = "qwen2.5-vl-7b-instruct"   # optional: image descriptions
+#   asr_model        = "parakeet-tdt-0.6b-v3"     # optional: voice-note transcription
+#   asr_timeout_s    = 300
+#
+# The model id keys below are the only contract with Lattice: each must match the
+# corresponding *_api_model / vlm_model string in config.toml.
+
+# Wait up to 5 min for a model to become ready (cold loads, large weights).
+healthCheckTimeout: 300
+logLevel: info
+
+# Base port for the ${PORT} macro; auto-incremented per running model. These are
+# container-internal ports llama-swap proxies to; only :8080 is published.
+startPort: 9100
+
+macros:
+  # The image bundles llama-server here; models are mounted at /models.
+  llama-server: "/app/llama-server --port ${PORT}"
+  models: "/models"
+
+# Groups control what stays resident together.
+groups:
+  # The search trio runs on EVERY query (expand -> embed -> rerank) and on every
+  # capture (embed). swap:false keeps all three loaded at once; exclusive:false
+  # lets them coexist with the VLM group so a search never cold-loads.
+  search:
+    swap: false
+    exclusive: false
+    members:
+      - bge-m3
+      - bge-reranker-v2-m3
+      - qwen2.5-3b-instruct
+  # VLM + ASR are background attachment jobs; they share a swap slot that
+  # coexists with the search trio and unloads on idle (ttl per model below).
+  media:
+    swap: true
+    exclusive: false
+    members:
+      - qwen2.5-vl-7b-instruct
+      - parakeet-tdt-0.6b-v3
+
+models:
+  # --- Embeddings: QMD dense vectors (embed_api_model) ---
+  bge-m3:
+    cmd: |
+      ${llama-server}
+      -m ${models}/bge-m3.gguf
+      --embeddings
+      --ctx-size 8192
+      --batch-size 8192
+      -ngl 99
+      --flash-attn
+      --no-mmap
+
+  # --- Reranking: QMD result reranking (rerank_api_model) ---
+  bge-reranker-v2-m3:
+    cmd: |
+      ${llama-server}
+      -m ${models}/bge-reranker-v2-m3.gguf
+      --reranking
+      --ctx-size 8192
+      -ngl 99
+      --flash-attn
+      --no-mmap
+
+  # --- Query expansion: chat completions (expand_api_model) ---
+  qwen2.5-3b-instruct:
+    cmd: |
+      ${llama-server}
+      -m ${models}/qwen2.5-3b-instruct-q4_k_m.gguf
+      --ctx-size 8192
+      -ngl 99
+      --jinja
+      --flash-attn
+      --no-mmap
+
+  # --- Vision: attachment image descriptions (vlm_model), POSTed to
+  #     /v1/chat/completions with image_url parts. Needs an mmproj projector. ---
+  qwen2.5-vl-7b-instruct:
+    ttl: 600   # unload 10 min after last use to free VRAM
+    cmd: |
+      ${llama-server}
+      -m ${models}/qwen2.5-vl-7b-instruct-q4_k_m.gguf
+      --mmproj ${models}/qwen2.5-vl-7b-instruct-mmproj-f16.gguf
+      --ctx-size 8192
+      -ngl 99
+      --flash-attn
+      --no-mmap
+
+  # --- ASR: voice-note transcription (asr_model), POSTed to
+  #     /v1/audio/transcriptions. Served by the Lattice asr-shim (spec 020):
+  #     a FastAPI app that normalizes audio via ffmpeg and transcribes with NeMo
+  #     Parakeet. llama-swap owns start/stop + idle eviction and routes on the
+  #     multipart `model` field. checkEndpoint=/health is the readiness gate
+  #     (200 only after ffmpeg is verified and the NeMo checkpoint is loaded).
+  #     The shim defaults to nvidia/parakeet-tdt-0.6b-v3; set ASR_SHIM_MODEL to
+  #     override. The .nemo downloads from HuggingFace on first load (cached via
+  #     HF_HOME), not staged in /models.
+  #
+  #     DEPLOYMENT NOTE — the shim venv at /opt/asr-shim/.venv does NOT exist in
+  #     the stock ghcr.io/mostlygeek/llama-swap image (it needs Python 3.12 +
+  #     ffmpeg + torch-CUDA + nemo_toolkit). asr-shim/Dockerfile builds a custom
+  #     image (base + this venv), published to ghcr.io/<owner>/lattice-llama-swap
+  #     by .github/workflows/llama-swap-docker.yml. The deployment pulls that image
+  #     (same as lattice-spine) and bind-mounts THIS file (external, not baked) to
+  #     /app/config.yaml — fetched from the llama-swap-v* release asset or raw
+  #     curl. Run on the stock image instead and ASR won't start — leave asr_model
+  #     unset and voice notes index filename-only.
+  parakeet-tdt-0.6b-v3:
+    ttl: 600
+    checkEndpoint: /health
+    cmd: |
+      /opt/asr-shim/.venv/bin/uvicorn asr_shim.main:app
+      --host 127.0.0.1 --port ${PORT}

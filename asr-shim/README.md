@@ -31,7 +31,7 @@ Smoke test:
 
 ```bash
 curl -s http://127.0.0.1:8090/health
-curl -s -F file=@note.m4a -F model=parakeet-tdt-0.6b-v2 \
+curl -s -F file=@note.m4a -F model=parakeet-tdt-0.6b-v3 \
   http://127.0.0.1:8090/v1/audio/transcriptions
 # -> { "text": "..." }
 ```
@@ -45,7 +45,7 @@ shape can be exercised without NeMo installed (this is what the tests use):
 ASR_SHIM_FAKE=1 uv run uvicorn asr_shim.main:app --port 8090
 ```
 
-The real model id defaults to `nvidia/parakeet-tdt-0.6b-v2` and can be
+The real model id defaults to `nvidia/parakeet-tdt-0.6b-v3` and can be
 overridden with `ASR_SHIM_MODEL`.
 
 ## Tests
@@ -64,7 +64,7 @@ eviction (TTL), and routes on the multipart `model` field:
 
 ```yaml
 models:
-  "parakeet-tdt-0.6b-v2":
+  "parakeet-tdt-0.6b-v3":
     cmd: |
       /opt/asr-shim/.venv/bin/uvicorn asr_shim.main:app --host 127.0.0.1 --port ${PORT}
     checkEndpoint: /health
